@@ -1,0 +1,48 @@
+# IPD AR Discharge
+
+ระบบติดตามเคสผู้ป่วยใน (IPD) — React + Vite + TypeScript + Tailwind v4, ต่อกับ Supabase โดยตรง (ไม่มี backend แยก), login ด้วย Google จำกัดเฉพาะ @mahidol.ac.th
+
+## Stack
+
+- Frontend: React 18 + Vite + TypeScript + Tailwind CSS v4
+- Backend: Supabase (Postgres + Auth) — project "IPD AR discharge" (`qwivyyvhezqbhlukcsmt`)
+- Auth: Google OAuth ผ่าน Supabase Auth, จำกัดโดเมนด้วย Postgres trigger + RLS
+- Deploy: Vercel
+
+## รันในเครื่อง (local dev)
+
+```bash
+npm install
+npm run dev
+```
+
+ไฟล์ `.env` มีค่า `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` ของโปรเจกต์อยู่แล้ว (เป็น anon key แบบ public ปลอดภัยที่จะ commit ไม่ได้ แต่กันไว้ด้วย `.gitignore` อยู่ดี — ถ้าโคลนเครื่องใหม่ให้ copy จาก `.env.example`)
+
+## Push ขึ้น GitHub ผ่าน GitHub Desktop
+
+1. เปิด GitHub Desktop → File → Add Local Repository → เลือกโฟลเดอร์นี้
+2. ถ้ายังไม่มี repo ปลายทาง ให้สร้าง repo ใหม่บน GitHub ก่อน แล้วค่อย publish จาก GitHub Desktop
+3. Commit ทุกไฟล์ (ยกเว้น `node_modules`, `dist`, `.env` ที่ถูก ignore ไว้แล้ว) แล้ว push
+
+## Deploy บน Vercel
+
+1. Import repo นี้เป็น Vercel project ใหม่ (framework preset: Vite)
+2. ตั้งค่า Environment Variables ใน Vercel project settings:
+   - `VITE_SUPABASE_URL` = `https://qwivyyvhezqbhlukcsmt.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = (ค่าเดียวกับใน `.env`)
+3. Deploy — Vercel จะ build ด้วย `npm run build` และ serve จาก `dist/` อัตโนมัติ
+4. หลัง deploy ครั้งแรก ให้กลับไปที่ Supabase Dashboard → Authentication → URL Configuration → ตั้ง Site URL เป็นโดเมน Vercel ที่ได้ (และเพิ่มใน Redirect URLs ด้วยถ้าจำเป็น)
+
+## สิทธิ์การใช้งาน
+
+- ทุกคนที่ login ด้วยอีเมล @mahidol.ac.th เข้าดูข้อมูลได้ (read-only โดย default)
+- ผู้ใช้ role `admin` เท่านั้นที่เพิ่ม/แก้ไขเคสได้ — ตั้ง role ได้โดยตรงในตาราง `app_users` ผ่าน Supabase SQL editor:
+  ```sql
+  update app_users set role = 'admin' where email = 'youremail@mahidol.ac.th';
+  ```
+  (ผู้ใช้ต้อง login เข้าระบบอย่างน้อย 1 ครั้งก่อน ถึงจะมีแถวใน `app_users` ให้แก้)
+
+## ยังไม่ได้ทำ (รอรายละเอียดเพิ่มเติม)
+
+- ตาราง/หน้าจอสำหรับติดตามสถานะเคลม: วันที่รับเอกสาร, วันที่ audit, วันที่ส่งเบิก (ทั้งแบบรายตัวและแบบอัพโหลดไฟล์)
+- Storage bucket สำหรับไฟล์แนบ

@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Thai", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-ink: #1c2430;
+  --color-paper: #f6f7f5;
+  --color-surface: #ffffff;
+  --color-line: #dfe3e0;
+  --color-teal: #0e6b6f;
+  --color-teal-dark: #0a4f52;
+  --color-teal-soft: #e3f0ef;
+  --color-amber: #c8842a;
+  --color-amber-soft: #f7ead4;
+  --color-rose: #b5473f;
+  --color-rose-soft: #f6e3e1;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background-color: var(--color-teal-soft);
+}
+
+.input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
+  background-color: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+}
+.input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-teal) 30%, transparent);
+}
+.input:disabled {
+  opacity: 0.6;
+}
