@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import type { Admission, AdmissionDraft, CoverageMaster, PayerMaster } from '../lib/types'
+import type { Admission, AdmissionDraft, CaseTrackingDraft, CoverageMaster, PayerMaster } from '../lib/types'
 
 function toDraft(a: Admission | null): AdmissionDraft {
   if (!a) {
@@ -37,6 +37,17 @@ function toDraft(a: Admission | null): AdmissionDraft {
   }
 }
 
+function toCaseDraft(a: Admission | null): CaseTrackingDraft {
+  const ct = a?.case_tracking
+  return {
+    document_received_date: ct?.document_received_date ?? '',
+    audit_date: ct?.audit_date ?? '',
+    audit_amount: ct?.audit_amount != null ? String(ct.audit_amount) : '',
+    submission_date: ct?.submission_date ?? '',
+    submission_amount: ct?.submission_amount != null ? String(ct.submission_amount) : '',
+  }
+}
+
 interface Props {
   admission: Admission | null
   coverageOptions: CoverageMaster[]
@@ -47,12 +58,17 @@ interface Props {
 
 export default function AdmissionForm({ admission, coverageOptions, payerOptions, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<AdmissionDraft>(toDraft(admission))
+  const [caseDraft, setCaseDraft] = useState<CaseTrackingDraft>(toCaseDraft(admission))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isEdit = admission !== null
 
   function set<K extends keyof AdmissionDraft>(key: K, value: AdmissionDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
+  }
+
+  function setCase<K extends keyof CaseTrackingDraft>(key: K, value: CaseTrackingDraft[K]) {
+    setCaseDraft((d) => ({ ...d, [key]: value }))
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -82,6 +98,25 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         payer_id: draft.payer_id || null,
       })
       if (admissionErr) throw admissionErr
+
+      const hasCaseData =
+        caseDraft.document_received_date ||
+        caseDraft.audit_date ||
+        caseDraft.audit_amount ||
+        caseDraft.submission_date ||
+        caseDraft.submission_amount
+
+      if (hasCaseData) {
+        const { error: caseErr } = await supabase.from('case_tracking').upsert({
+          encounter_id: Number(draft.encounter_id),
+          document_received_date: caseDraft.document_received_date || null,
+          audit_date: caseDraft.audit_date || null,
+          audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
+          submission_date: caseDraft.submission_date || null,
+          submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
+        })
+        if (caseErr) throw caseErr
+      }
 
       onSaved()
     } catch (err) {
@@ -230,6 +265,60 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 ))}
               </select>
             </Field>
+          </div>
+
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-xs font-semibold text-ink/60">สถานะเคลม</p>
+
+            <Field label="วันที่รับเอกสาร">
+              <input
+                type="date"
+                value={caseDraft.document_received_date}
+                onChange={(e) => setCase('document_received_date', e.target.value)}
+                className="input"
+              />
+            </Field>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="วันที่ Audit">
+                <input
+                  type="date"
+                  value={caseDraft.audit_date}
+                  onChange={(e) => setCase('audit_date', e.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label="ยอด Audit (บาท)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={caseDraft.audit_amount}
+                  onChange={(e) => setCase('audit_amount', e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="วันที่ส่งเบิก">
+                <input
+                  type="date"
+                  value={caseDraft.submission_date}
+                  onChange={(e) => setCase('submission_date', e.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label="ยอดส่งเบิก (บาท)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={caseDraft.submission_amount}
+                  onChange={(e) => setCase('submission_amount', e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
+            <p className="mt-1.5 text-[11px] text-ink/40">1 เคสส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่</p>
           </div>
 
           {error && <p className="text-sm text-rose">{error}</p>}

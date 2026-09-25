@@ -5,6 +5,31 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function ClaimStatus({ admission }: { admission: Admission }) {
+  const ct = admission.case_tracking
+  const steps: { key: string; label: string; done: boolean }[] = [
+    { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date },
+    { key: 'audit', label: 'Audit', done: !!ct?.audit_date },
+    { key: 'submit', label: 'ส่งเบิก', done: !!ct?.submission_date },
+  ]
+  return (
+    <div className="flex items-center gap-1">
+      {steps.map((s) => (
+        <span
+          key={s.key}
+          title={s.label}
+          className={
+            'rounded-full px-2 py-0.5 text-[11px] font-medium ' +
+            (s.done ? 'bg-teal-soft text-teal-dark' : 'bg-paper text-ink/40')
+          }
+        >
+          {s.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 interface Props {
   admissions: Admission[]
   loading: boolean
@@ -38,6 +63,7 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit }
             <th className="px-4 py-3 font-medium text-right">LOS</th>
             <th className="px-4 py-3 font-medium">สิทธิการรักษา</th>
             <th className="px-4 py-3 font-medium">ผู้จ่าย</th>
+            <th className="px-4 py-3 font-medium">สถานะเคลม</th>
             {isAdmin && <th className="px-4 py-3 font-medium text-right">แก้ไข</th>}
           </tr>
         </thead>
@@ -60,6 +86,9 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit }
               <td className="px-4 py-3 text-right text-ink/80">{a.los ?? '—'}</td>
               <td className="px-4 py-3 text-ink/80">{a.coverage_master?.coverage_name ?? '—'}</td>
               <td className="px-4 py-3 text-ink/70">{a.payer_master?.payer_name ?? '—'}</td>
+              <td className="px-4 py-3">
+                <ClaimStatus admission={a} />
+              </td>
               {isAdmin && (
                 <td className="px-4 py-3 text-right">
                   <button

@@ -16,6 +16,16 @@ export interface PayerMaster {
   payer_name: string
 }
 
+export interface CaseTracking {
+  encounter_id: number
+  document_received_date: string | null
+  audit_date: string | null
+  audit_amount: number | null
+  submission_date: string | null
+  submission_amount: number | null
+  updated_at: string
+}
+
 export interface Admission {
   encounter_id: number
   an: number
@@ -32,6 +42,23 @@ export interface Admission {
   patients: Patient | null
   coverage_master: CoverageMaster | null
   payer_master: PayerMaster | null
+  case_tracking: CaseTracking | null
+}
+
+export type BulkStage = 'document' | 'audit' | 'submission'
+
+export interface BulkRow {
+  encounter_id: number
+  date: string
+  amount?: number
+}
+
+export interface CaseTrackingDraft {
+  document_received_date: string
+  audit_date: string
+  audit_amount: string
+  submission_date: string
+  submission_amount: string
 }
 
 export interface AdmissionDraft {

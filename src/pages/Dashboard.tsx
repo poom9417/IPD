@@ -6,6 +6,7 @@ import StatCards from '../components/StatCards'
 import FilterBar from '../components/FilterBar'
 import AdmissionsTable from '../components/AdmissionsTable'
 import AdmissionForm from '../components/AdmissionForm'
+import BulkClaimUpload from '../components/BulkClaimUpload'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 
 export default function Dashboard() {
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const [payerOptions, setPayerOptions] = useState<PayerMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
+  const [showBulk, setShowBulk] = useState(false)
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
@@ -27,7 +29,7 @@ export default function Dashboard() {
     const [{ data: admissionsData }, { data: coverageData }, { data: payerData }] = await Promise.all([
       supabase
         .from('admissions')
-        .select('*, patients(*), coverage_master(*), payer_master(*)')
+        .select('*, patients(*), coverage_master(*), payer_master(*), case_tracking(*)')
         .order('admit_date', { ascending: false }),
       supabase.from('coverage_master').select('*').order('coverage_code'),
       supabase.from('payer_master').select('*').order('payer_id'),
@@ -77,12 +79,20 @@ export default function Dashboard() {
             onStatusFilterChange={setStatusFilter}
           />
           {isAdmin && (
-            <button
-              onClick={() => setEditing(null)}
-              className="whitespace-nowrap rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white hover:bg-teal transition-colors"
-            >
-              + เพิ่มเคส
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowBulk(true)}
+                className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+              >
+                อัพโหลดสถานะเคลม (CSV)
+              </button>
+              <button
+                onClick={() => setEditing(null)}
+                className="whitespace-nowrap rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white hover:bg-teal transition-colors"
+              >
+                + เพิ่มเคส
+              </button>
+            </div>
           )}
         </div>
 
@@ -93,6 +103,16 @@ export default function Dashboard() {
           onEdit={(a) => setEditing(a)}
         />
       </main>
+
+      {showBulk && (
+        <BulkClaimUpload
+          onClose={() => setShowBulk(false)}
+          onDone={() => {
+            setShowBulk(false)
+            loadData()
+          }}
+        />
+      )}
 
       {editing !== undefined && (
         <AdmissionForm
