@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext'
+import BrandLogo from './BrandLogo'
 
 export default function Login() {
   const { signInWithGoogle } = useAuth()
@@ -7,8 +8,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-teal-dark text-white text-lg font-semibold mb-4">
-            AR
+          <div className="inline-flex h-14 w-14 items-center justify-center mb-4">
+            <BrandLogo className="h-12 w-12" />
           </div>
           <h1 className="text-xl font-semibold text-ink">IPD AR Discharge</h1>
           <p className="mt-1 text-sm text-ink/60">ระบบติดตามเคสผู้ป่วยใน (IPD)</p>

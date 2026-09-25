@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext'
+import BrandLogo from './BrandLogo'
 
 export default function Navbar() {
   const { session, role, signOut } = useAuth()
@@ -8,9 +9,7 @@ export default function Navbar() {
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-dark text-xs font-semibold text-white">
-            AR
-          </div>
+          <BrandLogo className="h-8 w-8" />
           <div>
             <p className="text-sm font-semibold leading-none text-ink">IPD AR Discharge</p>
           </div>

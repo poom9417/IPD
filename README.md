@@ -59,6 +59,15 @@ npm run dev
   ```
   (คอลัมน์ตามขั้นตอนที่เลือก — ระบบ upsert ทับค่าเดิมด้วย encounter_id)
 
+## โลโก้
+
+ใช้โลโก้สถาบันการแพทย์จักรีนฤบดินทร์ (CNMI) จาก Wikimedia Commons แสดงผลด้วยเทคนิค CSS `mask-image` ให้เป็นสีทอง/เหลือง (`--color-amber` ใน `src/index.css`) โดยไม่ต้องแก้ไฟล์ภาพต้นฉบับ — ถ้าอยาก self-host แทนการโหลดจาก Wikimedia ดูวิธีใน comment ของ `src/components/BrandLogo.tsx`
+
+## Export Excel
+
+ปุ่ม "Export Excel" บน Dashboard (ใช้ได้ทุกสิทธิ์ ไม่จำกัด admin) ส่งออกเฉพาะรายการที่กรอง/ค้นหาอยู่ ณ ขณะนั้น เป็นไฟล์ `.xlsx` (ใช้ไลบรารี SheetJS ฝั่ง client ไม่ผ่าน server)
+
 ## ยังไม่ได้ทำ
 
 - Storage bucket สำหรับแนบไฟล์เอกสาร/หลักฐาน (ตอนนี้เป็นแค่ CSV mapping ไม่มีการเก็บไฟล์ต้นฉบับ)
+- หน้าจัดการสิทธิ์ผู้ใช้ (ตอนนี้ตั้ง role ผ่าน SQL / ตั้ง bootstrap admin ผ่าน trigger เท่านั้น)

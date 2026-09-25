@@ -8,6 +8,7 @@ import AdmissionsTable from '../components/AdmissionsTable'
 import AdmissionForm from '../components/AdmissionForm'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
+import { exportAdmissionsToExcel } from '../lib/exportExcel'
 
 export default function Dashboard() {
   const { role } = useAuth()
@@ -78,22 +79,31 @@ export default function Dashboard() {
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
           />
-          {isAdmin && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowBulk(true)}
-                className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
-              >
-                อัพโหลดสถานะเคลม (CSV)
-              </button>
-              <button
-                onClick={() => setEditing(null)}
-                className="whitespace-nowrap rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white hover:bg-teal transition-colors"
-              >
-                + เพิ่มเคส
-              </button>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportAdmissionsToExcel(filtered)}
+              disabled={filtered.length === 0}
+              className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors disabled:opacity-40"
+            >
+              ⬇ Export Excel
+            </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => setShowBulk(true)}
+                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                >
+                  อัพโหลดสถานะเคลม (CSV)
+                </button>
+                <button
+                  onClick={() => setEditing(null)}
+                  className="whitespace-nowrap rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white hover:bg-teal transition-colors"
+                >
+                  + เพิ่มเคส
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <AdmissionsTable
