@@ -11,6 +11,28 @@ import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import UserManagement from '../components/UserManagement'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 import { exportAdmissionsToExcel } from '../lib/exportExcel'
+import { getClaimStage, type ClaimStage } from '../lib/claimStatus'
+
+const PAGE_SIZE = 50
+const FETCH_CHUNK = 1000 // Supabase/PostgREST คืนสูงสุด 1,000 แถวต่อคำขอ ต้องดึงเป็นช่วงๆ
+
+// ดึง admissions ทั้งหมด — ถ้าดึงครั้งเดียวจะถูกตัดที่ 1,000 แถวโดยไม่มี error
+async function fetchAllAdmissions(): Promise<Admission[]> {
+  const all: Admission[] = []
+  for (let from = 0; ; from += FETCH_CHUNK) {
+    const { data, error } = await supabase
+      .from('admissions')
+      .select('*, patients(*), coverage_master(*), payer_master(*), case_tracking(*)')
+      .order('admit_date', { ascending: false })
+      .order('admission_id', { ascending: false }) // tie-breaker ให้ลำดับคงที่ระหว่างหน้า
+      .range(from, from + FETCH_CHUNK - 1)
+    if (error) throw error
+    const chunk = (data as unknown as Admission[]) ?? []
+    all.push(...chunk)
+    if (chunk.length < FETCH_CHUNK) break
+  }
+  return all
+}
 
 export default function Dashboard() {
   const { role } = useAuth()
@@ -20,6 +42,7 @@ export default function Dashboard() {
   const [coverageOptions, setCoverageOptions] = useState<CoverageMaster[]>([])
   const [payerOptions, setPayerOptions] = useState<PayerMaster[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -30,21 +53,29 @@ export default function Dashboard() {
   const [dischargeFrom, setDischargeFrom] = useState('')
   const [dischargeTo, setDischargeTo] = useState('')
   const [coverages, setCoverages] = useState<string[]>([])
+  const [payer, setPayer] = useState('')
+  const [claimStage, setClaimStage] = useState<ClaimStage | ''>('')
+  const [page, setPage] = useState(1)
 
   async function loadData() {
     setLoading(true)
-    const [{ data: admissionsData }, { data: coverageData }, { data: payerData }] = await Promise.all([
-      supabase
-        .from('admissions')
-        .select('*, patients(*), coverage_master(*), payer_master(*), case_tracking(*)')
-        .order('admit_date', { ascending: false }),
-      supabase.from('coverage_master').select('*').order('coverage_code'),
-      supabase.from('payer_master').select('*').order('payer_id'),
-    ])
-    setAdmissions((admissionsData as unknown as Admission[]) ?? [])
-    setCoverageOptions(coverageData ?? [])
-    setPayerOptions(payerData ?? [])
-    setLoading(false)
+    setLoadError(null)
+    try {
+      const [rows, cov, pay] = await Promise.all([
+        fetchAllAdmissions(),
+        supabase.from('coverage_master').select('*').order('coverage_code'),
+        supabase.from('payer_master').select('*').order('payer_id'),
+      ])
+      if (cov.error) throw cov.error
+      if (pay.error) throw pay.error
+      setAdmissions(rows)
+      setCoverageOptions(cov.data ?? [])
+      setPayerOptions(pay.data ?? [])
+    } catch (err) {
+      setLoadError((err as { message?: string })?.message ?? 'โหลดข้อมูลไม่สำเร็จ')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -93,8 +124,9 @@ export default function Dashboard() {
         q &&
         !(
           a.hn.toLowerCase().includes(q) ||
-          a.patients?.full_name.toLowerCase().includes(q) ||
-          String(a.encounter_id).includes(q)
+          (a.patients?.full_name ?? '').toLowerCase().includes(q) ||
+          String(a.encounter_id).includes(q) ||
+          String(a.an).includes(q)
         )
       ) {
         return false
@@ -112,11 +144,33 @@ export default function Dashboard() {
       }
 
       if (coverages.length > 0 && !coverages.includes(a.coverage_code)) return false
+      if (payer && a.payer_id !== payer) return false
+      if (claimStage && getClaimStage(a) !== claimStage) return false
       return true
     })
-  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages])
+  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage])
 
-  const hasActiveFilter = !!(search || division || dischargeFrom || dischargeTo || coverages.length)
+  // เปลี่ยน filter แล้วกลับไปหน้า 1
+  useEffect(() => {
+    setPage(1)
+  }, [search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage])
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const paged = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage],
+  )
+
+  const hasActiveFilter = !!(
+    search ||
+    division ||
+    dischargeFrom ||
+    dischargeTo ||
+    coverages.length ||
+    payer ||
+    claimStage
+  )
 
   function clearFilters() {
     setSearch('')
@@ -124,13 +178,16 @@ export default function Dashboard() {
     setDischargeFrom('')
     setDischargeTo('')
     setCoverages([])
+    setPayer('')
+    setClaimStage('')
   }
 
   return (
     <div className="min-h-screen">
       <Navbar />
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-        <StatCards admissions={admissions} />
+        {/* สถิติคิดจากรายการที่กรองอยู่ */}
+        <StatCards admissions={filtered} />
 
         <FilterBar
           search={search}
@@ -145,6 +202,11 @@ export default function Dashboard() {
           coverageOptions={coverageOptions}
           coverages={coverages}
           onCoveragesChange={setCoverages}
+          payerOptions={payerOptions}
+          payer={payer}
+          onPayerChange={setPayer}
+          claimStage={claimStage}
+          onClaimStageChange={setClaimStage}
           onClear={clearFilters}
           hasActiveFilter={hasActiveFilter}
         />
@@ -192,13 +254,46 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="flex items-center justify-between rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">
+            <span>โหลดข้อมูลไม่สำเร็จ: {loadError}</span>
+            <button onClick={loadData} className="underline">
+              ลองใหม่
+            </button>
+          </div>
+        )}
+
         <AdmissionsTable
-          admissions={filtered}
+          admissions={paged}
           loading={loading}
           isAdmin={isAdmin}
           onEdit={(a) => setEditing(a)}
           onReceiveDoc={receiveDocument}
         />
+
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between text-sm text-ink/60">
+            <span>
+              หน้า {currentPage} / {pageCount}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="rounded-lg border border-line px-3 py-1.5 hover:bg-paper disabled:opacity-40"
+              >
+                ก่อนหน้า
+              </button>
+              <button
+                onClick={() => setPage(currentPage + 1)}
+                disabled={currentPage >= pageCount}
+                className="rounded-lg border border-line px-3 py-1.5 hover:bg-paper disabled:opacity-40"
+              >
+                ถัดไป
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       {showUsers && <UserManagement onClose={() => setShowUsers(false)} />}
