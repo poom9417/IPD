@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Admission } from '../lib/types'
 
 function fmtDate(d: string | null) {
@@ -5,7 +6,16 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function ClaimStatus({ admission }: { admission: Admission }) {
+function ClaimStatus({
+  admission,
+  canReceive,
+  onReceiveDoc,
+}: {
+  admission: Admission
+  canReceive: boolean
+  onReceiveDoc: (a: Admission) => Promise<void>
+}) {
+  const [receiving, setReceiving] = useState(false)
   const ct = admission.case_tracking
   const steps: { key: string; label: string; done: boolean; title: string }[] = [
     { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date, title: ct?.document_received_date ? `รับเอกสาร ${fmtDate(ct.document_received_date)}` : 'รับเอกสาร' },
@@ -21,7 +31,26 @@ function ClaimStatus({ admission }: { admission: Admission }) {
   ]
   return (
     <div className="flex items-center gap-1">
-      {steps.map((s) => (
+      {steps.map((s) =>
+        s.key === 'doc' && !s.done && canReceive ? (
+          <button
+            key={s.key}
+            type="button"
+            disabled={receiving}
+            title="คลิกเพื่อบันทึกว่ารับเอกสารวันนี้"
+            onClick={async () => {
+              setReceiving(true)
+              try {
+                await onReceiveDoc(admission)
+              } finally {
+                setReceiving(false)
+              }
+            }}
+            className="rounded-full border border-teal-dark/40 bg-surface px-2 py-0.5 text-[11px] font-medium text-teal-dark transition-colors hover:bg-teal-soft disabled:opacity-50"
+          >
+            {receiving ? 'กำลังบันทึก…' : 'รับเอกสาร'}
+          </button>
+        ) : (
         <span
           key={s.key}
           title={s.title}
@@ -32,7 +61,8 @@ function ClaimStatus({ admission }: { admission: Admission }) {
         >
           {s.label}
         </span>
-      ))}
+        ),
+      )}
     </div>
   )
 }
@@ -42,9 +72,10 @@ interface Props {
   loading: boolean
   isAdmin: boolean
   onEdit: (a: Admission) => void
+  onReceiveDoc: (a: Admission) => Promise<void>
 }
 
-export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit }: Props) {
+export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, onReceiveDoc }: Props) {
   if (loading) {
     return <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/50">กำลังโหลดข้อมูล…</div>
   }
@@ -88,7 +119,7 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit }
               <td className="px-4 py-3 text-ink/80">{a.coverage_master?.coverage_name ?? '—'}</td>
               <td className="px-4 py-3 text-ink/70">{a.payer_master?.payer_name ?? '—'}</td>
               <td className="px-4 py-3">
-                <ClaimStatus admission={a} />
+                <ClaimStatus admission={a} canReceive={isAdmin} onReceiveDoc={onReceiveDoc} />
               </td>
               {isAdmin && (
                 <td className="px-4 py-3 text-right">

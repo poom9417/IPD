@@ -48,6 +48,29 @@ export default function Dashboard() {
     loadData()
   }, [])
 
+  // กดปุ่ม "รับเอกสาร" → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) ลง case_tracking ทันที
+  async function receiveDocument(a: Admission) {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const { data, error } = await supabase
+      .from('case_tracking')
+      .upsert(
+        { admission_id: a.admission_id, encounter_id: a.encounter_id, document_received_date: today },
+        { onConflict: 'admission_id' },
+      )
+      .select()
+      .single()
+    if (error) {
+      alert(`บันทึกรับเอกสารไม่สำเร็จ: ${error.message}`)
+      return
+    }
+    setAdmissions((prev) =>
+      prev.map((x) =>
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+      ),
+    )
+  }
+
   const divisions = useMemo(
     () => Array.from(new Set(admissions.map((a) => a.division_code).filter((d): d is string => !!d))).sort(),
     [admissions],
@@ -122,6 +145,7 @@ export default function Dashboard() {
           loading={loading}
           isAdmin={isAdmin}
           onEdit={(a) => setEditing(a)}
+          onReceiveDoc={receiveDocument}
         />
       </main>
 
