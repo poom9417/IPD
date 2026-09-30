@@ -76,18 +76,12 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit }
         </thead>
         <tbody>
           {admissions.map((a) => (
-            <tr key={a.encounter_id} className="border-b border-line last:border-0 hover:bg-paper/60">
+            <tr key={a.admission_id} className="border-b border-line last:border-0 hover:bg-paper/60">
               <td className="px-4 py-3 font-mono text-xs text-ink/70">{a.hn}</td>
               <td className="px-4 py-3 text-ink">{a.patients?.full_name ?? '—'}</td>
               <td className="px-4 py-3 text-ink/80">{fmtDate(a.admit_date)}</td>
               <td className="px-4 py-3 text-ink/80">
-                {a.discharge_date ? (
-                  fmtDate(a.discharge_date)
-                ) : (
-                  <span className="rounded-full bg-amber-soft px-2 py-0.5 text-xs font-medium text-amber">
-                    กำลังนอน
-                  </span>
-                )}
+                {fmtDate(a.discharge_date)}
               </td>
               <td className="px-4 py-3 font-mono text-xs text-ink/70">{a.division_code ?? '—'}</td>
               <td className="px-4 py-3 text-right text-ink/80">{a.los ?? '—'}</td>

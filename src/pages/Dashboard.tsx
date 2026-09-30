@@ -27,7 +27,6 @@ export default function Dashboard() {
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'discharged'>('all')
 
   async function loadData() {
     setLoading(true)
@@ -61,11 +60,9 @@ export default function Dashboard() {
         return false
       }
       if (division && a.division_code !== division) return false
-      if (statusFilter === 'active' && a.discharge_date) return false
-      if (statusFilter === 'discharged' && !a.discharge_date) return false
       return true
     })
-  }, [admissions, search, division, statusFilter])
+  }, [admissions, search, division])
 
   return (
     <div className="min-h-screen">
@@ -80,8 +77,6 @@ export default function Dashboard() {
             division={division}
             onDivisionChange={setDivision}
             divisions={divisions}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
           />
           <div className="flex gap-2">
             <button
@@ -136,7 +131,7 @@ export default function Dashboard() {
         <ImportAdmissionsCsv
           onClose={() => setShowImport(false)}
           onDone={() => {
-            setShowImport(false)
+            // ไม่ปิด modal เพื่อให้เห็นสรุปผลการนำเข้า
             loadData()
           }}
         />

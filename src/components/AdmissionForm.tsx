@@ -16,8 +16,8 @@ function toDraft(a: Admission | null): AdmissionDraft {
       discharge_time: '',
       division_code: '',
       los: '',
-      coverage_code: '',
-      payer_id: '',
+      coverage_code: 'UNK',
+      payer_id: 'UNK',
     }
   }
   return {
@@ -32,8 +32,8 @@ function toDraft(a: Admission | null): AdmissionDraft {
     discharge_time: a.discharge_time ?? '',
     division_code: a.division_code ?? '',
     los: a.los ?? '',
-    coverage_code: a.coverage_code ?? '',
-    payer_id: a.payer_id ?? '',
+    coverage_code: a.coverage_code || 'UNK',
+    payer_id: a.payer_id || 'UNK',
   }
 }
 
@@ -85,8 +85,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
       })
       if (patientErr) throw patientErr
 
-      const { error: admissionErr } = await supabase.from('admissions').upsert({
-        encounter_id: Number(draft.encounter_id),
+      const fields = {
         an: Number(draft.an),
         hn: draft.hn.trim(),
         admit_date: draft.admit_date,
@@ -95,10 +94,28 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         discharge_time: draft.discharge_time || null,
         division_code: draft.division_code || null,
         los: draft.los === '' ? null : Number(draft.los),
-        coverage_code: draft.coverage_code || null,
-        payer_id: draft.payer_id || null,
-      })
-      if (admissionErr) throw admissionErr
+        coverage_code: draft.coverage_code || 'UNK',
+        payer_id: draft.payer_id || 'UNK',
+      }
+
+      // 1 แถว = 1 encounter ต่อ 1 สิทธิ/ผู้จ่าย — แก้ไขด้วย admission_id, เพิ่มใหม่ด้วย insert
+      let admissionId: number
+      if (admission) {
+        const { error: updErr } = await supabase
+          .from('admissions')
+          .update({ ...fields, updated_at: new Date().toISOString() })
+          .eq('admission_id', admission.admission_id)
+        if (updErr) throw updErr
+        admissionId = admission.admission_id
+      } else {
+        const { data: ins, error: insErr } = await supabase
+          .from('admissions')
+          .insert({ encounter_id: Number(draft.encounter_id), ...fields })
+          .select('admission_id')
+          .single()
+        if (insErr) throw insErr
+        admissionId = ins.admission_id
+      }
 
       const hasCaseData =
         caseDraft.document_received_date ||
@@ -109,21 +126,30 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         caseDraft.claim_no
 
       if (hasCaseData) {
-        const { error: caseErr } = await supabase.from('case_tracking').upsert({
-          encounter_id: Number(draft.encounter_id),
-          document_received_date: caseDraft.document_received_date || null,
-          audit_date: caseDraft.audit_date || null,
-          audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
-          submission_date: caseDraft.submission_date || null,
-          submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
-          claim_no: caseDraft.claim_no || null,
-        })
+        const { error: caseErr } = await supabase.from('case_tracking').upsert(
+          {
+            admission_id: admissionId,
+            encounter_id: Number(draft.encounter_id),
+            document_received_date: caseDraft.document_received_date || null,
+            audit_date: caseDraft.audit_date || null,
+            audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
+            submission_date: caseDraft.submission_date || null,
+            submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
+            claim_no: caseDraft.claim_no || null,
+          },
+          { onConflict: 'admission_id' },
+        )
         if (caseErr) throw caseErr
       }
 
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ')
+      const e = err as { code?: string; message?: string }
+      setError(
+        e.code === '23505'
+          ? 'มีแถวของ encounter นี้ที่ใช้สิทธิ + ผู้จ่ายเดียวกันอยู่แล้ว — เลือกสิทธิ/ผู้จ่ายอื่น หรือแก้แถวเดิม'
+          : (e.message ?? 'บันทึกไม่สำเร็จ'),
+      )
     } finally {
       setSaving(false)
     }
@@ -250,7 +276,6 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 onChange={(e) => set('coverage_code', e.target.value)}
                 className="input"
               >
-                <option value="">— ไม่ระบุ —</option>
                 {coverageOptions.map((c) => (
                   <option key={c.coverage_code} value={c.coverage_code}>
                     {c.coverage_code} — {c.coverage_name}
@@ -260,7 +285,6 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             </Field>
             <Field label="ผู้จ่าย (payer)">
               <select value={draft.payer_id} onChange={(e) => set('payer_id', e.target.value)} className="input">
-                <option value="">— ไม่ระบุ —</option>
                 {payerOptions.map((p) => (
                   <option key={p.payer_id} value={p.payer_id}>
                     {p.payer_id} — {p.payer_name}
@@ -331,7 +355,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 />
               </Field>
             </div>
-            <p className="mt-1.5 text-[11px] text-ink/40">1 เคสส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่</p>
+            <p className="mt-1.5 text-[11px] text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
 
           {error && <p className="text-sm text-rose">{error}</p>}

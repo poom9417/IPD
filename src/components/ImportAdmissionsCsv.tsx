@@ -31,9 +31,17 @@ interface Row {
   [key: string]: string
 }
 
-function clean(v: string | undefined) {
-  const s = (v ?? '').trim()
-  return s === '' || s.toUpperCase() === 'NULL' ? null : s
+interface ImportSummary {
+  rows_in_file: number
+  invalid_skipped: number
+  duplicate_in_file_skipped: number
+  unk_placeholder_skipped: number
+  unk_promoted_to_real_coverage: number
+  new_patients: number
+  new_coverages: number
+  new_payers: number
+  admissions_inserted: number
+  admissions_updated: number
 }
 
 export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
@@ -41,12 +49,12 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
   const [fileName, setFileName] = useState('')
   const [missingCols, setMissingCols] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
+  const [summary, setSummary] = useState<ImportSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   function handleFile(file: File) {
     setFileName(file.name)
-    setResult(null)
+    setSummary(null)
     setError(null)
     Papa.parse<Row>(file, {
       header: true,
@@ -65,78 +73,18 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
     if (rows.length === 0 || missingCols.length > 0) return
     setUploading(true)
     setError(null)
-    setResult(null)
+    setSummary(null)
 
     try {
-      const coverageMap = new Map<string, string>()
-      const payerMap = new Map<string, string>()
-      const patientMap = new Map<string, { full_name: string; birthdate: string | null }>()
-      const admissionRows: Record<string, string | number | null>[] = []
-
-      for (const r of rows) {
-        const hn = clean(r['HN'])
-        const encounterId = clean(r['encounter_id'])
-        if (!hn || !encounterId) continue
-
-        const coverageCode = clean(r['coverage_code'])
-        const coverageName = clean(r['coverage_name'])
-        if (coverageCode && coverageName) coverageMap.set(coverageCode, coverageName)
-
-        const payerId = clean(r['payer_id'])
-        const payerName = clean(r['payer_name'])
-        if (payerId && payerName) payerMap.set(payerId, payerName)
-
-        patientMap.set(hn, {
-          full_name: clean(r['name']) ?? '',
-          birthdate: clean(r['birthdate']),
-        })
-
-        admissionRows.push({
-          encounter_id: Number(encounterId),
-          an: Number(clean(r['AN'])),
-          hn,
-          admit_date: clean(r['admit_date']),
-          admit_time: clean(r['admited_time']),
-          discharge_date: clean(r['discharge_date']),
-          discharge_time: clean(r['discharge_time']),
-          division_code: clean(r['division_code']),
-          hospital_status_code: clean(r['status']) ? Number(clean(r['status'])) : null,
-          los: clean(r['Los']) ? Number(clean(r['Los'])) : null,
-          coverage_code: coverageCode,
-          payer_id: payerId,
-        })
-      }
-
-      if (coverageMap.size > 0) {
-        const { error: e } = await supabase
-          .from('coverage_master')
-          .upsert(Array.from(coverageMap, ([coverage_code, coverage_name]) => ({ coverage_code, coverage_name })))
-        if (e) throw e
-      }
-
-      if (payerMap.size > 0) {
-        const { error: e } = await supabase
-          .from('payer_master')
-          .upsert(Array.from(payerMap, ([payer_id, payer_name]) => ({ payer_id, payer_name })))
-        if (e) throw e
-      }
-
-      if (patientMap.size > 0) {
-        const { error: e } = await supabase
-          .from('patients')
-          .upsert(Array.from(patientMap, ([hn, p]) => ({ hn, ...p })))
-        if (e) throw e
-      }
-
-      const { error: admErr, count } = await supabase
-        .from('admissions')
-        .upsert(admissionRows, { onConflict: 'encounter_id', count: 'exact' })
-      if (admErr) throw admErr
-
-      setResult(`นำเข้าสำเร็จ ${count ?? admissionRows.length} เคส (ผู้ป่วย ${patientMap.size} คน)`)
+      // ทั้งหมดทำในฟังก์ชันฝั่งฐานข้อมูลรอบเดียว (transaction เดียว):
+      // เพิ่ม HN / สิทธิ / ผู้จ่ายใหม่อัตโนมัติ, แปลง NULL เป็น UNK, ตัดแถวซ้ำ
+      const { data, error: rpcErr } = await supabase.rpc('import_admissions', { rows })
+      if (rpcErr) throw rpcErr
+      setSummary(data as ImportSummary)
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'นำเข้าไม่สำเร็จ')
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message
+      setError(msg ?? 'นำเข้าไม่สำเร็จ')
     } finally {
       setUploading(false)
     }
@@ -153,7 +101,9 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
         </div>
 
         <p className="mb-2 text-[11px] text-ink/50">
-          ต้องเป็นไฟล์รูปแบบเดียวกับตอนนำเข้าข้อมูลชุดแรก (คอลัมน์: {REQUIRED_COLS.join(', ')}) — encounter_id ที่มีอยู่แล้วจะถูกอัพเดตทับ ไม่สร้างซ้ำ
+          ต้องเป็นไฟล์รูปแบบเดียวกับตอนนำเข้าข้อมูลชุดแรก (คอลัมน์: {REQUIRED_COLS.join(', ')}) — 1 แถว = 1 encounter ต่อ 1 สิทธิ/ผู้จ่าย
+          (encounter เดียวกันแยกสิทธิได้) แถวที่ encounter + สิทธิ + ผู้จ่ายตรงกับที่มีอยู่แล้วจะถูกอัพเดตทับ ไม่สร้างซ้ำ
+          สิทธิ/ผู้จ่ายที่เป็น NULL จะบันทึกเป็น UNK และ HN / สิทธิ / ผู้จ่ายใหม่จะถูกเพิ่มให้อัตโนมัติ
         </p>
 
         <input
@@ -167,12 +117,36 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
           <p className="mb-3 text-sm text-rose">ไฟล์นี้ขาดคอลัมน์: {missingCols.join(', ')}</p>
         )}
 
-        {fileName && missingCols.length === 0 && rows.length > 0 && (
+        {fileName && missingCols.length === 0 && rows.length > 0 && !summary && (
           <p className="mb-3 text-sm text-ink/70">พบ {rows.length} แถว พร้อมนำเข้า</p>
         )}
 
         {error && <p className="mb-3 text-sm text-rose">{error}</p>}
-        {result && <p className="mb-3 text-sm text-teal-dark">{result}</p>}
+
+        {summary && (
+          <div className="mb-3 rounded-lg bg-paper px-3 py-2 text-sm text-ink/80">
+            <p className="font-medium text-teal-dark">
+              นำเข้าสำเร็จ: เพิ่มใหม่ {summary.admissions_inserted} · อัพเดต {summary.admissions_updated} จาก {summary.rows_in_file} แถว
+            </p>
+            <ul className="mt-1 space-y-0.5 text-xs text-ink/60">
+              <li>
+                เพิ่มใหม่ — ผู้ป่วย {summary.new_patients} · สิทธิ {summary.new_coverages} · ผู้จ่าย {summary.new_payers}
+              </li>
+              {summary.unk_promoted_to_real_coverage > 0 && (
+                <li>เปลี่ยนแถว UNK เป็นสิทธิจริง {summary.unk_promoted_to_real_coverage} แถว</li>
+              )}
+              {summary.unk_placeholder_skipped > 0 && (
+                <li>ข้ามแถว UNK ที่มีสิทธิจริงอยู่แล้ว {summary.unk_placeholder_skipped} แถว</li>
+              )}
+              {summary.duplicate_in_file_skipped > 0 && (
+                <li>ข้ามแถวซ้ำในไฟล์ (encounter+สิทธิ+ผู้จ่ายเดียวกัน) {summary.duplicate_in_file_skipped} แถว</li>
+              )}
+              {summary.invalid_skipped > 0 && (
+                <li className="text-rose">ข้ามแถวข้อมูลไม่ครบ (HN/AN/encounter_id/วันรับ) {summary.invalid_skipped} แถว</li>
+              )}
+            </ul>
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
@@ -180,10 +154,10 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={rows.length === 0 || missingCols.length > 0 || uploading}
+            disabled={rows.length === 0 || missingCols.length > 0 || uploading || !!summary}
             className="rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            {uploading ? 'กำลังนำเข้า…' : `นำเข้า ${rows.length} เคส`}
+            {uploading ? 'กำลังนำเข้า…' : `นำเข้า ${rows.length} แถว`}
           </button>
         </div>
       </div>

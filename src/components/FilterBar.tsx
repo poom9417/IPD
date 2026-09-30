@@ -4,8 +4,6 @@ interface Props {
   division: string
   onDivisionChange: (v: string) => void
   divisions: string[]
-  statusFilter: 'all' | 'active' | 'discharged'
-  onStatusFilterChange: (v: 'all' | 'active' | 'discharged') => void
 }
 
 export default function FilterBar({
@@ -14,8 +12,6 @@ export default function FilterBar({
   division,
   onDivisionChange,
   divisions,
-  statusFilter,
-  onStatusFilterChange,
 }: Props) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -38,29 +34,6 @@ export default function FilterBar({
           </option>
         ))}
       </select>
-
-      <div className="flex rounded-lg border border-line bg-surface p-0.5 text-sm">
-        {(
-          [
-            { key: 'all', label: 'ทั้งหมด' },
-            { key: 'active', label: 'กำลังนอน' },
-            { key: 'discharged', label: 'จำหน่ายแล้ว' },
-          ] as const
-        ).map((opt) => (
-          <button
-            key={opt.key}
-            onClick={() => onStatusFilterChange(opt.key)}
-            className={
-              'rounded-md px-3 py-1.5 transition-colors ' +
-              (statusFilter === opt.key
-                ? 'bg-teal-soft text-teal-dark font-medium'
-                : 'text-ink/60 hover:text-ink')
-            }
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

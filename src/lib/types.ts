@@ -17,6 +17,7 @@ export interface PayerMaster {
 }
 
 export interface CaseTracking {
+  admission_id: number
   encounter_id: number
   document_received_date: string | null
   audit_date: string | null
@@ -36,6 +37,7 @@ export interface AppUser {
 }
 
 export interface Admission {
+  admission_id: number
   encounter_id: number
   an: number
   hn: string
@@ -46,8 +48,8 @@ export interface Admission {
   division_code: string | null
   hospital_status_code: number | null
   los: number | null
-  coverage_code: string | null
-  payer_id: string | null
+  coverage_code: string
+  payer_id: string
   patients: Patient | null
   coverage_master: CoverageMaster | null
   payer_master: PayerMaster | null

@@ -16,13 +16,15 @@ const STAGE_CONFIG: Record<
   document: {
     label: 'รับเอกสาร',
     dateCol: 'document_received_date',
-    example: 'encounter_id,document_received_date\n3043836,2026-09-24',
+    example:
+      'encounter_id,document_received_date\n3043836,2026-09-24\n\n(ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
   },
   audit: {
     label: 'Audit',
     dateCol: 'audit_date',
     amountCol: 'audit_amount',
-    example: 'encounter_id,audit_date,audit_amount\n3043836,2026-09-25,12500.50',
+    example:
+      'encounter_id,audit_date,audit_amount\n3043836,2026-09-25,12500.50\n\n(ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
   },
   submission: {
     label: 'ส่งเบิก',
@@ -34,8 +36,14 @@ const STAGE_CONFIG: Record<
   },
 }
 
+interface Target {
+  admission_id: number
+  encounter_id: number
+}
+
 interface ParsedRow {
   encounter_id: number
+  targets: Target[]
   date: string
   amount?: number
   payerId?: string
@@ -52,7 +60,13 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
   const [result, setResult] = useState<string | null>(null)
 
   const cfg = STAGE_CONFIG[stage]
-  const payerByEncounter = new Map(admissions.map((a) => [a.encounter_id, a.payer_id]))
+  // 1 encounter อาจมีหลายแถว (แยกสิทธิ/ผู้จ่าย)
+  const byEncounter = new Map<number, Admission[]>()
+  for (const a of admissions) {
+    const list = byEncounter.get(a.encounter_id) ?? []
+    list.push(a)
+    byEncounter.set(a.encounter_id, list)
+  }
 
   function handleFile(file: File) {
     setFileName(file.name)
@@ -65,25 +79,37 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
           const encId = Number(r['encounter_id']?.trim())
           const date = r[cfg.dateCol]?.trim() ?? ''
           const amountRaw = cfg.amountCol ? r[cfg.amountCol]?.trim() : undefined
-          const payerId = cfg.needsPayerCheck ? r['payer_id']?.trim() : undefined
+          // ขั้นส่งเบิกต้องมี payer_id ตรงกัน / ขั้นอื่นใส่ payer_id เพื่อระบุแถวก็ได้ (ไม่ใส่ = ทุกสิทธิของ encounter)
+          const payerId = r['payer_id']?.trim() || undefined
           const claimNo = cfg.needsPayerCheck ? r['claim_no']?.trim() : undefined
 
           let error: string | undefined
+          let targets: Target[] = []
+          const candidates = byEncounter.get(encId) ?? []
+
           if (!encId) {
             error = 'encounter_id ไม่ถูกต้อง'
           } else if (!date) {
             error = `ไม่พบคอลัมน์ ${cfg.dateCol}`
-          } else if (!payerByEncounter.has(encId)) {
+          } else if (candidates.length === 0) {
             error = 'ไม่พบ encounter_id นี้ในระบบ'
-          } else if (cfg.needsPayerCheck && payerId) {
-            const systemPayer = payerByEncounter.get(encId) ?? ''
-            if ((systemPayer ?? '').trim().toLowerCase() !== payerId.toLowerCase()) {
-              error = `payer ไม่ตรงกับระบบ (ระบบ: ${systemPayer || '—'}, ไฟล์: ${payerId})`
+          } else if (payerId) {
+            targets = candidates
+              .filter((a) => (a.payer_id ?? '').trim().toLowerCase() === payerId.toLowerCase())
+              .map((a) => ({ admission_id: a.admission_id, encounter_id: a.encounter_id }))
+            if (targets.length === 0) {
+              const sys = candidates.map((a) => a.payer_id || '—').join(', ')
+              error = `payer ไม่ตรงกับระบบ (ระบบ: ${sys}, ไฟล์: ${payerId})`
             }
+          } else if (cfg.needsPayerCheck && candidates.length > 1) {
+            error = 'encounter นี้แยกหลายสิทธิ ต้องระบุ payer_id'
+          } else {
+            targets = candidates.map((a) => ({ admission_id: a.admission_id, encounter_id: a.encounter_id }))
           }
 
           return {
             encounter_id: encId,
+            targets,
             date,
             amount: amountRaw ? Number(amountRaw) : undefined,
             payerId,
@@ -103,23 +129,29 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
     setUploading(true)
     setResult(null)
 
-    const payload = valid.map((r) => {
-      const base: Record<string, string | number | null> = { encounter_id: r.encounter_id }
-      base[cfg.dateCol] = r.date
-      if (cfg.amountCol) base[cfg.amountCol] = r.amount ?? null
-      if (cfg.needsPayerCheck) base.claim_no = r.claimNo || null
-      return base
-    })
+    // 1 แถวในไฟล์ อาจลงได้หลายแถวในระบบ (ทุกสิทธิของ encounter) — คีย์คือ admission_id
+    const payload = valid.flatMap((r) =>
+      r.targets.map((t) => {
+        const base: Record<string, string | number | null> = {
+          admission_id: t.admission_id,
+          encounter_id: t.encounter_id,
+        }
+        base[cfg.dateCol] = r.date
+        if (cfg.amountCol) base[cfg.amountCol] = r.amount ?? null
+        if (cfg.needsPayerCheck) base.claim_no = r.claimNo || null
+        return base
+      }),
+    )
 
     const { error, count } = await supabase
       .from('case_tracking')
-      .upsert(payload, { onConflict: 'encounter_id', count: 'exact' })
+      .upsert(payload, { onConflict: 'admission_id', count: 'exact' })
 
     setUploading(false)
     if (error) {
       setResult(`เกิดข้อผิดพลาด: ${error.message}`)
     } else {
-      setResult(`บันทึกสำเร็จ ${count ?? valid.length} เคส`)
+      setResult(`บันทึกสำเร็จ ${count ?? payload.length} รายการ (แถวสิทธิ)`)
       onDone()
     }
   }
@@ -158,7 +190,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
         <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-[11px] text-ink/60">{cfg.example}</p>
         {cfg.needsPayerCheck && (
           <p className="mb-2 text-[11px] text-ink/50">
-            ระบบจะเช็ค payer_id ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส)
+            ระบบจะเช็ค payer_id ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส) — ถ้า encounter แยกหลายสิทธิ ต้องระบุ payer_id
           </p>
         )}
 
@@ -178,6 +210,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
                   <th className="px-2 py-1.5">วันที่</th>
                   {cfg.amountCol && <th className="px-2 py-1.5">จำนวนเงิน</th>}
                   {cfg.needsPayerCheck && <th className="px-2 py-1.5">claim_no</th>}
+                  <th className="px-2 py-1.5">ลงกี่สิทธิ</th>
                   <th className="px-2 py-1.5">สถานะ</th>
                 </tr>
               </thead>
@@ -188,6 +221,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
                     <td className="px-2 py-1.5">{r.date || '—'}</td>
                     {cfg.amountCol && <td className="px-2 py-1.5">{r.amount ?? '—'}</td>}
                     {cfg.needsPayerCheck && <td className="px-2 py-1.5">{r.claimNo || '—'}</td>}
+                    <td className="px-2 py-1.5">{r.error ? '—' : r.targets.length}</td>
                     <td className="px-2 py-1.5">
                       {r.error ? <span className="text-rose">{r.error}</span> : <span className="text-teal-dark">พร้อมบันทึก</span>}
                     </td>
