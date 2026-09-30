@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import BrandLogo from './BrandLogo'
+import UserManagement from './UserManagement'
 
 export default function Navbar() {
   const { session, role, signOut } = useAuth()
   const email = session?.user.email ?? ''
+  const [showUsers, setShowUsers] = useState(false)
 
   return (
     <header className="border-b border-line bg-surface">
@@ -27,6 +30,14 @@ export default function Navbar() {
               {role === 'admin' ? 'ผู้ดูแลระบบ (แก้ไขได้)' : 'ผู้ใช้งาน (ดูอย่างเดียว)'}
             </span>
           </div>
+          {role === 'admin' && (
+            <button
+              onClick={() => setShowUsers(true)}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-paper transition-colors"
+            >
+              จัดการผู้ใช้
+            </button>
+          )}
           <button
             onClick={signOut}
             className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-paper transition-colors"
@@ -35,6 +46,8 @@ export default function Navbar() {
           </button>
         </div>
       </div>
+
+      {showUsers && <UserManagement onClose={() => setShowUsers(false)} />}
     </header>
   )
 }

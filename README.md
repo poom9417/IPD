@@ -36,11 +36,9 @@ npm run dev
 ## สิทธิ์การใช้งาน
 
 - ทุกคนที่ login ด้วยอีเมล @mahidol.ac.th เข้าดูข้อมูลได้ (read-only โดย default)
-- ผู้ใช้ role `admin` เท่านั้นที่เพิ่ม/แก้ไขเคสได้ — ตั้ง role ได้โดยตรงในตาราง `app_users` ผ่าน Supabase SQL editor:
-  ```sql
-  update app_users set role = 'admin' where email = 'youremail@mahidol.ac.th';
-  ```
-  (ผู้ใช้ต้อง login เข้าระบบอย่างน้อย 1 ครั้งก่อน ถึงจะมีแถวใน `app_users` ให้แก้)
+- ผู้ใช้ role `admin` เท่านั้นที่เพิ่ม/แก้ไขเคสได้
+- `nattapoom.chu@mahidol.ac.th` ถูกตั้งเป็น admin อัตโนมัติตั้งแต่ login ครั้งแรก (bootstrap admin ผ่าน Postgres trigger)
+- คนอื่นตั้ง role/หน่วยงานได้ผ่านหน้าเว็บ ปุ่ม "จัดการสิทธิ์ผู้ใช้" (admin เท่านั้นที่เห็นปุ่มนี้) — ผู้ใช้ต้อง login เข้าระบบอย่างน้อย 1 ครั้งก่อน ถึงจะมีชื่อให้เลือกตั้งสิทธิ์
 
 ## สถานะเคลม (case_tracking)
 
@@ -48,16 +46,35 @@ npm run dev
 
 - `document_received_date` — วันที่รับเอกสาร
 - `audit_date`, `audit_amount` — วันที่ audit + ยอดเงิน
-- `submission_date`, `submission_amount` — วันที่ส่งเบิก + ยอดเงิน
+- `submission_date`, `submission_amount`, `claim_no` — วันที่ส่งเบิก + ยอดเงิน + เลขที่ใบส่งเบิก
 
 แก้ไขได้ 2 ทาง:
 - **รายตัว** — กดปุ่ม "แก้ไข" ที่แถวเคสนั้น มีส่วน "สถานะเคลม" ในฟอร์ม
-- **Bulk (CSV)** — ปุ่ม "อัพโหลดสถานะเคลม (CSV)" (เฉพาะ admin) เลือกขั้นตอน (รับเอกสาร/Audit/ส่งเบิก) แล้วอัพโหลดไฟล์ CSV รูปแบบ:
+- **Bulk (CSV)** — ปุ่ม "อัพโหลดสถานะเคลม (CSV)" (เฉพาะ admin) เลือกขั้นตอน แล้วอัพโหลดไฟล์ CSV รูปแบบ:
   ```
+  # รับเอกสาร
+  encounter_id,document_received_date
+  3043836,2026-09-24
+
+  # audit — export จาก Google Sheet ที่ทีม audit ใช้อยู่เป็น CSV แล้วตัดคอลัมน์เหลือแค่ 2 คอลัมน์นี้พอ
   encounter_id,audit_date,audit_amount
   3043836,2026-09-25,12500.50
+
+  # ส่งเบิก — ต้องมี payer_id ด้วย ระบบจะเช็คกับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส)
+  encounter_id,payer_id,claim_no,submission_date,submission_amount
+  3043836,50257,CLM-2026-0912,2026-09-26,12500.50
   ```
-  (คอลัมน์ตามขั้นตอนที่เลือก — ระบบ upsert ทับค่าเดิมด้วย encounter_id)
+  (ระบบ upsert ทับค่าเดิมด้วย encounter_id)
+
+**เรื่อง audit จาก Google Sheet:** ตอนนี้ยังไม่ได้เชื่อมต่ออัตโนมัติ (ชีตที่ให้ลิงก์มาไม่ได้เปิดสาธารณะ ดึงตรงไม่ได้) — ให้ export ชีตนั้นเป็น CSV แล้วอัพผ่านฟีเจอร์ข้างบนไปก่อน ถ้าต้องการให้ระบบดึงอัตโนมัติในเฟสถัดไป แนวทางคือทำ Supabase Edge Function ที่ใช้ Google Service Account (แชร์สิทธิ์ viewer ให้ service account บนชีตนั้น) อ่านผ่าน Sheets API v4 แล้ว upsert เข้า `case_tracking` ให้เอง — ยังไม่ได้ทำเพราะต้องตั้งค่า Google Cloud service account เพิ่ม
+
+## นำเข้าเคสใหม่จาก HIS (CSV)
+
+ปุ่ม "นำเข้าเคสใหม่ (CSV)" (เฉพาะ admin) — อัพโหลดไฟล์รูปแบบเดียวกับไฟล์ตั้งต้น (คอลัมน์: HN, AN, encounter_id, name, admit_date, admited_time, discharge_date, discharge_time, division_code, status, Los, birthdate, coverage_code, coverage_name, payer_id, payer_name) ระบบจะ upsert เข้า `patients`/`admissions`/`coverage_master`/`payer_master` ให้เอง encounter_id ที่มีอยู่แล้วจะถูกอัพเดตทับ ไม่สร้างซ้ำ — ยังไม่มีการเชื่อมต่อ API กับ HIS โดยตรง (ตามที่ตกลงว่ายังเป็นโปรเจกต์ทดลอง ใช้ไฟล์อัพโหลดจาก admin ไปก่อน)
+
+## จัดการสิทธิ์ผู้ใช้
+
+ปุ่ม "จัดการสิทธิ์ผู้ใช้" (เฉพาะ admin) — ดูรายชื่อคนที่เคย login เข้าระบบ ตั้ง role (admin/viewer) และ "หน่วยงาน" (รองรับกรณีทีมมาจากหลายหน่วยงาน) ได้จากหน้าเว็บโดยตรง ไม่ต้องรัน SQL
 
 ## โลโก้
 
@@ -67,7 +84,11 @@ npm run dev
 
 ปุ่ม "Export Excel" บน Dashboard (ใช้ได้ทุกสิทธิ์ ไม่จำกัด admin) ส่งออกเฉพาะรายการที่กรอง/ค้นหาอยู่ ณ ขณะนั้น เป็นไฟล์ `.xlsx` (ใช้ไลบรารี SheetJS ฝั่ง client ไม่ผ่าน server)
 
+## แก้ปัญหา "deploy แล้วจอขาว"
+
+ถ้าเปิดเว็บแล้วจอขาวสนิท (ไม่มีแม้แต่ข้อความ error) สาเหตุที่พบบ่อยที่สุดคือค่า `VITE_SUPABASE_URL` ที่วางใน Vercel มีอักขระเกิน (เว้นวรรค/เครื่องหมายคำพูดติดมาตอน copy-paste) โค้ดเวอร์ชันนี้ป้องกันไว้แล้ว (จะขึ้นข้อความ "ตั้งค่าระบบไม่ครบ" แทนจอขาว) แต่ env var ชนิด "sensitive" ใน Vercel **เปิดดูค่าเดิมซ้ำไม่ได้เลย** ถ้าไม่แน่ใจว่าค่าที่วางไว้ถูกต้อง ให้ลบตัวเดิมทิ้งแล้ววางใหม่จาก `.env.example` ให้ตรงเป๊ะ (Settings > Environment Variables) แล้ว Redeploy
+
 ## ยังไม่ได้ทำ
 
 - Storage bucket สำหรับแนบไฟล์เอกสาร/หลักฐาน (ตอนนี้เป็นแค่ CSV mapping ไม่มีการเก็บไฟล์ต้นฉบับ)
-- หน้าจัดการสิทธิ์ผู้ใช้ (ตอนนี้ตั้ง role ผ่าน SQL / ตั้ง bootstrap admin ผ่าน trigger เท่านั้น)
+- ดึงข้อมูล audit จาก Google Sheet อัตโนมัติ (ตอนนี้ต้อง export เป็น CSV เอง — ดูหัวข้อด้านบน)

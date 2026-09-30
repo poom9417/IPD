@@ -7,17 +7,24 @@ function fmtDate(d: string | null) {
 
 function ClaimStatus({ admission }: { admission: Admission }) {
   const ct = admission.case_tracking
-  const steps: { key: string; label: string; done: boolean }[] = [
-    { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date },
-    { key: 'audit', label: 'Audit', done: !!ct?.audit_date },
-    { key: 'submit', label: 'ส่งเบิก', done: !!ct?.submission_date },
+  const steps: { key: string; label: string; done: boolean; title: string }[] = [
+    { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date, title: ct?.document_received_date ? `รับเอกสาร ${fmtDate(ct.document_received_date)}` : 'รับเอกสาร' },
+    { key: 'audit', label: 'Audit', done: !!ct?.audit_date, title: ct?.audit_date ? `Audit ${fmtDate(ct.audit_date)}${ct.audit_amount != null ? ` · ${ct.audit_amount.toLocaleString()} บาท` : ''}` : 'Audit' },
+    {
+      key: 'submit',
+      label: 'ส่งเบิก',
+      done: !!ct?.submission_date,
+      title: ct?.submission_date
+        ? `ส่งเบิก ${fmtDate(ct.submission_date)}${ct.claim_no ? ` · เลขที่ ${ct.claim_no}` : ''}`
+        : 'ส่งเบิก',
+    },
   ]
   return (
     <div className="flex items-center gap-1">
       {steps.map((s) => (
         <span
           key={s.key}
-          title={s.label}
+          title={s.title}
           className={
             'rounded-full px-2 py-0.5 text-[11px] font-medium ' +
             (s.done ? 'bg-teal-soft text-teal-dark' : 'bg-paper text-ink/40')

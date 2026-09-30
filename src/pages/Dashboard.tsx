@@ -7,6 +7,8 @@ import FilterBar from '../components/FilterBar'
 import AdmissionsTable from '../components/AdmissionsTable'
 import AdmissionForm from '../components/AdmissionForm'
 import BulkClaimUpload from '../components/BulkClaimUpload'
+import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
+import UserManagement from '../components/UserManagement'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 import { exportAdmissionsToExcel } from '../lib/exportExcel'
 
@@ -20,6 +22,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
   const [showBulk, setShowBulk] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [showUsers, setShowUsers] = useState(false)
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
@@ -90,6 +94,18 @@ export default function Dashboard() {
             {isAdmin && (
               <>
                 <button
+                  onClick={() => setShowUsers(true)}
+                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                >
+                  จัดการสิทธิ์ผู้ใช้
+                </button>
+                <button
+                  onClick={() => setShowImport(true)}
+                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                >
+                  นำเข้าเคสใหม่ (CSV)
+                </button>
+                <button
                   onClick={() => setShowBulk(true)}
                   className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
                 >
@@ -114,8 +130,21 @@ export default function Dashboard() {
         />
       </main>
 
+      {showUsers && <UserManagement onClose={() => setShowUsers(false)} />}
+
+      {showImport && (
+        <ImportAdmissionsCsv
+          onClose={() => setShowImport(false)}
+          onDone={() => {
+            setShowImport(false)
+            loadData()
+          }}
+        />
+      )}
+
       {showBulk && (
         <BulkClaimUpload
+          admissions={admissions}
           onClose={() => setShowBulk(false)}
           onDone={() => {
             setShowBulk(false)

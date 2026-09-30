@@ -45,6 +45,7 @@ function toCaseDraft(a: Admission | null): CaseTrackingDraft {
     audit_amount: ct?.audit_amount != null ? String(ct.audit_amount) : '',
     submission_date: ct?.submission_date ?? '',
     submission_amount: ct?.submission_amount != null ? String(ct.submission_amount) : '',
+    claim_no: ct?.claim_no ?? '',
   }
 }
 
@@ -104,7 +105,8 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         caseDraft.audit_date ||
         caseDraft.audit_amount ||
         caseDraft.submission_date ||
-        caseDraft.submission_amount
+        caseDraft.submission_amount ||
+        caseDraft.claim_no
 
       if (hasCaseData) {
         const { error: caseErr } = await supabase.from('case_tracking').upsert({
@@ -114,6 +116,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
           submission_date: caseDraft.submission_date || null,
           submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
+          claim_no: caseDraft.claim_no || null,
         })
         if (caseErr) throw caseErr
       }
@@ -314,6 +317,16 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   step="0.01"
                   value={caseDraft.submission_amount}
                   onChange={(e) => setCase('submission_amount', e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
+            <div className="mt-3">
+              <Field label="เลขที่ใบส่งเบิก (claim_no)">
+                <input
+                  type="text"
+                  value={caseDraft.claim_no}
+                  onChange={(e) => setCase('claim_no', e.target.value)}
                   className="input"
                 />
               </Field>

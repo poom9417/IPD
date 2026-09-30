@@ -23,7 +23,16 @@ export interface CaseTracking {
   audit_amount: number | null
   submission_date: string | null
   submission_amount: number | null
+  claim_no: string | null
   updated_at: string
+}
+
+export interface AppUser {
+  id: string
+  email: string
+  role: 'admin' | 'viewer'
+  unit: string | null
+  created_at: string
 }
 
 export interface Admission {
@@ -59,6 +68,7 @@ export interface CaseTrackingDraft {
   audit_amount: string
   submission_date: string
   submission_amount: string
+  claim_no: string
 }
 
 export interface AdmissionDraft {
