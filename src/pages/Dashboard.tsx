@@ -27,6 +27,9 @@ export default function Dashboard() {
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
+  const [dischargeFrom, setDischargeFrom] = useState('')
+  const [dischargeTo, setDischargeTo] = useState('')
+  const [coverages, setCoverages] = useState<string[]>([])
 
   async function loadData() {
     setLoading(true)
@@ -78,14 +81,50 @@ export default function Dashboard() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
+
+    // วันจำหน่าย: เลือกช่วง → from..to, เลือกแค่วันเดียว (เริ่มหรือสิ้นสุดอย่างใดอย่างหนึ่ง) → วันนั้นวันเดียว
+    let from = dischargeFrom
+    let to = dischargeTo
+    if (from && to && from > to) [from, to] = [to, from]
+    const singleDay = from && !to ? from : !from && to ? to : ''
+
     return admissions.filter((a) => {
-      if (q && !(a.hn.toLowerCase().includes(q) || a.patients?.full_name.toLowerCase().includes(q))) {
+      if (
+        q &&
+        !(
+          a.hn.toLowerCase().includes(q) ||
+          a.patients?.full_name.toLowerCase().includes(q) ||
+          String(a.encounter_id).includes(q)
+        )
+      ) {
         return false
       }
       if (division && a.division_code !== division) return false
+
+      if (from || to) {
+        const d = a.discharge_date?.slice(0, 10)
+        if (!d) return false
+        if (singleDay) {
+          if (d !== singleDay) return false
+        } else if (d < from || d > to) {
+          return false
+        }
+      }
+
+      if (coverages.length > 0 && !coverages.includes(a.coverage_code)) return false
       return true
     })
-  }, [admissions, search, division])
+  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages])
+
+  const hasActiveFilter = !!(search || division || dischargeFrom || dischargeTo || coverages.length)
+
+  function clearFilters() {
+    setSearch('')
+    setDivision('')
+    setDischargeFrom('')
+    setDischargeTo('')
+    setCoverages([])
+  }
 
   return (
     <div className="min-h-screen">
@@ -93,15 +132,28 @@ export default function Dashboard() {
       <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
         <StatCards admissions={admissions} />
 
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          division={division}
+          onDivisionChange={setDivision}
+          divisions={divisions}
+          dischargeFrom={dischargeFrom}
+          onDischargeFromChange={setDischargeFrom}
+          dischargeTo={dischargeTo}
+          onDischargeToChange={setDischargeTo}
+          coverageOptions={coverageOptions}
+          coverages={coverages}
+          onCoveragesChange={setCoverages}
+          onClear={clearFilters}
+          hasActiveFilter={hasActiveFilter}
+        />
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <FilterBar
-            search={search}
-            onSearchChange={setSearch}
-            division={division}
-            onDivisionChange={setDivision}
-            divisions={divisions}
-          />
-          <div className="flex gap-2">
+          <div className="text-sm text-ink/60">
+            แสดง {filtered.length.toLocaleString()} จาก {admissions.length.toLocaleString()} รายการ
+          </div>
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => exportAdmissionsToExcel(filtered)}
               disabled={filtered.length === 0}

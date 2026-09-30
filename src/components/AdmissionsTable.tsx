@@ -90,9 +90,10 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, 
 
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-      <table className="w-full min-w-[860px] text-left text-sm">
+      <table className="w-full min-w-[960px] text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-ink/50">
+            <th className="px-4 py-3 font-medium">encounter_id</th>
             <th className="px-4 py-3 font-medium">HN</th>
             <th className="px-4 py-3 font-medium">ชื่อผู้ป่วย</th>
             <th className="px-4 py-3 font-medium">วันรับ</th>
@@ -108,6 +109,7 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, 
         <tbody>
           {admissions.map((a) => (
             <tr key={a.admission_id} className="border-b border-line last:border-0 hover:bg-paper/60">
+              <td className="px-4 py-3 font-mono text-xs font-medium text-ink">{a.encounter_id}</td>
               <td className="px-4 py-3 font-mono text-xs text-ink/70">{a.hn}</td>
               <td className="px-4 py-3 text-ink">{a.patients?.full_name ?? '—'}</td>
               <td className="px-4 py-3 text-ink/80">{fmtDate(a.admit_date)}</td>
@@ -116,7 +118,10 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, 
               </td>
               <td className="px-4 py-3 font-mono text-xs text-ink/70">{a.division_code ?? '—'}</td>
               <td className="px-4 py-3 text-right text-ink/80">{a.los ?? '—'}</td>
-              <td className="px-4 py-3 text-ink/80">{a.coverage_master?.coverage_name ?? '—'}</td>
+              <td className="px-4 py-3 text-ink/80">
+                <span className="mr-1.5 font-mono text-xs font-medium text-ink">{a.coverage_code}</span>
+                {a.coverage_master?.coverage_name ?? ''}
+              </td>
               <td className="px-4 py-3 text-ink/70">{a.payer_master?.payer_name ?? '—'}</td>
               <td className="px-4 py-3">
                 <ClaimStatus admission={a} canReceive={isAdmin} onReceiveDoc={onReceiveDoc} />
