@@ -64,8 +64,11 @@ export default function FilterBar({
   const now = new Date()
   const presets: { label: string; apply: () => void }[] = [
     {
-      label: 'วันนี้',
-      apply: () => setRange(now, now),
+      label: 'เมื่อวาน',
+      apply: () => {
+        const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+        setRange(y, y)
+      },
     },
     {
       label: '7 วันล่าสุด',
