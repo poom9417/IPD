@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { Admission, AdmissionDraft, CaseTrackingDraft, CoverageMaster, PayerMaster } from '../lib/types'
 
@@ -63,6 +63,15 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isEdit = admission !== null
+
+  // กด Esc เพื่อปิดหน้าต่าง
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
 
   function set<K extends keyof AdmissionDraft>(key: K, value: AdmissionDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
@@ -156,18 +165,23 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col rounded-2xl bg-surface shadow-xl"
+      >
+        {/* หัวข้อ — อยู่กับที่ */}
+        <div className="flex shrink-0 items-center justify-between px-6 pb-3 pt-5">
           <h2 className="text-base font-semibold text-ink">
             {isEdit ? 'แก้ไขเคส' : 'เพิ่มเคสใหม่'}
           </h2>
-          <button onClick={onClose} className="text-ink/40 hover:text-ink">
+          <button type="button" onClick={onClose} className="text-ink/40 hover:text-ink">
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        {/* ฟอร์ม — เลื่อนขึ้นลงได้ด้วยลูกกลิ้งเมาส์ */}
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 py-1">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Encounter ID">
               <input
@@ -357,10 +371,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             </div>
             <p className="mt-1.5 text-[11px] text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
+        </div>
 
-          {error && <p className="text-sm text-rose">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-2">
+        {/* ปุ่ม — ติดขอบล่างเสมอ ไม่ต้องเลื่อน */}
+        <div className="shrink-0 border-t border-line px-6 py-3">
+          {error && <p className="mb-2 text-sm text-rose">{error}</p>}
+          <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
               ยกเลิก
             </button>
@@ -372,8 +388,8 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   )
 }
