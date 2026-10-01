@@ -16,6 +16,11 @@
   --color-rose-soft: #f6e3e1;
 }
 
+/* กันหน้าเว็บขยับซ้าย-ขวาเมื่อ scrollbar แนวตั้งโผล่/หาย */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background-color: #ffffff;
   color: var(--color-ink);

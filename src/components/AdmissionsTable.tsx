@@ -35,7 +35,7 @@ function ClaimStatus({
     },
   ]
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-nowrap items-center gap-1">
       {steps.map((s) =>
         s.key === 'audit' && !s.done && canAudit ? (
           <button
@@ -103,6 +103,11 @@ interface Props {
   onAuditToday?: (a: Admission) => Promise<void>
 }
 
+// ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
+// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, หอผู้ป่วย, LOS, สิทธิ, ผู้จ่าย, สถานะเคลม, (แก้ไข)
+const COL_WIDTHS = [118, 86, 150, 94, 94, 80, 52, 200, 130, 215]
+const EDIT_COL_WIDTH = 76
+
 export default function AdmissionsTable({
   admissions,
   loading,
@@ -125,9 +130,17 @@ export default function AdmissionsTable({
     )
   }
 
+  const widths = isAdmin ? [...COL_WIDTHS, EDIT_COL_WIDTH] : COL_WIDTHS
+  const minWidth = widths.reduce((sum, w) => sum + w, 0)
+
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-      <table className="w-full min-w-[900px] text-left text-sm 2xl:min-w-0">
+      <table className="w-full table-fixed text-left text-sm" style={{ minWidth }}>
+        <colgroup>
+          {widths.map((w, i) => (
+            <col key={i} style={{ width: w }} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="bg-brand text-[13px] text-ink">
             <th className="whitespace-nowrap px-3 py-3 font-semibold">encounter_id</th>
@@ -148,18 +161,20 @@ export default function AdmissionsTable({
             <tr key={a.admission_id} className="border-b border-line last:border-0 hover:bg-paper">
               <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] font-semibold text-ink">{a.encounter_id}</td>
               <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] text-ink">{a.hn}</td>
-              <td className="min-w-[9rem] break-words px-3 py-2.5 text-ink">{a.patients?.full_name ?? '—'}</td>
+              <td className="break-words px-3 py-2.5 text-ink">{a.patients?.full_name ?? '—'}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-ink">{fmtDate(a.admit_date)}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-ink">
                 {fmtDate(a.discharge_date)}
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] text-ink">{a.division_code ?? '—'}</td>
+              <td className="break-words px-3 py-2.5 font-mono text-[13px] text-ink">{a.division_code ?? '—'}</td>
               <td className="px-3 py-2.5 text-right text-ink">{a.los ?? '—'}</td>
-              <td className="min-w-[10rem] break-words px-3 py-2.5 text-ink">
+              <td className="break-words px-3 py-2.5 text-ink">
                 <span className="mr-1.5 font-mono text-[13px] font-semibold text-ink">{a.coverage_code}</span>
                 {a.coverage_master?.coverage_name ?? ''}
               </td>
-              <td className="min-w-[8rem] break-words px-3 py-2.5 text-ink">{a.payer_master?.payer_name ?? '—'}</td>
+              <td className="truncate px-3 py-2.5 text-ink" title={a.payer_master?.payer_name ?? undefined}>
+                {a.payer_master?.payer_name ?? '—'}
+              </td>
               <td className="px-3 py-2.5">
                 <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
