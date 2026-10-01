@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'user' | 'viewer' | 'audit'
+export type AppRole = 'admin' | 'viewer'
 
 export interface Patient {
   hn: string
@@ -20,8 +20,8 @@ export interface CaseTracking {
   admission_id: number
   encounter_id: number
   document_received_date: string | null
+  document_received_amount: number | null
   audit_date: string | null
-  audit_amount: number | null
   submission_date: string | null
   submission_amount: number | null
   claim_no: string | null
@@ -31,7 +31,7 @@ export interface CaseTracking {
 export interface AppUser {
   id: string
   email: string
-  role: AppRole
+  role: 'admin' | 'viewer'
   unit: string | null
   created_at: string
 }
@@ -66,8 +66,8 @@ export interface BulkRow {
 
 export interface CaseTrackingDraft {
   document_received_date: string
+  document_received_amount: string
   audit_date: string
-  audit_amount: string
   submission_date: string
   submission_amount: string
   claim_no: string
@@ -87,36 +87,4 @@ export interface AdmissionDraft {
   los: number | ''
   coverage_code: string
   payer_id: string
-}
-
-// ---- Code C (เคสที่ส่งเบิกแล้วแต่ติด C) ----
-export interface CodeCCase {
-  id: number
-  admission_id: number
-  encounter_id: number
-  reason: string
-  deadline_date: string
-  reason_by: string | null
-  reason_by_email: string | null
-  reason_at: string
-  fix_detail: string | null
-  fix_by: string | null
-  fix_by_email: string | null
-  fix_at: string | null
-  admissions: {
-    hn: string
-    coverage_code: string
-    payer_id: string
-    patients: { full_name: string } | null
-    coverage_master: { coverage_name: string } | null
-    payer_master: { payer_name: string } | null
-    case_tracking: { submission_date: string | null; claim_no: string | null } | null
-  } | null
-}
-
-// ---- My job (ใครดูแลสิทธิไหน) ----
-export interface CoverageAssignment {
-  coverage_code: string
-  user_id: string
-  user_email: string | null
 }

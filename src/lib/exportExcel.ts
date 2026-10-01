@@ -21,11 +21,10 @@ export function exportAdmissionsToExcel(admissions: Admission[], fileName = 'ipd
     สิทธิการรักษา: a.coverage_master?.coverage_name ?? '',
     ผู้จ่าย: a.payer_master?.payer_name ?? '',
     วันที่รับเอกสาร: fmt(a.case_tracking?.document_received_date),
+    ยอดรับเอกสาร: a.case_tracking?.document_received_amount ?? '',
     วันที่Audit: fmt(a.case_tracking?.audit_date),
-    ยอดAudit: a.case_tracking?.audit_amount ?? '',
     วันที่ส่งเบิก: fmt(a.case_tracking?.submission_date),
     ยอดส่งเบิก: a.case_tracking?.submission_amount ?? '',
-    claim_no: a.case_tracking?.claim_no ?? '',
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(rows)
