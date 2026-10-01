@@ -36,11 +36,12 @@ export default function Dashboard() {
   const { role, session } = useAuth()
   const isAdmin = role === 'admin'
   const isAudit = role === 'audit'
-  // audit: อัพโหลดได้เฉพาะขั้น Audit + กดบันทึกวัน Audit ได้ (ฐานข้อมูลบังคับซ้ำอีกชั้น)
+  // audit: อัพโหลดได้เฉพาะขั้น Audit + กดบันทึกวัน Audit ได้ | user: อัพโหลดได้เฉพาะรับเอกสาร/ส่งเบิก (ฐานข้อมูลบังคับซ้ำอีกชั้น)
   const canBulk = role === 'admin' || role === 'user' || isAudit
   const canMarkAudit = isAdmin || isAudit
-  // admin + user: เพิ่มเคส / อัพโหลดสถานะเคลม (CSV) ได้  |  เฉพาะ admin: นำเข้าเคส, แก้ไขเคส, รับเอกสาร, จัดการผู้ใช้
+  // admin + user: เพิ่มเคส / อัพโหลดสถานะเคลม (CSV) / กดรับเอกสาร ได้  |  เฉพาะ admin: นำเข้าเคส, แก้ไขเคส, จัดการผู้ใช้
   const canEdit = role === 'admin' || role === 'user'
+  const canReceiveDoc = canEdit
 
   const [admissions, setAdmissions] = useState<Admission[]>([])
   const [coverageOptions, setCoverageOptions] = useState<CoverageMaster[]>([])
@@ -319,6 +320,7 @@ export default function Dashboard() {
           admissions={paged}
           loading={loading}
           isAdmin={isAdmin}
+          canReceive={canReceiveDoc}
           onEdit={(a) => setEditing(a)}
           onReceiveDoc={receiveDocument}
           canAudit={canMarkAudit}
@@ -363,7 +365,7 @@ export default function Dashboard() {
       {showBulk && (
         <BulkClaimUpload
           admissions={admissions}
-          allowedStages={isAudit ? ['audit'] : undefined}
+          allowedStages={isAudit ? ['audit'] : role === 'user' ? ['document', 'submission'] : undefined}
           onClose={() => setShowBulk(false)}
           onDone={() => {
             setShowBulk(false)

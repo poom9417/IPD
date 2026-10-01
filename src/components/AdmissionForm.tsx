@@ -132,10 +132,11 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         admissionId = ins.admission_id
       }
 
+      // role user ห้ามบันทึกวัน/ยอด Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
+      const canAuditFields = role === 'admin'
       const hasCaseData =
         caseDraft.document_received_date ||
-        caseDraft.audit_date ||
-        caseDraft.audit_amount ||
+        (canAuditFields && (caseDraft.audit_date || caseDraft.audit_amount)) ||
         caseDraft.submission_date ||
         caseDraft.submission_amount ||
         caseDraft.claim_no
@@ -146,8 +147,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             admission_id: admissionId,
             encounter_id: Number(draft.encounter_id),
             document_received_date: caseDraft.document_received_date || null,
-            audit_date: caseDraft.audit_date || null,
-            audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
+            ...(canAuditFields
+              ? {
+                  audit_date: caseDraft.audit_date || null,
+                  audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
+                }
+              : {}),
             submission_date: caseDraft.submission_date || null,
             submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
             claim_no: caseDraft.claim_no || null,
@@ -326,6 +331,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
               />
             </Field>
 
+            {role === 'admin' && (
             <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="วันที่ Audit">
                 <input
@@ -345,6 +351,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 />
               </Field>
             </div>
+            )}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="วันที่ส่งเบิก">

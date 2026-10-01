@@ -94,6 +94,8 @@ interface Props {
   admissions: Admission[]
   loading: boolean
   isAdmin: boolean
+  /** admin + user กดปุ่ม "รับเอกสาร" ได้ (audit / viewer ไม่ได้) */
+  canReceive?: boolean
   onEdit: (a: Admission) => void
   onReceiveDoc: (a: Admission) => Promise<void>
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
@@ -105,6 +107,7 @@ export default function AdmissionsTable({
   admissions,
   loading,
   isAdmin,
+  canReceive = false,
   onEdit,
   onReceiveDoc,
   canAudit = false,
@@ -158,7 +161,7 @@ export default function AdmissionsTable({
               </td>
               <td className="min-w-[8rem] break-words px-3 py-2.5 text-ink">{a.payer_master?.payer_name ?? '—'}</td>
               <td className="px-3 py-2.5">
-                <ClaimStatus admission={a} canReceive={isAdmin} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
+                <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
                 <td className="px-3 py-2.5 text-right">
