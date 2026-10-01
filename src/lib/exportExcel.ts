@@ -25,6 +25,7 @@ export function exportAdmissionsToExcel(admissions: Admission[], fileName = 'ipd
     ยอดAudit: a.case_tracking?.audit_amount ?? '',
     วันที่ส่งเบิก: fmt(a.case_tracking?.submission_date),
     ยอดส่งเบิก: a.case_tracking?.submission_amount ?? '',
+    claim_no: a.case_tracking?.claim_no ?? '',
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(rows)

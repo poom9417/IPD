@@ -6,7 +6,8 @@ import type { CoverageAssignment, CoverageMaster } from '../lib/types'
 export default function MyJobPage() {
   const { session, role } = useAuth()
   const myId = session?.user.id ?? ''
-  const canEdit = role === 'admin' || role === 'user' || role === 'audit'
+  // เฉพาะ admin / user เลือกสิทธิได้ (audit และ viewer ไม่มีหน้านี้ — ฐานข้อมูลบล็อกซ้ำอีกชั้น)
+  const canEdit = role === 'admin' || role === 'user'
 
   const [coverages, setCoverages] = useState<CoverageMaster[]>([])
   const [assignments, setAssignments] = useState<CoverageAssignment[]>([])
@@ -40,14 +41,12 @@ export default function MyJobPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId])
 
-  // ผู้ดูแลคนอื่นของแต่ละสิทธิ
-  const othersByCoverage = useMemo(() => {
-    const m = new Map<string, string[]>()
+  // 1 สิทธิมีผู้ดูแลได้คนเดียว — สิทธิที่คนอื่นดูแลอยู่ (code → อีเมลของเขา)
+  const ownerByCoverage = useMemo(() => {
+    const m = new Map<string, string>()
     for (const a of assignments) {
       if (a.user_id === myId) continue
-      const arr = m.get(a.coverage_code) ?? []
-      arr.push(a.user_email ?? '—')
-      m.set(a.coverage_code, arr)
+      m.set(a.coverage_code, a.user_email ?? '—')
     }
     return m
   }, [assignments, myId])
@@ -60,9 +59,16 @@ export default function MyJobPage() {
     )
   }, [coverages, query])
 
+  // เลือกได้เฉพาะสิทธิที่ว่าง หรือของตัวเอง
+  const selectableVisible = useMemo(
+    () => visible.filter((c) => !ownerByCoverage.has(c.coverage_code)),
+    [visible, ownerByCoverage],
+  )
+
   const dirty = selected.size !== saved.size || [...selected].some((c) => !saved.has(c))
 
   function toggle(code: string) {
+    if (ownerByCoverage.has(code)) return
     setMessage(null)
     setSelected((prev) => {
       const next = new Set(prev)
@@ -73,24 +79,33 @@ export default function MyJobPage() {
   }
 
   function selectVisible() {
-    setSelected((prev) => new Set([...prev, ...visible.map((c) => c.coverage_code)]))
+    setSelected((prev) => new Set([...prev, ...selectableVisible.map((c) => c.coverage_code)]))
   }
 
   async function save() {
     setSaving(true)
     setMessage(null)
-    const { error } = await supabase.rpc('set_my_coverages', { codes: [...selected] })
+    // ฟังก์ชันฝั่งฐานข้อมูลคืน "รายการสิทธิที่จองไม่สำเร็จ" (มีคนอื่นดูแลแล้ว เช่น กดตัดหน้ากัน)
+    const { data, error } = await supabase.rpc('set_my_coverages', { codes: [...selected] })
     setSaving(false)
     if (error) {
       setMessage({ ok: false, text: `บันทึกไม่สำเร็จ: ${error.message}` })
       return
     }
-    setMessage({ ok: true, text: `บันทึกแล้ว — คุณดูแล ${selected.size} สิทธิ` })
-    load()
+    const refused = (data as string[] | null) ?? []
+    if (refused.length > 0) {
+      setMessage({
+        ok: false,
+        text: `สิทธิ ${refused.join(', ')} มีผู้ดูแลอยู่แล้ว จึงไม่ถูกบันทึก (อาจมีคนเลือกตัดหน้า) — สิทธิที่เหลือบันทึกแล้ว`,
+      })
+    } else {
+      setMessage({ ok: true, text: `บันทึกแล้ว — คุณดูแล ${selected.size} สิทธิ` })
+    }
+    await load()
   }
 
   const unassigned = coverages.filter(
-    (c) => !selected.has(c.coverage_code) && !othersByCoverage.has(c.coverage_code),
+    (c) => !selected.has(c.coverage_code) && !ownerByCoverage.has(c.coverage_code),
   ).length
 
   return (
@@ -98,8 +113,8 @@ export default function MyJobPage() {
       <div>
         <h1 className="text-xl font-bold text-ink">My job — สิทธิที่ฉันดูแล</h1>
         <p className="mt-1 text-sm text-ink/70">
-          เลือกสิทธิการรักษาที่คุณรับผิดชอบได้หลายรายการ สิทธิหนึ่งมีผู้ดูแลได้หลายคน
-          เมื่อบันทึกแล้วหน้า Mine จะมีปุ่ม “เฉพาะสิทธิของฉัน” ให้กรองเคสทันที
+          เลือกสิทธิการรักษาที่คุณรับผิดชอบได้หลายรายการ แต่ 1 สิทธิมีผู้ดูแลได้ 1 คนเท่านั้น
+          สิทธิที่มีคนดูแลแล้วจะเลือกไม่ได้ เมื่อบันทึกแล้วหน้า Mine และ Code C จะมีปุ่ม “เฉพาะสิทธิของฉัน” ให้กรองเคสทันที
         </p>
       </div>
 
@@ -129,9 +144,10 @@ export default function MyJobPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={selectVisible}
-              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink"
+              disabled={selectableVisible.length === 0}
+              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
             >
-              {query ? `เลือกที่ค้นเจอ (${visible.length})` : 'เลือกทั้งหมด'}
+              {query ? `เลือกที่ค้นเจอ (${selectableVisible.length})` : 'เลือกที่ว่างทั้งหมด'}
             </button>
             <button
               onClick={() => setSelected(new Set())}
@@ -153,7 +169,7 @@ export default function MyJobPage() {
       {message && (
         <p className={'text-sm ' + (message.ok ? 'text-ink font-semibold' : 'text-rose')}>{message.text}</p>
       )}
-      {!canEdit && <p className="text-sm text-ink/70">บัญชีนี้เป็นแบบดูอย่างเดียว กำหนดสิทธิที่ดูแลไม่ได้</p>}
+      {!canEdit && <p className="text-sm text-ink/70">บัญชีนี้กำหนดสิทธิที่ดูแลไม่ได้</p>}
 
       {loading ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
@@ -165,28 +181,34 @@ export default function MyJobPage() {
                 <th className="w-14 px-3 py-3 font-semibold">ดูแล</th>
                 <th className="whitespace-nowrap px-3 py-3 font-semibold">รหัสสิทธิ</th>
                 <th className="px-3 py-3 font-semibold">ชื่อสิทธิ</th>
-                <th className="px-3 py-3 font-semibold">ผู้ดูแลคนอื่น</th>
+                <th className="px-3 py-3 font-semibold">ผู้ดูแล</th>
               </tr>
             </thead>
             <tbody>
               {visible.map((c) => {
                 const on = selected.has(c.coverage_code)
-                const others = othersByCoverage.get(c.coverage_code) ?? []
+                const owner = ownerByCoverage.get(c.coverage_code)
+                const locked = owner !== undefined
+                const clickable = canEdit && !locked
                 return (
                   <tr
                     key={c.coverage_code}
-                    onClick={() => canEdit && toggle(c.coverage_code)}
+                    onClick={() => clickable && toggle(c.coverage_code)}
                     className={
                       'border-b border-line last:border-0 ' +
-                      (canEdit ? 'cursor-pointer ' : '') +
-                      (on ? 'bg-brand-soft/60 hover:bg-brand-soft' : 'hover:bg-paper')
+                      (clickable ? 'cursor-pointer ' : '') +
+                      (locked
+                        ? 'bg-paper/60 text-ink/50'
+                        : on
+                          ? 'bg-brand-soft/60 hover:bg-brand-soft'
+                          : 'hover:bg-paper')
                     }
                   >
                     <td className="px-3 py-2.5">
                       <input
                         type="checkbox"
                         checked={on}
-                        disabled={!canEdit}
+                        disabled={!clickable}
                         onChange={() => toggle(c.coverage_code)}
                         onClick={(e) => e.stopPropagation()}
                         className="h-4 w-4 accent-black"
@@ -197,7 +219,13 @@ export default function MyJobPage() {
                     </td>
                     <td className="px-3 py-2.5 text-ink">{c.coverage_name}</td>
                     <td className="px-3 py-2.5 text-ink/80">
-                      {others.length === 0 ? <span className="text-ink/40">—</span> : others.join(', ')}
+                      {locked ? (
+                        owner
+                      ) : on ? (
+                        <span className="font-semibold text-ink">ฉัน</span>
+                      ) : (
+                        <span className="text-ink/40">ว่าง</span>
+                      )}
                     </td>
                   </tr>
                 )

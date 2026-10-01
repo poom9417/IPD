@@ -15,8 +15,8 @@ interface Props {
 
 export default function Sidebar({ page, onChange }: Props) {
   const { role } = useAuth()
-  // viewer (ดูอย่างเดียว) ไม่มีหน้า My job
-  const canJob = role === 'admin' || role === 'user' || role === 'audit'
+  // My job ใช้ได้เฉพาะ admin และ user — audit (กดวัน Audit + ตอบ Code C เท่านั้น) และ viewer ไม่มีหน้านี้
+  const canJob = role === 'admin' || role === 'user'
   const items = ITEMS.filter((i) => !i.needsJob || canJob)
 
   return (

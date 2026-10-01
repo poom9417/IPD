@@ -1,6 +1,11 @@
 -- ============================================================================
 -- IPD AR discharge — role "audit" + หน้า Code C + หน้า My job
--- รันซ้ำได้ (idempotent)  |  ทดสอบบน Supabase project qwivyyvhezqbhlukcsmt
+-- รันซ้ำได้ (idempotent)  |  ตรงกับฐานข้อมูล production (Supabase project qwivyyvhezqbhlukcsmt)
+--
+-- กติกาที่ไฟล์นี้บังคับ
+--   * audit: ลงได้เฉพาะ audit_date / audit_amount ใน case_tracking + ตอบช่อง "แก้ไขอย่างไร" ใน Code C
+--   * My job: 1 สิทธิมีผู้ดูแลได้ "คนเดียว" และเฉพาะ role admin / user (audit และ viewer ใช้ไม่ได้)
+-- หมายเหตุ: ไฟล์นี้ต้องรันหลัง add_user_role.sql (ใช้ public.is_admin() / is_editor())
 -- ============================================================================
 
 -- 1) role "audit" -------------------------------------------------------------
@@ -152,15 +157,31 @@ create trigger trg_guard_code_c_cases
   before insert or update on public.code_c_cases
   for each row execute function public.guard_code_c_cases();
 
--- 4) My job: ใครดูแลสิทธิไหน (many-to-many; 1 สิทธิมีผู้ดูแลได้หลายคน) -----------------
+-- 4) My job: ใครดูแลสิทธิไหน (1 สิทธิ = 1 ผู้ดูแล; 1 คนดูแลได้หลายสิทธิ) ---------------
 create table if not exists public.coverage_assignments (
-  coverage_code text not null references public.coverage_master(coverage_code) on delete cascade,
+  coverage_code text primary key references public.coverage_master(coverage_code) on delete cascade,
   user_id       uuid not null references public.app_users(id) on delete cascade,
   user_email    text,
-  created_at    timestamptz not null default now(),
-  primary key (coverage_code, user_id)
+  created_at    timestamptz not null default now()
 );
 create index if not exists coverage_assignments_user_idx on public.coverage_assignments(user_id);
+
+-- เผื่อ environment เก่าที่เคยสร้าง PK แบบ (coverage_code, user_id): ลดเหลือผู้ดูแลคนเดียวต่อสิทธิ
+-- (เก็บคนที่ได้สิทธิก่อน) แล้วเปลี่ยน PK เป็น coverage_code ตัวเดียว — production ปัจจุบันเป็นแบบนี้อยู่แล้ว จึงไม่ทำอะไร
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.coverage_assignments'::regclass and contype = 'p' and array_length(conkey, 1) > 1
+  ) then
+    delete from public.coverage_assignments a
+      using public.coverage_assignments b
+     where a.coverage_code = b.coverage_code
+       and (a.created_at, a.user_id) > (b.created_at, b.user_id);
+    alter table public.coverage_assignments drop constraint coverage_assignments_pkey;
+    alter table public.coverage_assignments add primary key (coverage_code);
+  end if;
+end $$;
 
 alter table public.coverage_assignments enable row level security;
 
@@ -168,10 +189,11 @@ drop policy if exists "read coverage_assignments"   on public.coverage_assignmen
 drop policy if exists "insert coverage_assignments" on public.coverage_assignments;
 drop policy if exists "delete coverage_assignments" on public.coverage_assignments;
 create policy "read coverage_assignments" on public.coverage_assignments for select to authenticated using (true);
+-- admin จัดการแทนใครก็ได้ | user จัดการได้เฉพาะของตัวเอง | audit / viewer ทำไม่ได้
 create policy "insert coverage_assignments" on public.coverage_assignments for insert to authenticated
-  with check (public.is_admin() or (user_id = auth.uid() and public.my_role() in ('user','audit')));
+  with check (public.is_admin() or (user_id = auth.uid() and public.my_role() = 'user'));
 create policy "delete coverage_assignments" on public.coverage_assignments for delete to authenticated
-  using (public.is_admin() or (user_id = auth.uid() and public.my_role() in ('user','audit')));
+  using (public.is_admin() or (user_id = auth.uid() and public.my_role() = 'user'));
 
 create or replace function public.fill_assignment_email()
 returns trigger language plpgsql security definer set search_path to 'public' as $$
@@ -184,13 +206,24 @@ create trigger trg_fill_assignment_email
   before insert on public.coverage_assignments
   for each row execute function public.fill_assignment_email();
 
--- บันทึก "สิทธิที่ฉันดูแล" ทีเดียวทั้งชุด (แทนที่ของเดิม) — SECURITY INVOKER จึงผ่าน RLS ด้านบน
-create or replace function public.set_my_coverages(codes text[])
-returns void language plpgsql security invoker set search_path to 'public' as $$
+-- บันทึก "สิทธิที่ฉันดูแล" ทั้งชุด (แทนที่ของเดิม) — SECURITY INVOKER จึงผ่าน RLS ด้านบน
+-- คืนค่า = รายการสิทธิที่ "จองไม่สำเร็จ" เพราะมีคนอื่นดูแลอยู่แล้ว (array ว่าง = สำเร็จทั้งหมด)
+drop function if exists public.set_my_coverages(text[]);
+create function public.set_my_coverages(codes text[])
+returns text[] language plpgsql security invoker set search_path to 'public' as $$
+declare
+  want text[] := coalesce(codes, '{}');
 begin
   delete from public.coverage_assignments
-   where user_id = auth.uid() and not (coverage_code = any (coalesce(codes, '{}')));
+   where user_id = auth.uid() and not (coverage_code = any (want));
+
   insert into public.coverage_assignments (coverage_code, user_id)
-    select c, auth.uid() from unnest(coalesce(codes, '{}')) as c
-    on conflict do nothing;
+    select c, auth.uid() from unnest(want) as c
+    on conflict (coverage_code) do nothing;
+
+  return coalesce((
+    select array_agg(c) from unnest(want) as c
+     where not exists (select 1 from public.coverage_assignments
+                        where coverage_code = c and user_id = auth.uid())
+  ), '{}');
 end $$;

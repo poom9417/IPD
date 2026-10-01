@@ -4,6 +4,7 @@ import Sidebar, { type PageKey } from './Sidebar'
 import Dashboard from '../pages/Dashboard'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
+import { useAuth } from '../contexts/AuthContext'
 
 const VALID: PageKey[] = ['mine', 'codec', 'myjob']
 
@@ -13,7 +14,11 @@ function readHash(): PageKey {
 }
 
 export default function AppLayout() {
+  const { role, roleLoading } = useAuth()
   const [page, setPage] = useState<PageKey>(readHash)
+
+  // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob ใน URL เอง)
+  const canJob = role === 'admin' || role === 'user'
 
   // เก็บหน้าปัจจุบันไว้ใน URL hash — refresh แล้วยังอยู่หน้าเดิม
   useEffect(() => {
@@ -21,6 +26,12 @@ export default function AppLayout() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  // รอโหลด role เสร็จก่อนค่อยเด้ง ไม่งั้น admin ที่ refresh หน้า #myjob จะโดนเด้งออกผิดๆ
+  useEffect(() => {
+    if (page === 'myjob' && !roleLoading && role !== null && !canJob) go('mine')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, role, roleLoading, canJob])
 
   function go(p: PageKey) {
     window.location.hash = p
@@ -35,7 +46,7 @@ export default function AppLayout() {
         <div className="min-w-0 flex-1">
           {page === 'mine' && <Dashboard />}
           {page === 'codec' && <CodeCPage />}
-          {page === 'myjob' && <MyJobPage />}
+          {page === 'myjob' && canJob && <MyJobPage />}
         </div>
       </div>
     </div>
