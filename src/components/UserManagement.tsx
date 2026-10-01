@@ -89,6 +89,7 @@ export default function UserManagement({ onClose }: Props) {
                         className="input py-1 text-xs"
                       >
                         <option value="viewer">ดูอย่างเดียว</option>
+                        <option value="user">ผู้ใช้ทั่วไป</option>
                         <option value="admin">Admin</option>
                       </select>
                     </td>

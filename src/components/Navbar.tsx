@@ -24,10 +24,14 @@ export default function Navbar() {
             <span
               className={
                 'text-xs font-medium ' +
-                (role === 'admin' ? 'text-brand' : 'text-white/60')
+                (role === 'admin' ? 'text-brand' : role === 'user' ? 'text-white/80' : 'text-white/60')
               }
             >
-              {role === 'admin' ? 'ผู้ดูแลระบบ (แก้ไขได้)' : 'ผู้ใช้งาน (ดูอย่างเดียว)'}
+              {role === 'admin'
+                ? 'ผู้ดูแลระบบ (แก้ไขได้)'
+                : role === 'user'
+                  ? 'ผู้ใช้ทั่วไป (เพิ่มเคส/อัพโหลดสถานะเคลมได้)'
+                  : 'ผู้ใช้งาน (ดูอย่างเดียว)'}
             </span>
           </div>
           {role === 'admin' && (

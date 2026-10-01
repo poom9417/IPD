@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'viewer'
+export type AppRole = 'admin' | 'user' | 'viewer'
 
 export interface Patient {
   hn: string
@@ -31,7 +31,7 @@ export interface CaseTracking {
 export interface AppUser {
   id: string
   email: string
-  role: 'admin' | 'viewer'
+  role: AppRole
   unit: string | null
   created_at: string
 }

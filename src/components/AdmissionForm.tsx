@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../contexts/AuthContext'
 import type { Admission, AdmissionDraft, CaseTrackingDraft, CoverageMaster, PayerMaster } from '../lib/types'
 
 function toDraft(a: Admission | null): AdmissionDraft {
@@ -63,6 +64,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isEdit = admission !== null
+  const { role } = useAuth()
 
   // กด Esc เพื่อปิดหน้าต่าง
   useEffect(() => {
@@ -87,11 +89,15 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
     setError(null)
 
     try {
-      const { error: patientErr } = await supabase.from('patients').upsert({
-        hn: draft.hn.trim(),
-        full_name: draft.full_name.trim(),
-        birthdate: draft.birthdate || null,
-      })
+      // admin: เพิ่ม/แก้ข้อมูลผู้ป่วยได้  |  user: เพิ่ม HN ใหม่ได้อย่างเดียว (HN ที่มีอยู่แล้วจะไม่ถูกเขียนทับ)
+      const { error: patientErr } = await supabase.from('patients').upsert(
+        {
+          hn: draft.hn.trim(),
+          full_name: draft.full_name.trim(),
+          birthdate: draft.birthdate || null,
+        },
+        role === 'admin' ? undefined : { onConflict: 'hn', ignoreDuplicates: true },
+      )
       if (patientErr) throw patientErr
 
       const fields = {
