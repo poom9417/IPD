@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../contexts/AuthContext'
 import type { Admission, AdmissionDraft, CaseTrackingDraft, CoverageMaster, PayerMaster } from '../lib/types'
 
 function toDraft(a: Admission | null): AdmissionDraft {
@@ -41,8 +42,8 @@ function toCaseDraft(a: Admission | null): CaseTrackingDraft {
   const ct = a?.case_tracking
   return {
     document_received_date: ct?.document_received_date ?? '',
-    document_received_amount: ct?.document_received_amount != null ? String(ct.document_received_amount) : '',
     audit_date: ct?.audit_date ?? '',
+    audit_amount: ct?.audit_amount != null ? String(ct.audit_amount) : '',
     submission_date: ct?.submission_date ?? '',
     submission_amount: ct?.submission_amount != null ? String(ct.submission_amount) : '',
     claim_no: ct?.claim_no ?? '',
@@ -63,6 +64,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isEdit = admission !== null
+  const { role } = useAuth()
 
   // กด Esc เพื่อปิดหน้าต่าง
   useEffect(() => {
@@ -87,11 +89,15 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
     setError(null)
 
     try {
-      const { error: patientErr } = await supabase.from('patients').upsert({
-        hn: draft.hn.trim(),
-        full_name: draft.full_name.trim(),
-        birthdate: draft.birthdate || null,
-      })
+      // admin: เพิ่ม/แก้ข้อมูลผู้ป่วยได้  |  user: เพิ่ม HN ใหม่ได้อย่างเดียว (HN ที่มีอยู่แล้วจะไม่ถูกเขียนทับ)
+      const { error: patientErr } = await supabase.from('patients').upsert(
+        {
+          hn: draft.hn.trim(),
+          full_name: draft.full_name.trim(),
+          birthdate: draft.birthdate || null,
+        },
+        role === 'admin' ? undefined : { onConflict: 'hn', ignoreDuplicates: true },
+      )
       if (patientErr) throw patientErr
 
       const fields = {
@@ -126,10 +132,11 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         admissionId = ins.admission_id
       }
 
+      // role user ห้ามบันทึกวัน/ยอด Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
+      const canAuditFields = role === 'admin'
       const hasCaseData =
         caseDraft.document_received_date ||
-        caseDraft.document_received_amount ||
-        caseDraft.audit_date ||
+        (canAuditFields && (caseDraft.audit_date || caseDraft.audit_amount)) ||
         caseDraft.submission_date ||
         caseDraft.submission_amount ||
         caseDraft.claim_no
@@ -140,9 +147,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             admission_id: admissionId,
             encounter_id: Number(draft.encounter_id),
             document_received_date: caseDraft.document_received_date || null,
-            document_received_amount:
-              caseDraft.document_received_amount === '' ? null : Number(caseDraft.document_received_amount),
-            audit_date: caseDraft.audit_date || null,
+            ...(canAuditFields
+              ? {
+                  audit_date: caseDraft.audit_date || null,
+                  audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
+                }
+              : {}),
             submission_date: caseDraft.submission_date || null,
             submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
             claim_no: caseDraft.claim_no || null,
@@ -176,7 +186,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           <h2 className="text-base font-semibold text-ink">
             {isEdit ? 'แก้ไขเคส' : 'เพิ่มเคสใหม่'}
           </h2>
-          <button type="button" onClick={onClose} className="text-ink/40 hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
         </div>
@@ -310,29 +320,19 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           </div>
 
           <div className="border-t border-line pt-3">
-            <p className="mb-2 text-xs font-semibold text-ink/60">สถานะเคลม</p>
+            <p className="mb-2 text-sm font-semibold text-ink/80">สถานะเคลม</p>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="วันที่รับเอกสาร">
-                <input
-                  type="date"
-                  value={caseDraft.document_received_date}
-                  onChange={(e) => setCase('document_received_date', e.target.value)}
-                  className="input"
-                />
-              </Field>
-              <Field label="ยอดรับเอกสาร (บาท)">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={caseDraft.document_received_amount}
-                  onChange={(e) => setCase('document_received_amount', e.target.value)}
-                  className="input"
-                />
-              </Field>
-            </div>
+            <Field label="วันที่รับเอกสาร">
+              <input
+                type="date"
+                value={caseDraft.document_received_date}
+                onChange={(e) => setCase('document_received_date', e.target.value)}
+                className="input"
+              />
+            </Field>
 
-            <div className="mt-3">
+            {role === 'admin' && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="วันที่ Audit">
                 <input
                   type="date"
@@ -341,7 +341,17 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   className="input"
                 />
               </Field>
+              <Field label="ยอด Audit (บาท)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={caseDraft.audit_amount}
+                  onChange={(e) => setCase('audit_amount', e.target.value)}
+                  className="input"
+                />
+              </Field>
             </div>
+            )}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="วันที่ส่งเบิก">
@@ -372,7 +382,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 />
               </Field>
             </div>
-            <p className="mt-1.5 text-[11px] text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
+            <p className="mt-1.5 text-sm text-ink/60">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
         </div>
 
@@ -380,13 +390,13 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         <div className="shrink-0 border-t border-line px-6 py-3">
           {error && <p className="mb-2 text-sm text-rose">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
+            <button type="button" onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
             >
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
@@ -400,7 +410,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-ink/60">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-ink/80">{label}</span>
       {children}
     </label>
   )
