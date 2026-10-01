@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabaseClient'
 import type { Admission, BulkStage } from '../lib/types'
+import { parseGgoClaimFile } from '../lib/ggoClaimFile'
 
 interface Props {
   admissions: Admission[]
@@ -34,7 +35,7 @@ const STAGE_CONFIG: Record<
     amountCol: 'submission_amount',
     needsPayerCheck: true,
     example:
-      'encounter_id,payer_id,claim_no,submission_date,submission_amount\n3043836,50257,CLM-2026-0912,2026-09-26,12500.50',
+      'อัพโหลดไฟล์ .xls "ตั้งเบิก ประเภทออกใบแจ้งหนี้ สิทธิ GGO" ได้เลย (ไม่ต้องแก้ไฟล์)\n\nระบบแมพให้อัตโนมัติ:\nenc_id → encounter_id · payer → payer_id · claim_no → claim_no\ndateclaim → วันที่ส่งเบิก (แปลง พ.ศ. → ค.ศ.) · claim_amount → ยอดส่งเบิก\nแถวที่ claimcancel มี "X" = ยกเลิก ไม่นับเป็นการส่งเบิก',
   },
 }
 
@@ -52,6 +53,8 @@ interface ParsedRow {
   claimNo?: string
   raw: Record<string, string>
   error?: string
+  /** ข้ามโดยตั้งใจ (ไม่ใช่ error) เช่น claimcancel = X */
+  skip?: string
 }
 
 export default function BulkClaimUpload({ admissions, onClose, onDone, allowedStages }: Props) {
@@ -71,9 +74,57 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
     byEncounter.set(a.encounter_id, list)
   }
 
+  // หา admission ของ encounter + payer ที่ตรงกัน (ใช้กับไฟล์ GGO ที่มี payer ทุกแถว)
+  function resolveByPayer(encId: number, payerId: string): { targets: Target[]; error?: string } {
+    const candidates = byEncounter.get(encId) ?? []
+    if (candidates.length === 0) return { targets: [], error: 'ไม่พบ encounter_id นี้ในระบบ' }
+    const targets = candidates
+      .filter((a) => (a.payer_id ?? '').trim().toLowerCase() === payerId.toLowerCase())
+      .map((a) => ({ admission_id: a.admission_id, encounter_id: a.encounter_id }))
+    if (targets.length === 0) {
+      const sys = candidates.map((a) => a.payer_id || '—').join(', ')
+      return { targets: [], error: `payer ไม่ตรงกับระบบ (ระบบ: ${sys}, ไฟล์: ${payerId})` }
+    }
+    return { targets }
+  }
+
+  // ขั้นส่งเบิก: อ่านไฟล์ .xls ของระบบเบิก แล้วแปลงให้เข้ากับ DB ของเรา
+  async function handleGgoFile(file: File) {
+    try {
+      const ggoRows = await parseGgoClaimFile(file)
+      const parsed: ParsedRow[] = ggoRows.map((g) => {
+        const base = {
+          encounter_id: g.encounterId,
+          date: g.claimDate ?? g.claimDateRaw,
+          amount: g.claimAmount ?? undefined,
+          payerId: g.payerId,
+          claimNo: g.claimNo,
+          raw: { name: g.name },
+        }
+        // claimcancel มี X → ไม่นับ ไม่เอามาเบิก (ข้ามก่อนเช็คอย่างอื่น)
+        if (g.cancelled) return { ...base, targets: [], skip: 'ยกเลิก (claimcancel = X)' }
+        if (!g.encounterId) return { ...base, targets: [], error: 'enc_id ไม่ถูกต้อง' }
+        if (!g.payerId) return { ...base, targets: [], error: 'ไม่มี payer' }
+        if (!g.claimNo) return { ...base, targets: [], error: 'ไม่มี claim_no' }
+        if (!g.claimDate) return { ...base, targets: [], error: `อ่านวันที่ไม่ได้ (${g.claimDateRaw || 'ว่าง'})` }
+        if (g.claimAmount === null) return { ...base, targets: [], error: 'claim_amount ไม่ถูกต้อง' }
+        const { targets, error } = resolveByPayer(g.encounterId, g.payerId)
+        return { ...base, targets, error }
+      })
+      setRows(parsed)
+    } catch (e) {
+      setRows([])
+      setResult(`อ่านไฟล์ไม่ได้: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
   function handleFile(file: File) {
     setFileName(file.name)
     setResult(null)
+    if (stage === 'submission') {
+      void handleGgoFile(file)
+      return
+    }
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
@@ -127,7 +178,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
   }
 
   async function handleConfirm() {
-    const valid = rows.filter((r) => !r.error)
+    const valid = rows.filter((r) => !r.error && !r.skip)
     if (valid.length === 0) return
     setUploading(true)
     setResult(null)
@@ -146,27 +197,31 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
       }),
     )
 
+    // กัน admission_id ซ้ำในชุดเดียว (Postgres ไม่ให้ upsert แถวเดิมสองครั้งในคำสั่งเดียว) — ใช้แถวหลังสุด
+    const unique = [...new Map(payload.map((p) => [p.admission_id, p])).values()]
+
     const { error, count } = await supabase
       .from('case_tracking')
-      .upsert(payload, { onConflict: 'admission_id', count: 'exact' })
+      .upsert(unique, { onConflict: 'admission_id', count: 'exact' })
 
     setUploading(false)
     if (error) {
       setResult(`เกิดข้อผิดพลาด: ${error.message}`)
     } else {
-      setResult(`บันทึกสำเร็จ ${count ?? payload.length} รายการ (แถวสิทธิ)`)
+      setResult(`บันทึกสำเร็จ ${count ?? unique.length} รายการ (แถวสิทธิ)`)
       onDone()
     }
   }
 
-  const validCount = rows.filter((r) => !r.error).length
-  const errorCount = rows.length - validCount
+  const skipCount = rows.filter((r) => r.skip).length
+  const errorCount = rows.filter((r) => r.error).length
+  const validCount = rows.length - skipCount - errorCount
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-      <div className="w-full max-w-xl rounded-2xl bg-surface p-6 shadow-xl">
+      <div className="w-full max-w-2xl rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-ink">อัพโหลดสถานะเคลมแบบ Bulk (CSV)</h2>
+          <h2 className="text-base font-semibold text-ink">อัพโหลดสถานะเคลมแบบ Bulk</h2>
           <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
@@ -193,19 +248,19 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
         <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-sm text-ink/70">{cfg.example}</p>
         {cfg.needsPayerCheck && (
           <p className="mb-2 text-sm text-ink/70">
-            ระบบจะเช็ค payer_id ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส) — ถ้า encounter แยกหลายสิทธิ ต้องระบุ payer_id
+            ระบบจะเช็ค payer ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น (และ encounter ที่แยกหลายสิทธิจะลงเฉพาะแถวสิทธิที่ payer ตรงกัน) ถ้าไม่ตรงจะไม่บันทึกแถวนั้น กันแมพผิดเคส
           </p>
         )}
 
         <input
           type="file"
-          accept=".csv"
+          accept={stage === 'submission' ? '.xls,.xlsx' : '.csv'}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           className="input mb-3"
         />
 
         {fileName && rows.length > 0 && (
-          <div className="mb-3 max-h-48 overflow-y-auto rounded-lg border border-line text-xs">
+          <div className="mb-3 max-h-64 overflow-y-auto rounded-lg border border-line text-xs">
             <table className="w-full text-left">
               <thead className="bg-paper text-ink/50">
                 <tr>
@@ -219,14 +274,20 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-t border-line">
+                  <tr key={i} className={`border-t border-line ${r.skip ? 'opacity-60' : ''}`}>
                     <td className="px-2 py-1.5">{r.encounter_id || '—'}</td>
                     <td className="px-2 py-1.5">{r.date || '—'}</td>
                     {cfg.amountCol && <td className="px-2 py-1.5">{r.amount ?? '—'}</td>}
                     {cfg.needsPayerCheck && <td className="px-2 py-1.5">{r.claimNo || '—'}</td>}
-                    <td className="px-2 py-1.5">{r.error ? '—' : r.targets.length}</td>
+                    <td className="px-2 py-1.5">{r.error || r.skip ? '—' : r.targets.length}</td>
                     <td className="px-2 py-1.5">
-                      {r.error ? <span className="text-rose">{r.error}</span> : <span className="text-ink font-semibold">พร้อมบันทึก</span>}
+                      {r.skip ? (
+                        <span className="text-ink/50">{r.skip}</span>
+                      ) : r.error ? (
+                        <span className="text-rose">{r.error}</span>
+                      ) : (
+                        <span className="text-ink font-semibold">พร้อมบันทึก</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -237,7 +298,9 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
 
         {rows.length > 0 && (
           <p className="mb-3 text-sm text-ink/70">
-            พร้อมบันทึก {validCount} แถว{errorCount > 0 && <span className="text-rose"> · ผิดพลาด {errorCount} แถว</span>}
+            พร้อมบันทึก {validCount} แถว
+            {skipCount > 0 && <span> · ข้าม (ยกเลิก X) {skipCount} แถว</span>}
+            {errorCount > 0 && <span className="text-rose"> · ผิดพลาด {errorCount} แถว</span>}
           </p>
         )}
 
