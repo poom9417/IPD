@@ -86,7 +86,7 @@ export default function CoverageMultiSelect({ options, value, onChange }: Props)
             </button>
           </div>
           <div className="max-h-64 overflow-auto">
-            {visible.length === 0 && <p className="px-2 py-3 text-center text-xs text-ink/50">ไม่พบสิทธิที่ค้นหา</p>}
+            {visible.length === 0 && <p className="px-2 py-3 text-center text-sm text-ink/70">ไม่พบสิทธิที่ค้นหา</p>}
             {visible.map((o) => (
               <label
                 key={o.coverage_code}

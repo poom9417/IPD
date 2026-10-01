@@ -95,12 +95,12 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
       <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">นำเข้าเคสใหม่จาก HIS (CSV)</h2>
-          <button onClick={onClose} className="text-ink/40 hover:text-ink">
+          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
         </div>
 
-        <p className="mb-2 text-xs text-ink/50">
+        <p className="mb-2 text-sm text-ink/70">
           ต้องเป็นไฟล์รูปแบบเดียวกับตอนนำเข้าข้อมูลชุดแรก (คอลัมน์: {REQUIRED_COLS.join(', ')}) — 1 แถว = 1 encounter ต่อ 1 สิทธิ/ผู้จ่าย
           (encounter เดียวกันแยกสิทธิได้) แถวที่ encounter + สิทธิ + ผู้จ่ายตรงกับที่มีอยู่แล้วจะถูกอัพเดตทับ ไม่สร้างซ้ำ
           สิทธิ/ผู้จ่ายที่เป็น NULL จะบันทึกเป็น UNK และ HN / สิทธิ / ผู้จ่ายใหม่จะถูกเพิ่มให้อัตโนมัติ
@@ -128,7 +128,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
             <p className="font-medium text-ink font-semibold">
               นำเข้าสำเร็จ: เพิ่มใหม่ {summary.admissions_inserted} · อัพเดต {summary.admissions_updated} จาก {summary.rows_in_file} แถว
             </p>
-            <ul className="mt-1 space-y-0.5 text-xs text-ink/60">
+            <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
               <li>
                 เพิ่มใหม่ — ผู้ป่วย {summary.new_patients} · สิทธิ {summary.new_coverages} · ผู้จ่าย {summary.new_payers}
               </li>
@@ -149,7 +149,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
+          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
             ปิด
           </button>
           <button

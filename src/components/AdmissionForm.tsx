@@ -181,7 +181,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           <h2 className="text-base font-semibold text-ink">
             {isEdit ? 'แก้ไขเคส' : 'เพิ่มเคสใหม่'}
           </h2>
-          <button type="button" onClick={onClose} className="text-ink/40 hover:text-ink">
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
         </div>
@@ -315,7 +315,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           </div>
 
           <div className="border-t border-line pt-3">
-            <p className="mb-2 text-xs font-semibold text-ink/60">สถานะเคลม</p>
+            <p className="mb-2 text-sm font-semibold text-ink/80">สถานะเคลม</p>
 
             <Field label="วันที่รับเอกสาร">
               <input
@@ -375,7 +375,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 />
               </Field>
             </div>
-            <p className="mt-1.5 text-xs text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
+            <p className="mt-1.5 text-sm text-ink/60">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
         </div>
 
@@ -383,7 +383,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         <div className="shrink-0 border-t border-line px-6 py-3">
           {error && <p className="mb-2 text-sm text-rose">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
+            <button type="button" onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
               ยกเลิก
             </button>
             <button
@@ -403,7 +403,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-ink/60">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-ink/80">{label}</span>
       {children}
     </label>
   )

@@ -164,12 +164,12 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
       <div className="w-full max-w-xl rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">อัพโหลดสถานะเคลมแบบ Bulk (CSV)</h2>
-          <button onClick={onClose} className="text-ink/40 hover:text-ink">
+          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
         </div>
 
-        <label className="mb-1 block text-xs font-medium text-ink/60">ขั้นตอนที่จะอัพเดต</label>
+        <label className="mb-1 block text-sm font-medium text-ink/80">ขั้นตอนที่จะอัพเดต</label>
         <select
           value={stage}
           onChange={(e) => {
@@ -187,9 +187,9 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
           ))}
         </select>
 
-        <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-xs text-ink/60">{cfg.example}</p>
+        <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-sm text-ink/70">{cfg.example}</p>
         {cfg.needsPayerCheck && (
-          <p className="mb-2 text-xs text-ink/50">
+          <p className="mb-2 text-sm text-ink/70">
             ระบบจะเช็ค payer_id ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส) — ถ้า encounter แยกหลายสิทธิ ต้องระบุ payer_id
           </p>
         )}
@@ -233,7 +233,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
         )}
 
         {rows.length > 0 && (
-          <p className="mb-3 text-xs text-ink/60">
+          <p className="mb-3 text-sm text-ink/70">
             พร้อมบันทึก {validCount} แถว{errorCount > 0 && <span className="text-rose"> · ผิดพลาด {errorCount} แถว</span>}
           </p>
         )}
@@ -241,7 +241,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
         {result && <p className="mb-3 text-sm text-ink">{result}</p>}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-line px-4 py-2 text-sm text-ink/70">
+          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
             ปิด
           </button>
           <button

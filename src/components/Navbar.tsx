@@ -23,8 +23,8 @@ export default function Navbar() {
             <span className="text-sm text-white">{email}</span>
             <span
               className={
-                'text-xs font-medium ' +
-                (role === 'admin' ? 'text-brand' : role === 'user' ? 'text-white/80' : 'text-white/60')
+                'text-[13px] font-medium ' +
+                (role === 'admin' ? 'text-brand' : role === 'user' ? 'text-brand/80' : 'text-white/70')
               }
             >
               {role === 'admin'
