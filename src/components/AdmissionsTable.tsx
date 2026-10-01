@@ -10,12 +10,17 @@ function ClaimStatus({
   admission,
   canReceive,
   onReceiveDoc,
+  canAudit,
+  onAuditToday,
 }: {
   admission: Admission
   canReceive: boolean
   onReceiveDoc: (a: Admission) => Promise<void>
+  canAudit: boolean
+  onAuditToday: (a: Admission) => Promise<void>
 }) {
   const [receiving, setReceiving] = useState(false)
+  const [auditing, setAuditing] = useState(false)
   const ct = admission.case_tracking
   const steps: { key: string; label: string; done: boolean; title: string }[] = [
     { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date, title: ct?.document_received_date ? `รับเอกสาร ${fmtDate(ct.document_received_date)}` : 'รับเอกสาร' },
@@ -32,7 +37,25 @@ function ClaimStatus({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {steps.map((s) =>
-        s.key === 'doc' && !s.done && canReceive ? (
+        s.key === 'audit' && !s.done && canAudit ? (
+          <button
+            key={s.key}
+            type="button"
+            disabled={auditing}
+            title="คลิกเพื่อบันทึกว่า Audit วันนี้"
+            onClick={async () => {
+              setAuditing(true)
+              try {
+                await onAuditToday(admission)
+              } finally {
+                setAuditing(false)
+              }
+            }}
+            className="rounded-full border border-ink bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
+          >
+            {auditing ? 'กำลังบันทึก…' : 'Audit'}
+          </button>
+        ) : s.key === 'doc' && !s.done && canReceive ? (
           <button
             key={s.key}
             type="button"
@@ -73,9 +96,20 @@ interface Props {
   isAdmin: boolean
   onEdit: (a: Admission) => void
   onReceiveDoc: (a: Admission) => Promise<void>
+  /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
+  canAudit?: boolean
+  onAuditToday?: (a: Admission) => Promise<void>
 }
 
-export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, onReceiveDoc }: Props) {
+export default function AdmissionsTable({
+  admissions,
+  loading,
+  isAdmin,
+  onEdit,
+  onReceiveDoc,
+  canAudit = false,
+  onAuditToday = async () => {},
+}: Props) {
   if (loading) {
     return <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
   }
@@ -124,7 +158,7 @@ export default function AdmissionsTable({ admissions, loading, isAdmin, onEdit, 
               </td>
               <td className="min-w-[8rem] break-words px-3 py-2.5 text-ink">{a.payer_master?.payer_name ?? '—'}</td>
               <td className="px-3 py-2.5">
-                <ClaimStatus admission={a} canReceive={isAdmin} onReceiveDoc={onReceiveDoc} />
+                <ClaimStatus admission={a} canReceive={isAdmin} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
                 <td className="px-3 py-2.5 text-right">

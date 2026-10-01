@@ -1,6 +1,6 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './components/Login'
-import Dashboard from './pages/Dashboard'
+import AppLayout from './components/AppLayout'
 import { supabaseConfigError } from './lib/supabaseClient'
 
 function Shell() {
@@ -14,7 +14,7 @@ function Shell() {
     )
   }
 
-  return session ? <Dashboard /> : <Login />
+  return session ? <AppLayout /> : <Login />
 }
 
 export default function App() {

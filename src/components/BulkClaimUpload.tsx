@@ -7,6 +7,8 @@ interface Props {
   admissions: Admission[]
   onClose: () => void
   onDone: () => void
+  /** จำกัดขั้นตอนที่เลือกได้ (เช่น role audit → ['audit']) ไม่ใส่ = ทุกขั้นตอน */
+  allowedStages?: BulkStage[]
 }
 
 const STAGE_CONFIG: Record<
@@ -52,8 +54,9 @@ interface ParsedRow {
   error?: string
 }
 
-export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) {
-  const [stage, setStage] = useState<BulkStage>('audit')
+export default function BulkClaimUpload({ admissions, onClose, onDone, allowedStages }: Props) {
+  const stageList = (Object.keys(STAGE_CONFIG) as BulkStage[]).filter((s) => !allowedStages || allowedStages.includes(s))
+  const [stage, setStage] = useState<BulkStage>(stageList.includes('audit') ? 'audit' : stageList[0])
   const [rows, setRows] = useState<ParsedRow[]>([])
   const [fileName, setFileName] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -180,7 +183,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
           }}
           className="input mb-3"
         >
-          {(Object.keys(STAGE_CONFIG) as BulkStage[]).map((s) => (
+          {stageList.map((s) => (
             <option key={s} value={s}>
               {STAGE_CONFIG[s].label}
             </option>

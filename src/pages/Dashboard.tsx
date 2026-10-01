@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import Navbar from '../components/Navbar'
 import StatCards from '../components/StatCards'
 import FilterBar from '../components/FilterBar'
 import AdmissionsTable from '../components/AdmissionsTable'
@@ -34,8 +33,12 @@ async function fetchAllAdmissions(): Promise<Admission[]> {
 }
 
 export default function Dashboard() {
-  const { role } = useAuth()
+  const { role, session } = useAuth()
   const isAdmin = role === 'admin'
+  const isAudit = role === 'audit'
+  // audit: อัพโหลดได้เฉพาะขั้น Audit + กดบันทึกวัน Audit ได้ (ฐานข้อมูลบังคับซ้ำอีกชั้น)
+  const canBulk = role === 'admin' || role === 'user' || isAudit
+  const canMarkAudit = isAdmin || isAudit
   // admin + user: เพิ่มเคส / อัพโหลดสถานะเคลม (CSV) ได้  |  เฉพาะ admin: นำเข้าเคส, แก้ไขเคส, รับเอกสาร, จัดการผู้ใช้
   const canEdit = role === 'admin' || role === 'user'
 
@@ -47,6 +50,7 @@ export default function Dashboard() {
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [myCoverages, setMyCoverages] = useState<string[]>([])
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
@@ -82,6 +86,21 @@ export default function Dashboard() {
     loadData()
   }, [])
 
+  // สิทธิที่ฉันดูแล (จากหน้า My job) ใช้กับปุ่มกรอง "เฉพาะสิทธิของฉัน"
+  useEffect(() => {
+    if (!session) return
+    supabase
+      .from('coverage_assignments')
+      .select('coverage_code')
+      .eq('user_id', session.user.id)
+      .then(({ data }) => setMyCoverages((data ?? []).map((r) => r.coverage_code as string)))
+  }, [session])
+
+  const showingMine =
+    myCoverages.length > 0 &&
+    coverages.length === myCoverages.length &&
+    myCoverages.every((c) => coverages.includes(c))
+
   // กดปุ่ม "รับเอกสาร" → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) ลง case_tracking ทันที
   async function receiveDocument(a: Admission) {
     const now = new Date()
@@ -96,6 +115,29 @@ export default function Dashboard() {
       .single()
     if (error) {
       alert(`บันทึกรับเอกสารไม่สำเร็จ: ${error.message}`)
+      return
+    }
+    setAdmissions((prev) =>
+      prev.map((x) =>
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+      ),
+    )
+  }
+
+  // role audit กดปุ่ม "Audit" → บันทึกวันที่วันนี้ลง audit_date (ไม่แตะฟิลด์อื่น)
+  async function auditToday(a: Admission) {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const { data, error } = await supabase
+      .from('case_tracking')
+      .upsert(
+        { admission_id: a.admission_id, encounter_id: a.encounter_id, audit_date: today },
+        { onConflict: 'admission_id' },
+      )
+      .select()
+      .single()
+    if (error) {
+      alert(`บันทึกวัน Audit ไม่สำเร็จ: ${error.message}`)
       return
     }
     setAdmissions((prev) =>
@@ -183,8 +225,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Navbar />
+    <div>
       <main className="w-full space-y-5 px-4 py-6 sm:px-8">
         {/* สถิติคิดจากรายการที่กรองอยู่ */}
         <StatCards admissions={filtered} />
@@ -216,6 +257,19 @@ export default function Dashboard() {
             แสดง {filtered.length.toLocaleString()} จาก {admissions.length.toLocaleString()} รายการ
           </div>
           <div className="flex flex-wrap gap-2">
+            {myCoverages.length > 0 && (
+              <button
+                onClick={() => setCoverages(showingMine ? [] : myCoverages)}
+                className={
+                  'whitespace-nowrap rounded-lg border px-4 py-2 text-sm font-medium transition-colors ' +
+                  (showingMine
+                    ? 'border-ink bg-brand text-ink'
+                    : 'border-ink/30 text-ink hover:bg-brand-soft hover:border-ink')
+                }
+              >
+                เฉพาะสิทธิของฉัน ({myCoverages.length})
+              </button>
+            )}
             <button
               onClick={() => exportAdmissionsToExcel(filtered)}
               disabled={filtered.length === 0}
@@ -231,14 +285,16 @@ export default function Dashboard() {
                 นำเข้าเคสใหม่ (CSV)
               </button>
             )}
+            {canBulk && (
+              <button
+                onClick={() => setShowBulk(true)}
+                className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
+              >
+                {isAudit ? 'อัพโหลดวัน Audit (CSV)' : 'อัพโหลดสถานะเคลม (CSV)'}
+              </button>
+            )}
             {canEdit && (
               <>
-                <button
-                  onClick={() => setShowBulk(true)}
-                  className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
-                >
-                  อัพโหลดสถานะเคลม (CSV)
-                </button>
                 <button
                   onClick={() => setEditing(null)}
                   className="whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark transition-colors"
@@ -265,6 +321,8 @@ export default function Dashboard() {
           isAdmin={isAdmin}
           onEdit={(a) => setEditing(a)}
           onReceiveDoc={receiveDocument}
+          canAudit={canMarkAudit}
+          onAuditToday={auditToday}
         />
 
         {!loading && filtered.length > PAGE_SIZE && (
@@ -305,6 +363,7 @@ export default function Dashboard() {
       {showBulk && (
         <BulkClaimUpload
           admissions={admissions}
+          allowedStages={isAudit ? ['audit'] : undefined}
           onClose={() => setShowBulk(false)}
           onDone={() => {
             setShowBulk(false)

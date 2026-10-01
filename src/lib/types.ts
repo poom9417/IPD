@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'user' | 'viewer'
+export type AppRole = 'admin' | 'user' | 'viewer' | 'audit'
 
 export interface Patient {
   hn: string
@@ -87,4 +87,36 @@ export interface AdmissionDraft {
   los: number | ''
   coverage_code: string
   payer_id: string
+}
+
+// ---- Code C (เคสที่ส่งเบิกแล้วแต่ติด C) ----
+export interface CodeCCase {
+  id: number
+  admission_id: number
+  encounter_id: number
+  reason: string
+  deadline_date: string
+  reason_by: string | null
+  reason_by_email: string | null
+  reason_at: string
+  fix_detail: string | null
+  fix_by: string | null
+  fix_by_email: string | null
+  fix_at: string | null
+  admissions: {
+    hn: string
+    coverage_code: string
+    payer_id: string
+    patients: { full_name: string } | null
+    coverage_master: { coverage_name: string } | null
+    payer_master: { payer_name: string } | null
+    case_tracking: { submission_date: string | null; claim_no: string | null } | null
+  } | null
+}
+
+// ---- My job (ใครดูแลสิทธิไหน) ----
+export interface CoverageAssignment {
+  coverage_code: string
+  user_id: string
+  user_email: string | null
 }
