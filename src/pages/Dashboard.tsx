@@ -5,6 +5,7 @@ import StatCards from '../components/StatCards'
 import FilterBar from '../components/FilterBar'
 import AdmissionsTable from '../components/AdmissionsTable'
 import AdmissionForm from '../components/AdmissionForm'
+import CaseDetailModal from '../components/CaseDetailModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
@@ -49,6 +50,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
+  const [viewing, setViewing] = useState<Admission | null>(null)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [myCoverages, setMyCoverages] = useState<string[]>([])
@@ -322,6 +324,7 @@ export default function Dashboard() {
           isAdmin={isAdmin}
           canReceive={canReceiveDoc}
           onEdit={(a) => setEditing(a)}
+          onView={(a) => setViewing(a)}
           onReceiveDoc={receiveDocument}
           canAudit={canMarkAudit}
           onAuditToday={auditToday}
@@ -371,6 +374,21 @@ export default function Dashboard() {
             setShowBulk(false)
             loadData()
           }}
+        />
+      )}
+
+      {viewing && (
+        <CaseDetailModal
+          admission={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={
+            isAdmin
+              ? (a) => {
+                  setViewing(null)
+                  setEditing(a)
+                }
+              : undefined
+          }
         />
       )}
 

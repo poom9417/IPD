@@ -97,6 +97,8 @@ interface Props {
   /** admin + user กดปุ่ม "รับเอกสาร" ได้ (audit / viewer ไม่ได้) */
   canReceive?: boolean
   onEdit: (a: Admission) => void
+  /** คลิกที่แถว = เปิดหน้าต่างดูรายละเอียด (ทุก role) */
+  onView?: (a: Admission) => void
   onReceiveDoc: (a: Admission) => Promise<void>
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
   canAudit?: boolean
@@ -114,6 +116,7 @@ export default function AdmissionsTable({
   isAdmin,
   canReceive = false,
   onEdit,
+  onView,
   onReceiveDoc,
   canAudit = false,
   onAuditToday = async () => {},
@@ -158,7 +161,19 @@ export default function AdmissionsTable({
         </thead>
         <tbody>
           {admissions.map((a) => (
-            <tr key={a.admission_id} className="border-b border-line last:border-0 hover:bg-paper">
+            <tr
+              key={a.admission_id}
+              onClick={() => onView?.(a)}
+              onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault()
+                  onView?.(a)
+                }
+              }}
+              tabIndex={onView ? 0 : undefined}
+              title={onView ? 'คลิกเพื่อดูรายละเอียดเคส' : undefined}
+              className={'border-b border-line last:border-0 hover:bg-paper ' + (onView ? 'cursor-pointer' : '')}
+            >
               <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] font-semibold text-ink">{a.encounter_id}</td>
               <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] text-ink">{a.hn}</td>
               <td className="break-words px-3 py-2.5 text-ink">{a.patients?.full_name ?? '—'}</td>
@@ -175,11 +190,11 @@ export default function AdmissionsTable({
               <td className="truncate px-3 py-2.5 text-ink" title={a.payer_master?.payer_name ?? undefined}>
                 {a.payer_master?.payer_name ?? '—'}
               </td>
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                 <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
-                <td className="px-3 py-2.5 text-right">
+                <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => onEdit(a)}
                     className="rounded-md border border-ink/40 px-3 py-1 text-sm font-medium text-ink hover:bg-brand"
