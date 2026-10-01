@@ -42,8 +42,8 @@ function toCaseDraft(a: Admission | null): CaseTrackingDraft {
   const ct = a?.case_tracking
   return {
     document_received_date: ct?.document_received_date ?? '',
+    document_received_amount: ct?.document_received_amount != null ? String(ct.document_received_amount) : '',
     audit_date: ct?.audit_date ?? '',
-    audit_amount: ct?.audit_amount != null ? String(ct.audit_amount) : '',
     submission_date: ct?.submission_date ?? '',
     submission_amount: ct?.submission_amount != null ? String(ct.submission_amount) : '',
     claim_no: ct?.claim_no ?? '',
@@ -132,11 +132,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         admissionId = ins.admission_id
       }
 
-      // role user ห้ามบันทึกวัน/ยอด Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
+      // role user ห้ามบันทึกวัน Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
       const canAuditFields = role === 'admin'
       const hasCaseData =
         caseDraft.document_received_date ||
-        (canAuditFields && (caseDraft.audit_date || caseDraft.audit_amount)) ||
+        caseDraft.document_received_amount ||
+        (canAuditFields && caseDraft.audit_date) ||
         caseDraft.submission_date ||
         caseDraft.submission_amount ||
         caseDraft.claim_no
@@ -147,12 +148,9 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             admission_id: admissionId,
             encounter_id: Number(draft.encounter_id),
             document_received_date: caseDraft.document_received_date || null,
-            ...(canAuditFields
-              ? {
-                  audit_date: caseDraft.audit_date || null,
-                  audit_amount: caseDraft.audit_amount === '' ? null : Number(caseDraft.audit_amount),
-                }
-              : {}),
+            document_received_amount:
+              caseDraft.document_received_amount === '' ? null : Number(caseDraft.document_received_amount),
+            ...(canAuditFields ? { audit_date: caseDraft.audit_date || null } : {}),
             submission_date: caseDraft.submission_date || null,
             submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
             claim_no: caseDraft.claim_no || null,
@@ -322,31 +320,33 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           <div className="border-t border-line pt-3">
             <p className="mb-2 text-sm font-semibold text-ink/80">สถานะเคลม</p>
 
-            <Field label="วันที่รับเอกสาร">
-              <input
-                type="date"
-                value={caseDraft.document_received_date}
-                onChange={(e) => setCase('document_received_date', e.target.value)}
-                className="input"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="วันที่รับเอกสาร">
+                <input
+                  type="date"
+                  value={caseDraft.document_received_date}
+                  onChange={(e) => setCase('document_received_date', e.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label="ยอดรับเอกสาร (บาท)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={caseDraft.document_received_amount}
+                  onChange={(e) => setCase('document_received_amount', e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
 
             {role === 'admin' && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3">
               <Field label="วันที่ Audit">
                 <input
                   type="date"
                   value={caseDraft.audit_date}
                   onChange={(e) => setCase('audit_date', e.target.value)}
-                  className="input"
-                />
-              </Field>
-              <Field label="ยอด Audit (บาท)">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={caseDraft.audit_amount}
-                  onChange={(e) => setCase('audit_amount', e.target.value)}
                   className="input"
                 />
               </Field>

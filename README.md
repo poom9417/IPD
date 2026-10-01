@@ -50,7 +50,7 @@ npm run dev
 | หน้า My job (เลือกสิทธิที่ดูแล) | ✅ | ✅ | **ไม่มีหน้านี้** | – |
 | จัดการผู้ใช้ (ตั้ง role / หน่วยงาน) | ✅ | – | – | – |
 
-- **audit** มีหน้าที่แค่ลงวัน/ยอด Audit และตอบ Code C — ฐานข้อมูลบังคับซ้ำอีกชั้น (trigger `guard_case_tracking_audit`) ว่า audit แก้ได้เฉพาะ `audit_date` / `audit_amount`
+- **audit** มีหน้าที่แค่ลงวัน Audit และตอบ Code C — ฐานข้อมูลบังคับซ้ำอีกชั้น (trigger `guard_case_tracking_audit`) ว่า audit แก้ได้เฉพาะ `audit_date`
 - `nattapoom.chu@mahidol.ac.th` ถูกตั้งเป็น admin อัตโนมัติตั้งแต่ login ครั้งแรก (bootstrap admin ผ่าน Postgres trigger)
 - ตั้ง role/หน่วยงานได้ที่ปุ่ม "จัดการผู้ใช้" (เฉพาะ admin) — ผู้ใช้ต้อง login อย่างน้อย 1 ครั้งก่อนถึงจะมีชื่อในรายการ
 
@@ -71,24 +71,24 @@ npm run dev
 
 **1 แถวต่อ 1 แถวสิทธิ/ผู้จ่าย** (คีย์คือ `admission_id`) — encounter ที่แยกหลายสิทธิจึงมีสถานะเคลมแยกกัน ส่งเบิกได้ครั้งเดียวต่อแถว (ไม่มีประวัติหลายครั้ง)
 
-- `document_received_date` — วันที่รับเอกสาร
-- `audit_date`, `audit_amount` — วันที่ audit + ยอดเงิน
+- `document_received_date`, `document_received_amount` — วันที่รับเอกสาร + ยอดรับเอกสาร (ลงโดย admin / user)
+- `audit_date` — วันที่ audit (ไม่มียอดเงิน; ลงโดย admin / audit)
 - `submission_date`, `submission_amount`, `claim_no` — วันที่ส่งเบิก + ยอดเงิน + เลขที่ใบส่งเบิก
 
 ขั้นตอนเคลม (ใช้กรองในหน้า Mine): รอรับเอกสาร → รอ Audit → รอส่งเบิก → ส่งเบิกแล้ว
 
 แก้ไขได้ 3 ทาง:
-- **ปุ่มลัดในตาราง** — "รับเอกสาร" (admin) / "Audit" (admin, audit) กดแล้วบันทึกวันนี้ทันที
+- **ปุ่มลัดในตาราง** — "รับเอกสาร" (admin, user) กดแล้วกรอกยอดรับเอกสาร ยืนยันด้วย ✓ / Enter แล้วบันทึกวันนี้พร้อมยอด · "Audit" (admin, audit) กดแล้วบันทึกวันนี้ทันที
 - **รายตัว** — admin กดปุ่ม "แก้ไข" ที่แถวเคส มีส่วน "สถานะเคลม" ในฟอร์ม
 - **Bulk (CSV)** — ปุ่ม "อัพโหลดสถานะเคลม (CSV)" เลือกขั้นตอน แล้วอัพโหลดไฟล์รูปแบบ:
   ```
-  # รับเอกสาร
-  encounter_id,document_received_date
-  3043836,2026-09-24
+  # รับเอกสาร — ต้องมียอดรับเอกสารทุกแถว
+  encounter_id,document_received_date,document_received_amount
+  3043836,2026-09-24,12500.50
 
   # audit — export จาก Google Sheet ของทีม audit เป็น CSV แล้วเหลือคอลัมน์เหล่านี้
-  encounter_id,audit_date,audit_amount
-  3043836,2026-09-25,12500.50
+  encounter_id,audit_date
+  3043836,2026-09-25
 
   # ส่งเบิก — ต้องมี payer_id ระบบจะเช็คกับ payer ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส)
   encounter_id,payer_id,claim_no,submission_date,submission_amount
@@ -113,7 +113,7 @@ npm run dev
 
 ## Export Excel
 
-ปุ่ม "Export Excel" บน Mine (ทุก role) ส่งออกเฉพาะรายการที่กรอง/ค้นหาอยู่ ณ ขณะนั้นเป็นไฟล์ `.xlsx` (SheetJS ฝั่ง client) คอลัมน์รวมสถานะเคลมทั้งหมด: วันรับเอกสาร, วัน/ยอด Audit, วัน/ยอดส่งเบิก และ `claim_no`
+ปุ่ม "Export Excel" บน Mine (ทุก role) ส่งออกเฉพาะรายการที่กรอง/ค้นหาอยู่ ณ ขณะนั้นเป็นไฟล์ `.xlsx` (SheetJS ฝั่ง client) คอลัมน์รวมสถานะเคลมทั้งหมด: วัน/ยอดรับเอกสาร, วัน Audit, วัน/ยอดส่งเบิก และ `claim_no`
 
 ## ธีมและโลโก้
 

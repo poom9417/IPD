@@ -14,20 +14,29 @@ interface Props {
 
 const STAGE_CONFIG: Record<
   BulkStage,
-  { label: string; dateCol: string; amountCol?: string; needsPayerCheck?: boolean; example: string }
+  {
+    label: string
+    dateCol: string
+    amountCol?: string
+    /** ต้องมียอดทุกแถว (ไม่เว้นว่าง) */
+    amountRequired?: boolean
+    needsPayerCheck?: boolean
+    example: string
+  }
 > = {
   document: {
     label: 'รับเอกสาร',
     dateCol: 'document_received_date',
+    amountCol: 'document_received_amount',
+    amountRequired: true,
     example:
-      'encounter_id,document_received_date\n3043836,2026-09-24\n\n(ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
+      'encounter_id,document_received_date,document_received_amount\n3043836,2026-09-24,12500.50\n\n(ต้องมียอดรับเอกสารทุกแถว — ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
   },
   audit: {
     label: 'Audit',
     dateCol: 'audit_date',
-    amountCol: 'audit_amount',
     example:
-      'encounter_id,audit_date,audit_amount\n3043836,2026-09-25,12500.50\n\n(ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
+      'encounter_id,audit_date\n3043836,2026-09-25\n\n(ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
   },
   submission: {
     label: 'ส่งเบิก',
@@ -133,6 +142,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
           const encId = Number(r['encounter_id']?.trim())
           const date = r[cfg.dateCol]?.trim() ?? ''
           const amountRaw = cfg.amountCol ? r[cfg.amountCol]?.trim() : undefined
+          const amount = amountRaw ? Number(amountRaw.replace(/,/g, '')) : undefined
           // ขั้นส่งเบิกต้องมี payer_id ตรงกัน / ขั้นอื่นใส่ payer_id เพื่อระบุแถวก็ได้ (ไม่ใส่ = ทุกสิทธิของ encounter)
           const payerId = r['payer_id']?.trim() || undefined
           const claimNo = cfg.needsPayerCheck ? r['claim_no']?.trim() : undefined
@@ -145,6 +155,10 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
             error = 'encounter_id ไม่ถูกต้อง'
           } else if (!date) {
             error = `ไม่พบคอลัมน์ ${cfg.dateCol}`
+          } else if (cfg.amountCol && cfg.amountRequired && !amountRaw) {
+            error = `ต้องระบุ ${cfg.amountCol}`
+          } else if (amount !== undefined && !Number.isFinite(amount)) {
+            error = `${cfg.amountCol} ไม่ใช่ตัวเลข`
           } else if (candidates.length === 0) {
             error = 'ไม่พบ encounter_id นี้ในระบบ'
           } else if (payerId) {
@@ -165,7 +179,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
             encounter_id: encId,
             targets,
             date,
-            amount: amountRaw ? Number(amountRaw) : undefined,
+            amount,
             payerId,
             claimNo,
             raw: r,

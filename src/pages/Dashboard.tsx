@@ -104,27 +104,34 @@ export default function Dashboard() {
     coverages.length === myCoverages.length &&
     myCoverages.every((c) => coverages.includes(c))
 
-  // กดปุ่ม "รับเอกสาร" → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) ลง case_tracking ทันที
-  async function receiveDocument(a: Admission) {
+  // กดปุ่ม "รับเอกสาร" + กรอกยอด → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) และยอดรับเอกสารลง case_tracking
+  // คืน true เมื่อสำเร็จ (ช่องกรอกยอดในตารางจะปิดเองเฉพาะตอนสำเร็จ)
+  async function receiveDocument(a: Admission, amount: number): Promise<boolean> {
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const { data, error } = await supabase
       .from('case_tracking')
       .upsert(
-        { admission_id: a.admission_id, encounter_id: a.encounter_id, document_received_date: today },
+        {
+          admission_id: a.admission_id,
+          encounter_id: a.encounter_id,
+          document_received_date: today,
+          document_received_amount: amount,
+        },
         { onConflict: 'admission_id' },
       )
       .select()
       .single()
     if (error) {
       alert(`บันทึกรับเอกสารไม่สำเร็จ: ${error.message}`)
-      return
+      return false
     }
     setAdmissions((prev) =>
       prev.map((x) =>
         x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
       ),
     )
+    return true
   }
 
   // role audit กดปุ่ม "Audit" → บันทึกวันที่วันนี้ลง audit_date (ไม่แตะฟิลด์อื่น)

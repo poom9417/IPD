@@ -15,16 +15,96 @@ function ClaimStatus({
 }: {
   admission: Admission
   canReceive: boolean
-  onReceiveDoc: (a: Admission) => Promise<void>
+  onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
   canAudit: boolean
   onAuditToday: (a: Admission) => Promise<void>
 }) {
+  const [entering, setEntering] = useState(false)
   const [receiving, setReceiving] = useState(false)
+  const [amount, setAmount] = useState('')
   const [auditing, setAuditing] = useState(false)
   const ct = admission.case_tracking
+
+  const amountNum = Number(amount)
+  const amountValid = amount.trim() !== '' && Number.isFinite(amountNum) && amountNum >= 0
+
+  async function confirmReceive() {
+    if (!amountValid || receiving) return
+    setReceiving(true)
+    try {
+      const ok = await onReceiveDoc(admission, amountNum)
+      if (ok) {
+        setEntering(false)
+        setAmount('')
+      }
+    } finally {
+      setReceiving(false)
+    }
+  }
+
+  function cancelReceive() {
+    setEntering(false)
+    setAmount('')
+  }
+
+  // กำลังกรอกยอดรับเอกสาร: แสดงเฉพาะช่องกรอก (ซ่อนป้ายอื่นชั่วคราวให้พอดีคอลัมน์)
+  if (entering && !ct?.document_received_date && canReceive) {
+    return (
+      <div className="flex flex-nowrap items-center gap-1">
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min="0"
+          placeholder="ยอดรับเอกสาร (บาท)"
+          value={amount}
+          disabled={receiving}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void confirmReceive()
+            } else if (e.key === 'Escape') {
+              cancelReceive()
+            }
+          }}
+          className="w-32 rounded-md border border-ink/40 bg-surface px-2 py-0.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
+        />
+        <button
+          type="button"
+          title="ยืนยัน: รับเอกสารวันนี้"
+          disabled={!amountValid || receiving}
+          onClick={() => void confirmReceive()}
+          className="rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink hover:bg-brand-dark disabled:opacity-40"
+        >
+          {receiving ? '…' : '✓'}
+        </button>
+        <button
+          type="button"
+          title="ยกเลิก"
+          disabled={receiving}
+          onClick={cancelReceive}
+          className="rounded-full border border-ink/40 px-2 py-0.5 text-xs text-ink hover:bg-brand-soft disabled:opacity-40"
+        >
+          ✕
+        </button>
+      </div>
+    )
+  }
+
   const steps: { key: string; label: string; done: boolean; title: string }[] = [
-    { key: 'doc', label: 'รับเอกสาร', done: !!ct?.document_received_date, title: ct?.document_received_date ? `รับเอกสาร ${fmtDate(ct.document_received_date)}` : 'รับเอกสาร' },
-    { key: 'audit', label: 'Audit', done: !!ct?.audit_date, title: ct?.audit_date ? `Audit ${fmtDate(ct.audit_date)}${ct.audit_amount != null ? ` · ${ct.audit_amount.toLocaleString()} บาท` : ''}` : 'Audit' },
+    {
+      key: 'doc',
+      label: 'รับเอกสาร',
+      done: !!ct?.document_received_date,
+      title: ct?.document_received_date
+        ? `รับเอกสาร ${fmtDate(ct.document_received_date)}${
+            ct.document_received_amount != null ? ` · ${ct.document_received_amount.toLocaleString()} บาท` : ''
+          }`
+        : 'รับเอกสาร',
+    },
+    { key: 'audit', label: 'Audit', done: !!ct?.audit_date, title: ct?.audit_date ? `Audit ${fmtDate(ct.audit_date)}` : 'Audit' },
     {
       key: 'submit',
       label: 'ส่งเบิก',
@@ -59,19 +139,11 @@ function ClaimStatus({
           <button
             key={s.key}
             type="button"
-            disabled={receiving}
-            title="คลิกเพื่อบันทึกว่ารับเอกสารวันนี้"
-            onClick={async () => {
-              setReceiving(true)
-              try {
-                await onReceiveDoc(admission)
-              } finally {
-                setReceiving(false)
-              }
-            }}
-            className="rounded-full border border-ink bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
+            title="คลิกเพื่อกรอกยอดและบันทึกว่ารับเอกสารวันนี้"
+            onClick={() => setEntering(true)}
+            className="rounded-full border border-ink bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand"
           >
-            {receiving ? 'กำลังบันทึก…' : 'รับเอกสาร'}
+            รับเอกสาร
           </button>
         ) : (
         <span
@@ -99,7 +171,8 @@ interface Props {
   onEdit: (a: Admission) => void
   /** คลิกที่แถว = เปิดหน้าต่างดูรายละเอียด (ทุก role) */
   onView?: (a: Admission) => void
-  onReceiveDoc: (a: Admission) => Promise<void>
+  /** กรอกยอดรับเอกสารแล้วบันทึก — คืน true เมื่อสำเร็จ */
+  onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
   canAudit?: boolean
   onAuditToday?: (a: Admission) => Promise<void>

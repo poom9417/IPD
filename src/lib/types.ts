@@ -20,8 +20,8 @@ export interface CaseTracking {
   admission_id: number
   encounter_id: number
   document_received_date: string | null
+  document_received_amount: number | null
   audit_date: string | null
-  audit_amount: number | null
   submission_date: string | null
   submission_amount: number | null
   claim_no: string | null
@@ -66,8 +66,8 @@ export interface BulkRow {
 
 export interface CaseTrackingDraft {
   document_received_date: string
+  document_received_amount: string
   audit_date: string
-  audit_amount: string
   submission_date: string
   submission_amount: string
   claim_no: string
