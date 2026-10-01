@@ -100,7 +100,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
           </button>
         </div>
 
-        <p className="mb-2 text-[11px] text-ink/50">
+        <p className="mb-2 text-xs text-ink/50">
           ต้องเป็นไฟล์รูปแบบเดียวกับตอนนำเข้าข้อมูลชุดแรก (คอลัมน์: {REQUIRED_COLS.join(', ')}) — 1 แถว = 1 encounter ต่อ 1 สิทธิ/ผู้จ่าย
           (encounter เดียวกันแยกสิทธิได้) แถวที่ encounter + สิทธิ + ผู้จ่ายตรงกับที่มีอยู่แล้วจะถูกอัพเดตทับ ไม่สร้างซ้ำ
           สิทธิ/ผู้จ่ายที่เป็น NULL จะบันทึกเป็น UNK และ HN / สิทธิ / ผู้จ่ายใหม่จะถูกเพิ่มให้อัตโนมัติ
@@ -125,7 +125,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
 
         {summary && (
           <div className="mb-3 rounded-lg bg-paper px-3 py-2 text-sm text-ink/80">
-            <p className="font-medium text-teal-dark">
+            <p className="font-medium text-ink font-semibold">
               นำเข้าสำเร็จ: เพิ่มใหม่ {summary.admissions_inserted} · อัพเดต {summary.admissions_updated} จาก {summary.rows_in_file} แถว
             </p>
             <ul className="mt-1 space-y-0.5 text-xs text-ink/60">
@@ -155,7 +155,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
           <button
             onClick={handleConfirm}
             disabled={rows.length === 0 || missingCols.length > 0 || uploading || !!summary}
-            className="rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {uploading ? 'กำลังนำเข้า…' : `นำเข้า ${rows.length} แถว`}
           </button>

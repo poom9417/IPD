@@ -25,10 +25,10 @@ interface Props {
 }
 
 const inputCls =
-  'rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-teal/30'
+  'rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/60'
 
 const chipCls =
-  'rounded-full border border-line bg-surface px-2.5 py-1 text-xs text-ink/70 hover:bg-paper transition-colors'
+  'rounded-full border border-ink/25 bg-surface px-3 py-1 text-sm text-ink hover:bg-brand transition-colors'
 
 // วันที่แบบ YYYY-MM-DD ตามเวลาท้องถิ่น (ไม่ใช้ toISOString เพราะเลื่อนเป็น UTC)
 function ymd(d: Date) {
@@ -125,19 +125,19 @@ export default function FilterBar({
           ))}
         </select>
 
-        <div className="text-xs text-ink/60">
+        <div className="text-sm text-ink/70">
           <div className="mb-1">สิทธิ (เลือกได้หลายอัน)</div>
           <CoverageMultiSelect options={coverageOptions} value={coverages} onChange={onCoveragesChange} />
         </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-xs text-ink/60">
+        <label className="text-sm text-ink/70">
           <div className="mb-1">วันจำหน่าย: เริ่ม</div>
           <input type="date" value={dischargeFrom} onChange={(e) => onDischargeFromChange(e.target.value)} className={inputCls} />
         </label>
 
-        <label className="text-xs text-ink/60">
+        <label className="text-sm text-ink/70">
           <div className="mb-1">สิ้นสุด</div>
           <input
             type="date"
@@ -157,7 +157,7 @@ export default function FilterBar({
         </div>
 
         {hasActiveFilter && (
-          <button type="button" onClick={onClear} className="pb-2 text-sm text-ink/60 underline hover:text-ink">
+          <button type="button" onClick={onClear} className="pb-2 text-sm text-ink/70 underline hover:text-ink">
             ล้าง filter
           </button>
         )}

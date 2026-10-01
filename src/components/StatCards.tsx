@@ -17,11 +17,11 @@ export default function StatCards({ admissions }: { admissions: Admission[] }) {
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {stats.map((s) => (
-        <div key={s.label} className="rounded-xl border border-line bg-surface p-4">
-          <p className="text-xs text-ink/50">{s.label}</p>
-          <p className="mt-1 text-2xl font-semibold text-ink">{s.value}</p>
+        <div key={s.label} className="rounded-xl border border-line border-l-8 border-l-brand bg-surface px-5 py-4">
+          <p className="text-sm font-medium text-ink/70">{s.label}</p>
+          <p className="mt-1 text-3xl font-bold text-ink">{s.value}</p>
         </div>
       ))}
     </div>

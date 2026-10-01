@@ -369,7 +369,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 />
               </Field>
             </div>
-            <p className="mt-1.5 text-[11px] text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
+            <p className="mt-1.5 text-xs text-ink/40">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
         </div>
 
@@ -383,7 +383,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
             >
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>

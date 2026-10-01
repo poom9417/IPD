@@ -8,17 +8,17 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-14 w-14 items-center justify-center mb-4">
-            <BrandLogo className="h-12 w-12" />
+          <div className="inline-flex h-20 w-20 items-center justify-center mb-4 rounded-2xl bg-ink">
+            <BrandLogo className="h-14 w-14" />
           </div>
-          <h1 className="text-xl font-semibold text-ink">IPD AR Discharge</h1>
-          <p className="mt-1 text-sm text-ink/60">ระบบติดตามเคสผู้ป่วยใน (IPD)</p>
+          <h1 className="text-2xl font-bold text-ink">IPD AR Discharge</h1>
+          <p className="mt-1 text-base text-ink/70">ระบบติดตามเคสผู้ป่วยใน (IPD)</p>
         </div>
 
-        <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+        <div className="rounded-2xl border-2 border-ink bg-surface p-6 shadow-[6px_6px_0_0_var(--color-brand)]">
           <button
             onClick={signInWithGoogle}
-            className="w-full flex items-center justify-center gap-3 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium text-ink hover:bg-paper transition-colors"
+            className="w-full flex items-center justify-center gap-3 rounded-xl border border-ink bg-brand px-4 py-3 text-base font-semibold text-ink hover:bg-brand-dark transition-colors"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
               <path
@@ -40,7 +40,7 @@ export default function Login() {
             </svg>
             เข้าสู่ระบบด้วย Google
           </button>
-          <p className="mt-4 text-center text-xs text-ink/50">
+          <p className="mt-4 text-center text-sm text-ink/60">
             จำกัดเฉพาะบัญชี @mahidol.ac.th เท่านั้น
           </p>
         </div>

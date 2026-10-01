@@ -46,7 +46,7 @@ export default function UserManagement({ onClose }: Props) {
           </button>
         </div>
 
-        <p className="mb-3 text-[11px] text-ink/50">
+        <p className="mb-3 text-xs text-ink/50">
           รายชื่อจะปรากฏหลังผู้ใช้ login ด้วย Google ครั้งแรกเท่านั้น (ยังไม่ได้ login จะยังไม่มีในลิสต์นี้)
         </p>
 

@@ -62,7 +62,7 @@ export default function CoverageMultiSelect({ options, value, onChange }: Props)
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="min-w-[200px] rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm text-ink focus:outline-none focus:ring-2 focus:ring-teal/30"
+        className="min-w-[200px] rounded-lg border border-ink/25 bg-surface px-3 py-2 text-left text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/60"
       >
         <span className={value.length === 0 ? 'text-ink/60' : ''}>{label}</span>
         <span className="float-right text-ink/40">▾</span>
@@ -78,10 +78,10 @@ export default function CoverageMultiSelect({ options, value, onChange }: Props)
             className="input mb-1.5 py-1.5 text-xs"
           />
           <div className="mb-1 flex justify-between px-2 text-xs">
-            <button type="button" className="text-teal-dark hover:underline" onClick={selectVisible}>
+            <button type="button" className="text-ink font-semibold hover:underline" onClick={selectVisible}>
               {query ? `เลือกที่ค้นเจอ (${visible.length})` : 'เลือกทั้งหมด'}
             </button>
-            <button type="button" className="text-teal-dark hover:underline" onClick={() => onChange([])}>
+            <button type="button" className="text-ink font-semibold hover:underline" onClick={() => onChange([])}>
               ล้าง
             </button>
           </div>

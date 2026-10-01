@@ -185,7 +185,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
+      <main className="w-full space-y-5 px-4 py-6 sm:px-8">
         {/* สถิติคิดจากรายการที่กรองอยู่ */}
         <StatCards admissions={filtered} />
 
@@ -212,14 +212,14 @@ export default function Dashboard() {
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-ink/60">
+          <div className="text-sm text-ink/70">
             แสดง {filtered.length.toLocaleString()} จาก {admissions.length.toLocaleString()} รายการ
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => exportAdmissionsToExcel(filtered)}
               disabled={filtered.length === 0}
-              className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors disabled:opacity-40"
+              className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
             >
               ⬇ Export Excel
             </button>
@@ -227,25 +227,25 @@ export default function Dashboard() {
               <>
                 <button
                   onClick={() => setShowUsers(true)}
-                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                  className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
                 >
                   จัดการสิทธิ์ผู้ใช้
                 </button>
                 <button
                   onClick={() => setShowImport(true)}
-                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                  className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
                 >
                   นำเข้าเคสใหม่ (CSV)
                 </button>
                 <button
                   onClick={() => setShowBulk(true)}
-                  className="whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink/70 hover:bg-paper transition-colors"
+                  className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
                 >
                   อัพโหลดสถานะเคลม (CSV)
                 </button>
                 <button
                   onClick={() => setEditing(null)}
-                  className="whitespace-nowrap rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white hover:bg-teal transition-colors"
+                  className="whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark transition-colors"
                 >
                   + เพิ่มเคส
                 </button>

@@ -187,9 +187,9 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
           ))}
         </select>
 
-        <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-[11px] text-ink/60">{cfg.example}</p>
+        <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-xs text-ink/60">{cfg.example}</p>
         {cfg.needsPayerCheck && (
-          <p className="mb-2 text-[11px] text-ink/50">
+          <p className="mb-2 text-xs text-ink/50">
             ระบบจะเช็ค payer_id ในไฟล์กับ payer ที่บันทึกไว้ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส) — ถ้า encounter แยกหลายสิทธิ ต้องระบุ payer_id
           </p>
         )}
@@ -223,7 +223,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
                     {cfg.needsPayerCheck && <td className="px-2 py-1.5">{r.claimNo || '—'}</td>}
                     <td className="px-2 py-1.5">{r.error ? '—' : r.targets.length}</td>
                     <td className="px-2 py-1.5">
-                      {r.error ? <span className="text-rose">{r.error}</span> : <span className="text-teal-dark">พร้อมบันทึก</span>}
+                      {r.error ? <span className="text-rose">{r.error}</span> : <span className="text-ink font-semibold">พร้อมบันทึก</span>}
                     </td>
                   </tr>
                 ))}
@@ -247,7 +247,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone }: Props) 
           <button
             onClick={handleConfirm}
             disabled={validCount === 0 || uploading}
-            className="rounded-lg bg-teal-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {uploading ? 'กำลังบันทึก…' : `บันทึก ${validCount} เคส`}
           </button>
