@@ -61,3 +61,12 @@ body {
   -webkit-mask-position: center;
   mask-position: center;
 }
+
+/* เมนูเด้งขึ้นแบบ fade */
+@keyframes menu-fade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.menu-fade {
+  animation: menu-fade 150ms ease-out;
+}

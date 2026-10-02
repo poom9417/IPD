@@ -10,18 +10,28 @@ export default function StatCards({ admissions }: { admissions: Admission[] }) {
       : Math.round((encounters.reduce((sum, a) => sum + (a.los ?? 0), 0) / total) * 10) / 10
   const uniquePatients = new Set(admissions.map((a) => a.hn)).size
 
-  const stats = [
+  // ยอดรับเอกสารเก็บรายแถว (case_tracking ผูกกับ admission แต่ละสิทธิ) — รวมทุกแถวที่กรองอยู่
+  const received = admissions.filter((a) => a.case_tracking?.document_received_amount != null)
+  const receivedTotal = received.reduce((sum, a) => sum + (a.case_tracking?.document_received_amount ?? 0), 0)
+
+  const stats: { label: string; value: string; note?: string }[] = [
     { label: 'เคสทั้งหมด', value: total.toLocaleString() },
     { label: 'จำนวนผู้ป่วย', value: uniquePatients.toLocaleString() },
     { label: 'LOS เฉลี่ย (วัน)', value: avgLos.toLocaleString() },
+    {
+      label: 'ยอดรับเอกสารรวม (บาท)',
+      value: receivedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      note: `จาก ${received.length.toLocaleString()} รายการที่รับเอกสารแล้ว`,
+    },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="rounded-xl border border-line border-l-8 border-l-brand bg-surface px-5 py-4">
           <p className="text-sm font-medium text-ink/70">{s.label}</p>
-          <p className="mt-1 text-3xl font-bold text-ink">{s.value}</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-ink">{s.value}</p>
+          {s.note && <p className="mt-0.5 text-sm text-ink/70">{s.note}</p>}
         </div>
       ))}
     </div>

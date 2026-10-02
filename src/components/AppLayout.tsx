@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Navbar from './Navbar'
-import Sidebar, { type PageKey } from './Sidebar'
+import { type PageKey } from './NavMenu'
 import Dashboard from '../pages/Dashboard'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
@@ -40,14 +40,11 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <Navbar />
-      <div className="flex flex-col md:flex-row">
-        <Sidebar page={page} onChange={go} />
-        <div className="min-w-0 flex-1">
-          {page === 'mine' && <Dashboard />}
-          {page === 'codec' && <CodeCPage />}
-          {page === 'myjob' && canJob && <MyJobPage />}
-        </div>
+      <Navbar page={page} onNavigate={go} />
+      <div className="min-w-0">
+        {page === 'mine' && <Dashboard />}
+        {page === 'codec' && <CodeCPage />}
+        {page === 'myjob' && canJob && <MyJobPage />}
       </div>
     </div>
   )

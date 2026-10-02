@@ -6,6 +6,11 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
+function fmtMoney(n: number | null | undefined) {
+  if (n == null) return '—'
+  return n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function ClaimStatus({
   admission,
   canReceive,
@@ -179,8 +184,8 @@ interface Props {
 }
 
 // ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
-// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, หอผู้ป่วย, LOS, สิทธิ, ผู้จ่าย, สถานะเคลม, (แก้ไข)
-const COL_WIDTHS = [118, 86, 150, 94, 94, 80, 52, 200, 130, 215]
+// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, หอผู้ป่วย, LOS, สิทธิ, ผู้จ่าย, ยอดรับเอกสาร, สถานะเคลม, (แก้ไข)
+const COL_WIDTHS = [114, 82, 140, 94, 94, 72, 48, 180, 120, 112, 215]
 const EDIT_COL_WIDTH = 76
 
 export default function AdmissionsTable({
@@ -228,6 +233,7 @@ export default function AdmissionsTable({
             <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">LOS</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สิทธิการรักษา</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">ผู้จ่าย</th>
+            <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอดรับเอกสาร</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สถานะเคลม</th>
             {isAdmin && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">แก้ไข</th>}
           </tr>
@@ -262,6 +268,9 @@ export default function AdmissionsTable({
               </td>
               <td className="truncate px-3 py-2.5 text-ink" title={a.payer_master?.payer_name ?? undefined}>
                 {a.payer_master?.payer_name ?? '—'}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-ink">
+                {fmtMoney(a.case_tracking?.document_received_amount)}
               </td>
               <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                 <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
