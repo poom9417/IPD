@@ -111,7 +111,7 @@ export default function MyJobPage() {
   return (
     <main className="w-full space-y-5 px-4 py-6 sm:px-8">
       <div>
-        <h1 className="text-xl font-bold text-ink">My job — สิทธิที่ฉันดูแล</h1>
+        <h1 className="text-xl font-bold text-ink">My claim — สิทธิที่ฉันดูแล</h1>
         <p className="mt-1 text-sm text-ink/70">
           เลือกสิทธิการรักษาที่คุณรับผิดชอบได้หลายรายการ แต่ 1 สิทธิมีผู้ดูแลได้ 1 คนเท่านั้น
           สิทธิที่มีคนดูแลแล้วจะเลือกไม่ได้ เมื่อบันทึกแล้วหน้า Mine และ Code C จะมีปุ่ม “เฉพาะสิทธิของฉัน” ให้กรองเคสทันที

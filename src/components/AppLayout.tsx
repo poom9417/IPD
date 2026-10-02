@@ -4,12 +4,15 @@ import { type PageKey } from './NavMenu'
 import Dashboard from '../pages/Dashboard'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
+import MyJobDashboardPage from '../pages/MyJobDashboardPage'
 import { useAuth } from '../contexts/AuthContext'
 
-const VALID: PageKey[] = ['mine', 'codec', 'myjob']
+const VALID: PageKey[] = ['mine', 'codec', 'myjob-dashboard', 'myjob-claim']
 
 function readHash(): PageKey {
-  const h = window.location.hash.replace('#', '') as PageKey
+  const raw = window.location.hash.replace('#', '')
+  // ลิงก์เก่า #myjob (หน้าเลือกสิทธิเดิม) → ย้ายไปที่ My claim
+  const h = (raw === 'myjob' ? 'myjob-claim' : raw) as PageKey
   return VALID.includes(h) ? h : 'mine'
 }
 
@@ -17,7 +20,7 @@ export default function AppLayout() {
   const { role, roleLoading } = useAuth()
   const [page, setPage] = useState<PageKey>(readHash)
 
-  // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob ใน URL เอง)
+  // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob-dashboard / #myjob-claim ใน URL เอง)
   const canJob = role === 'admin' || role === 'user'
 
   // เก็บหน้าปัจจุบันไว้ใน URL hash — refresh แล้วยังอยู่หน้าเดิม
@@ -27,9 +30,9 @@ export default function AppLayout() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  // รอโหลด role เสร็จก่อนค่อยเด้ง ไม่งั้น admin ที่ refresh หน้า #myjob จะโดนเด้งออกผิดๆ
+  // รอโหลด role เสร็จก่อนค่อยเด้ง ไม่งั้น admin ที่ refresh หน้า My job จะโดนเด้งออกผิดๆ
   useEffect(() => {
-    if (page === 'myjob' && !roleLoading && role !== null && !canJob) go('mine')
+    if (page.startsWith('myjob') && !roleLoading && role !== null && !canJob) go('mine')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, role, roleLoading, canJob])
 
@@ -44,7 +47,8 @@ export default function AppLayout() {
       <div className="min-w-0">
         {page === 'mine' && <Dashboard />}
         {page === 'codec' && <CodeCPage />}
-        {page === 'myjob' && canJob && <MyJobPage />}
+        {page === 'myjob-dashboard' && canJob && <MyJobDashboardPage />}
+        {page === 'myjob-claim' && canJob && <MyJobPage />}
       </div>
     </div>
   )

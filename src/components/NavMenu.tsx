@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-export type PageKey = 'mine' | 'codec' | 'myjob'
+export type PageKey = 'mine' | 'codec' | 'myjob-dashboard' | 'myjob-claim'
+
+type Child = { page: PageKey; label: string; sub: string }
 
 type Entry = {
-  page: PageKey
+  /** หน้าที่เปิดเมื่อกด (เมนูที่มี children จะเป็นหัวข้อ กดแล้วกางเมนูย่อยแทน) */
+  page?: PageKey
+  key: string
   label: string
   sub: string
   icon: ReactNode
   /** My job ใช้ได้เฉพาะ admin และ user */
   needsJob?: boolean
+  children?: Child[]
 }
 
 const iconCls = 'h-5 w-5 shrink-0'
@@ -25,6 +30,7 @@ const svg = (children: ReactNode) => (
 const MENU: Entry[] = [
   {
     page: 'mine',
+    key: 'mine',
     label: 'หน้าหลัก',
     sub: 'รับเอกสาร / ส่งเบิก',
     icon: svg(
@@ -37,6 +43,7 @@ const MENU: Entry[] = [
   },
   {
     page: 'codec',
+    key: 'codec',
     label: 'Code C',
     sub: 'เคสติด C หลังส่งเบิก',
     icon: svg(
@@ -47,10 +54,14 @@ const MENU: Entry[] = [
     ),
   },
   {
-    page: 'myjob',
+    key: 'myjob',
     label: 'My job',
-    sub: 'เคสของสิทธิที่ฉันดูแล',
+    sub: 'งานของสิทธิที่ฉันดูแล',
     needsJob: true,
+    children: [
+      { page: 'myjob-dashboard', label: 'Dashboard', sub: 'ระยะเวลาส่งเบิก — ภาพรวมและรายเคส' },
+      { page: 'myjob-claim', label: 'My claim', sub: 'เลือกสิทธิที่ฉันดูแล' },
+    ],
     icon: svg(
       <>
         <rect x="3" y="7" width="18" height="13" rx="2" />
@@ -73,7 +84,10 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
   const timer = useRef<number | undefined>(undefined)
 
   const entries = MENU.filter((e) => !e.needsJob || canJob)
-  const current = MENU.find((e) => e.page === page)
+  const currentEntry = MENU.find((e) => e.page === page || e.children?.some((c) => c.page === page))
+  const currentChild = currentEntry?.children?.find((c) => c.page === page)
+  // เมนูย่อยที่กางอยู่ — เริ่มต้นกางตามหน้าปัจจุบัน
+  const [expanded, setExpanded] = useState<string | null>(currentEntry?.children ? currentEntry.key : null)
 
   function close() {
     window.clearTimeout(timer.current)
@@ -140,14 +154,73 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
           <div role="menu" className="menu-fade absolute left-0 top-full z-50 pt-2">
             <ul className="w-72 rounded-xl border border-ink/10 bg-white p-1.5 text-ink shadow-xl">
               {entries.map((e) => {
+                if (e.children) {
+                  const open = expanded === e.key
+                  const groupCur = e.children.some((c) => c.page === page)
+                  return (
+                    <li key={e.key}>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        aria-expanded={open}
+                        onClick={() => setExpanded(open ? null : e.key)}
+                        className={
+                          'flex w-full items-center gap-3 rounded-lg border-l-4 px-3 py-2.5 text-left transition-colors ' +
+                          (groupCur ? 'border-ink bg-brand' : 'border-transparent hover:bg-brand-soft')
+                        }
+                      >
+                        {e.icon}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[15px] font-semibold leading-tight">{e.label}</span>
+                          <span className="block text-sm text-ink/70">{e.sub}</span>
+                        </span>
+                        <svg
+                          className={'h-4 w-4 shrink-0 transition-transform ' + (open ? 'rotate-90' : '')}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          aria-hidden
+                        >
+                          <path d="M9 6l6 6-6 6" />
+                        </svg>
+                      </button>
+                      {open && (
+                        <ul className="ml-5 mt-0.5 space-y-0.5 border-l border-ink/15 pl-2">
+                          {e.children.map((c) => {
+                            const cur = c.page === page
+                            return (
+                              <li key={c.page}>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  aria-current={cur ? 'page' : undefined}
+                                  onClick={() => go(c.page)}
+                                  className={
+                                    'block w-full rounded-lg border-l-4 px-3 py-2 text-left transition-colors ' +
+                                    (cur ? 'border-ink bg-brand' : 'border-transparent hover:bg-brand-soft')
+                                  }
+                                >
+                                  <span className="block text-[15px] font-semibold leading-tight">{c.label}</span>
+                                  <span className="block text-sm text-ink/70">{c.sub}</span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  )
+                }
                 const cur = e.page === page
                 return (
-                  <li key={e.page}>
+                  <li key={e.key}>
                     <button
                       type="button"
                       role="menuitem"
                       aria-current={cur ? 'page' : undefined}
-                      onClick={() => go(e.page)}
+                      onClick={() => e.page && go(e.page)}
                       className={
                         'flex w-full items-center gap-3 rounded-lg border-l-4 px-3 py-2.5 text-left transition-colors ' +
                         (cur ? 'border-ink bg-brand' : 'border-transparent hover:bg-brand-soft')
@@ -167,9 +240,15 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
         )}
       </div>
 
-      {current && (
-        <nav aria-label="หน้าปัจจุบัน" className="hidden items-center border-l border-white/25 pl-3 text-sm sm:flex">
-          <span className="font-semibold text-brand">{current.label}</span>
+      {currentEntry && (
+        <nav aria-label="หน้าปัจจุบัน" className="hidden items-center gap-1.5 border-l border-white/25 pl-3 text-sm sm:flex">
+          <span className={currentChild ? 'text-white/70' : 'font-semibold text-brand'}>{currentEntry.label}</span>
+          {currentChild && (
+            <>
+              <span className="text-white/40">›</span>
+              <span className="font-semibold text-brand">{currentChild.label}</span>
+            </>
+          )}
         </nav>
       )}
     </>
