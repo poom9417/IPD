@@ -108,7 +108,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit }: Props
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="วันที่รับเอกสาร">{fmtDate(ct?.document_received_date)}</Field>
-              <Field label="ยอดรับเอกสาร">{fmtMoney(ct?.document_received_amount)}</Field>
+              <Field label="ยอด claim จาก HIS">{fmtMoney(ct?.document_received_amount)}</Field>
             </div>
 
             <div className="mt-3">

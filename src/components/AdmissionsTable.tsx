@@ -6,6 +6,33 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
+// ---- จำนวนวันหลัง Audit ----
+// นับเป็น "วันตามปฏิทิน" (ตัดเวลาออก) กันเลื่อนเพราะ timezone
+function dayNumber(ymd: string | null | undefined): number | null {
+  const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd) : null
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86_400_000 : null
+}
+
+function todayDayNumber(): number {
+  const n = new Date()
+  return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86_400_000
+}
+
+/**
+ * ยังไม่ส่งเบิก  → วันนี้ − วัน Audit        (pending = true: ค้างอยู่ ตัวเลขยังเดินต่อ)
+ * ส่งเบิกแล้ว    → วันส่งเบิก − วัน Audit    (pending = false: ตัวเลขนิ่งแล้ว)
+ * ยังไม่มีวัน Audit → null (แสดง —)
+ */
+function daysAfterAudit(
+  ct: Admission['case_tracking'],
+  today: number,
+): { days: number; pending: boolean } | null {
+  const audit = dayNumber(ct?.audit_date)
+  if (audit === null) return null
+  const submitted = dayNumber(ct?.submission_date)
+  return submitted === null ? { days: today - audit, pending: true } : { days: submitted - audit, pending: false }
+}
+
 function fmtMoney(n: number | null | undefined) {
   if (n == null) return '—'
   return n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -62,7 +89,7 @@ function ClaimStatus({
           inputMode="decimal"
           step="0.01"
           min="0"
-          placeholder="ยอดรับเอกสาร (บาท)"
+          placeholder="ยอด claim จาก HIS (บาท)"
           value={amount}
           disabled={receiving}
           onChange={(e) => setAmount(e.target.value)}
@@ -184,8 +211,8 @@ interface Props {
 }
 
 // ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
-// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, หอผู้ป่วย, LOS, สิทธิ, ผู้จ่าย, ยอดรับเอกสาร, สถานะเคลม, (แก้ไข)
-const COL_WIDTHS = [114, 82, 140, 94, 94, 72, 48, 180, 120, 112, 215]
+// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, วัน Audit, ค้างเบิก(วัน), สิทธิ, ยอด claim จาก HIS, สถานะเคลม, (แก้ไข)
+const COL_WIDTHS = [114, 82, 150, 94, 94, 94, 104, 180, 140, 215]
 const EDIT_COL_WIDTH = 76
 
 export default function AdmissionsTable({
@@ -211,6 +238,7 @@ export default function AdmissionsTable({
     )
   }
 
+  const today = todayDayNumber()
   const widths = isAdmin ? [...COL_WIDTHS, EDIT_COL_WIDTH] : COL_WIDTHS
   const minWidth = widths.reduce((sum, w) => sum + w, 0)
 
@@ -229,11 +257,15 @@ export default function AdmissionsTable({
             <th className="whitespace-nowrap px-3 py-3 font-semibold">ชื่อผู้ป่วย</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">วันรับ</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">วันจำหน่าย</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold">หอผู้ป่วย</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">LOS</th>
+            <th className="whitespace-nowrap px-3 py-3 font-semibold">วัน Audit</th>
+            <th
+              className="whitespace-nowrap px-3 py-3 text-right font-semibold"
+              title="ยังไม่ส่งเบิก = วันนี้ − วัน Audit · ส่งเบิกแล้ว = วันส่งเบิก − วัน Audit"
+            >
+              ค้างเบิก (วัน)
+            </th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สิทธิการรักษา</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold">ผู้จ่าย</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอดรับเอกสาร</th>
+            <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอด claim จาก HIS</th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สถานะเคลม</th>
             {isAdmin && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">แก้ไข</th>}
           </tr>
@@ -260,14 +292,31 @@ export default function AdmissionsTable({
               <td className="whitespace-nowrap px-3 py-2.5 text-ink">
                 {fmtDate(a.discharge_date)}
               </td>
-              <td className="break-words px-3 py-2.5 font-mono text-[13px] text-ink">{a.division_code ?? '—'}</td>
-              <td className="px-3 py-2.5 text-right text-ink">{a.los ?? '—'}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-ink">{fmtDate(a.case_tracking?.audit_date ?? null)}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink">
+                {(() => {
+                  const aging = daysAfterAudit(a.case_tracking, today)
+                  if (!aging) return '—'
+                  return aging.pending ? (
+                    <span
+                      className="inline-block min-w-8 rounded-full bg-alert px-2.5 py-0.5 text-center font-bold text-white"
+                      title={`ยังไม่ส่งเบิก — Audit มาแล้ว ${aging.days} วัน`}
+                    >
+                      {aging.days}
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-block min-w-8 rounded-full bg-brand px-2.5 py-0.5 text-center font-bold text-ink"
+                      title={`ส่งเบิกแล้ว — ใช้เวลา ${aging.days} วันหลัง Audit`}
+                    >
+                      {aging.days}
+                    </span>
+                  )
+                })()}
+              </td>
               <td className="break-words px-3 py-2.5 text-ink">
                 <span className="mr-1.5 font-mono text-[13px] font-semibold text-ink">{a.coverage_code}</span>
                 {a.coverage_master?.coverage_name ?? ''}
-              </td>
-              <td className="truncate px-3 py-2.5 text-ink" title={a.payer_master?.payer_name ?? undefined}>
-                {a.payer_master?.payer_name ?? '—'}
               </td>
               <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-ink">
                 {fmtMoney(a.case_tracking?.document_received_amount)}

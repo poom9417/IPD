@@ -19,9 +19,9 @@ export default function StatCards({ admissions }: { admissions: Admission[] }) {
     { label: 'จำนวนผู้ป่วย', value: uniquePatients.toLocaleString() },
     { label: 'LOS เฉลี่ย (วัน)', value: avgLos.toLocaleString() },
     {
-      label: 'ยอดรับเอกสารรวม (บาท)',
+      label: 'ยอด claim จาก HIS รวม (บาท)',
       value: receivedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      note: `จาก ${received.length.toLocaleString()} รายการที่รับเอกสารแล้ว`,
+      note: `จาก ${received.length.toLocaleString()} รายการที่มียอด`,
     },
   ]
 

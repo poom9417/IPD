@@ -329,7 +329,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   className="input"
                 />
               </Field>
-              <Field label="ยอดรับเอกสาร (บาท)">
+              <Field label="ยอด claim จาก HIS (บาท)">
                 <input
                   type="number"
                   step="0.01"
