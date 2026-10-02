@@ -9,7 +9,7 @@ import CaseDetailModal from '../components/CaseDetailModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
-import { exportAdmissionsToExcel } from '../lib/exportExcel'
+import { exportAllToExcel } from '../lib/exportExcel'
 import { getClaimStage, type ClaimStage } from '../lib/claimStatus'
 
 const PAGE_SIZE = 50
@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [myCoverages, setMyCoverages] = useState<string[]>([])
+  const [exporting, setExporting] = useState(false)
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
@@ -132,6 +133,18 @@ export default function Dashboard() {
       ),
     )
     return true
+  }
+
+  // Export ข้อมูลทั้งหมด: ดึงสดจากฐานข้อมูลทุกตาราง ไม่ผ่านตัวกรอง/ไม่จำกัดแถว
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await exportAllToExcel()
+    } catch (err) {
+      alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
+    } finally {
+      setExporting(false)
+    }
   }
 
   // role audit กดปุ่ม "Audit" → บันทึกวันที่วันนี้ลง audit_date (ไม่แตะฟิลด์อื่น)
@@ -281,11 +294,12 @@ export default function Dashboard() {
               </button>
             )}
             <button
-              onClick={() => exportAdmissionsToExcel(filtered)}
-              disabled={filtered.length === 0}
+              onClick={handleExport}
+              disabled={exporting}
+              title="ส่งออกข้อมูลทั้งหมดในระบบ (ไม่ขึ้นกับตัวกรองบนหน้าจอ)"
               className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
             >
-              ⬇ Export Excel
+              {exporting ? 'กำลังเตรียมไฟล์…' : '⬇ Export Excel (ทั้งหมด)'}
             </button>
             {isAdmin && (
               <button
