@@ -117,6 +117,16 @@ export interface CodeCCase {
 // ---- My job (ใครดูแลสิทธิไหน) ----
 export interface CoverageAssignment {
   coverage_code: string
+  payer_id: string
   user_id: string
   user_email: string | null
+}
+
+// สิทธิ + ผู้จ่าย (payer) ที่มีอยู่จริงในข้อมูลเคส — หน่วยที่ใช้กำหนดผู้ดูแลในหน้า My claim
+export interface CoveragePayerPair {
+  coverage_code: string
+  payer_id: string
+  coverage_name: string | null
+  payer_name: string | null
+  case_count: number
 }

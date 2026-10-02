@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { pairKey } from '../lib/pairKey'
 import { useAuth } from '../contexts/AuthContext'
 import StatCards from '../components/StatCards'
 import FilterBar from '../components/FilterBar'
@@ -53,7 +54,8 @@ export default function Dashboard() {
   const [viewing, setViewing] = useState<Admission | null>(null)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [myCoverages, setMyCoverages] = useState<string[]>([])
+  const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
+  const [onlyMine, setOnlyMine] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   const [search, setSearch] = useState('')
@@ -95,15 +97,13 @@ export default function Dashboard() {
     if (!session) return
     supabase
       .from('coverage_assignments')
-      .select('coverage_code')
+      .select('coverage_code, payer_id')
       .eq('user_id', session.user.id)
-      .then(({ data }) => setMyCoverages((data ?? []).map((r) => r.coverage_code as string)))
+      .then(({ data }) =>
+        setMyPairs(new Set((data ?? []).map((r) => pairKey(r.coverage_code as string, r.payer_id as string)))),
+      )
   }, [session])
 
-  const showingMine =
-    myCoverages.length > 0 &&
-    coverages.length === myCoverages.length &&
-    myCoverages.every((c) => coverages.includes(c))
 
   // กดปุ่ม "รับเอกสาร" + กรอกยอด → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) และยอดรับเอกสารลง case_tracking
   // คืน true เมื่อสำเร็จ (ช่องกรอกยอดในตารางจะปิดเองเฉพาะตอนสำเร็จ)
@@ -209,16 +209,17 @@ export default function Dashboard() {
       }
 
       if (coverages.length > 0 && !coverages.includes(a.coverage_code)) return false
+      if (onlyMine && !myPairs.has(pairKey(a.coverage_code, a.payer_id))) return false
       if (payer && a.payer_id !== payer) return false
       if (claimStage && getClaimStage(a) !== claimStage) return false
       return true
     })
-  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage])
+  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage, onlyMine, myPairs])
 
   // เปลี่ยน filter แล้วกลับไปหน้า 1
   useEffect(() => {
     setPage(1)
-  }, [search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage])
+  }, [search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage, onlyMine])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -234,7 +235,8 @@ export default function Dashboard() {
     dischargeTo ||
     coverages.length ||
     payer ||
-    claimStage
+    claimStage ||
+    onlyMine
   )
 
   function clearFilters() {
@@ -245,6 +247,7 @@ export default function Dashboard() {
     setCoverages([])
     setPayer('')
     setClaimStage('')
+    setOnlyMine(false)
   }
 
   return (
@@ -280,17 +283,17 @@ export default function Dashboard() {
             แสดง {filtered.length.toLocaleString()} จาก {admissions.length.toLocaleString()} รายการ
           </div>
           <div className="flex flex-wrap gap-2">
-            {myCoverages.length > 0 && (
+            {myPairs.size > 0 && (
               <button
-                onClick={() => setCoverages(showingMine ? [] : myCoverages)}
+                onClick={() => setOnlyMine((v) => !v)}
                 className={
                   'whitespace-nowrap rounded-lg border px-4 py-2 text-sm font-medium transition-colors ' +
-                  (showingMine
+                  (onlyMine
                     ? 'border-ink bg-brand text-ink'
                     : 'border-ink/30 text-ink hover:bg-brand-soft hover:border-ink')
                 }
               >
-                เฉพาะสิทธิของฉัน ({myCoverages.length})
+                เฉพาะสิทธิของฉัน ({myPairs.size})
               </button>
             )}
             <button

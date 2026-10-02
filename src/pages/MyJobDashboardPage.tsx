@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { pairKey } from '../lib/pairKey'
 import { useAuth } from '../contexts/AuthContext'
 import CoverageMultiSelect from '../components/CoverageMultiSelect'
 import CaseDetailModal from '../components/CaseDetailModal'
@@ -91,9 +92,10 @@ export default function MyJobDashboardPage() {
       setLoading(true)
       setError(null)
       try {
-        const asg = await supabase.from('coverage_assignments').select('coverage_code').eq('user_id', myId)
+        const asg = await supabase.from('coverage_assignments').select('coverage_code, payer_id').eq('user_id', myId)
         if (asg.error) throw asg.error
-        const codes = (asg.data ?? []).map((r) => r.coverage_code as string)
+        const pairSet = new Set((asg.data ?? []).map((r) => pairKey(r.coverage_code as string, r.payer_id as string)))
+        const codes = [...new Set((asg.data ?? []).map((r) => r.coverage_code as string))]
         if (codes.length === 0) {
           setMyCoverages([])
           setAdmissions([])
@@ -108,7 +110,8 @@ export default function MyJobDashboardPage() {
         if (pay.error) throw pay.error
         setMyCoverages((cov.data as CoverageMaster[]) ?? [])
         setPayers((pay.data as PayerMaster[]) ?? [])
-        setAdmissions(rows)
+        // ดึงตามรหัสสิทธิ แล้วเหลือเฉพาะคู่ สิทธิ+payer ที่ฉันดูแลจริง (เช่น GGO 50258 ไม่ปนกับ 50257)
+        setAdmissions(rows.filter((a) => pairSet.has(pairKey(a.coverage_code, a.payer_id))))
       } catch (e) {
         setError((e as { message?: string })?.message ?? 'โหลดข้อมูลไม่สำเร็จ')
       } finally {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { pairKey } from '../lib/pairKey'
 import { useAuth } from '../contexts/AuthContext'
 import type { Admission, CodeCCase } from '../lib/types'
 
@@ -328,7 +329,7 @@ export default function CodeCPage() {
   const canReply = role === 'admin' || role === 'audit'
 
   const [cases, setCases] = useState<CodeCCase[]>([])
-  const [myCoverages, setMyCoverages] = useState<string[]>([])
+  const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [status, setStatus] = useState<StatusFilter>('')
@@ -358,9 +359,11 @@ export default function CodeCPage() {
     if (!myId) return
     supabase
       .from('coverage_assignments')
-      .select('coverage_code')
+      .select('coverage_code, payer_id')
       .eq('user_id', myId)
-      .then(({ data }) => setMyCoverages((data ?? []).map((r) => r.coverage_code as string)))
+      .then(({ data }) =>
+        setMyPairs(new Set((data ?? []).map((r) => pairKey(r.coverage_code as string, r.payer_id as string)))),
+      )
   }, [myId])
 
   const today = todayStr()
@@ -371,7 +374,7 @@ export default function CodeCPage() {
       const done = !!c.fix_detail
       if (status === 'open' && done) return false
       if (status === 'done' && !done) return false
-      if (onlyMine && !myCoverages.includes(c.admissions?.coverage_code ?? '')) return false
+      if (onlyMine && !myPairs.has(pairKey(c.admissions?.coverage_code, c.admissions?.payer_id))) return false
       if (
         q &&
         !(
@@ -383,7 +386,7 @@ export default function CodeCPage() {
         return false
       return true
     })
-  }, [cases, status, onlyMine, myCoverages, search])
+  }, [cases, status, onlyMine, myPairs, search])
 
   const openCount = cases.filter((c) => !c.fix_detail).length
   const overdueCount = cases.filter((c) => !c.fix_detail && c.deadline_date < today).length
@@ -439,7 +442,7 @@ export default function CodeCPage() {
           <option value="open">รอ Audit แก้ไข</option>
           <option value="done">แก้ไขแล้ว</option>
         </select>
-        {myCoverages.length > 0 && (
+        {myPairs.size > 0 && (
           <button
             onClick={() => setOnlyMine((v) => !v)}
             className={
