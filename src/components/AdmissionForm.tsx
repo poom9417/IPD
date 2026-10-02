@@ -142,7 +142,10 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         caseDraft.submission_amount ||
         caseDraft.claim_no
 
-      if (hasCaseData) {
+      // ถ้าเคสนี้เคยมีแถว case_tracking อยู่แล้ว ต้องบันทึกต่อเสมอ แม้ช่องที่เหลือจะว่างหมด
+      // (ไม่งั้นการลบค่าสุดท้ายออกจะไม่ถูกส่งไปที่ DB — ค่าเดิมจึงไม่หาย)
+      const hadCaseRow = !!admission?.case_tracking
+      if (hasCaseData || hadCaseRow) {
         const { error: caseErr } = await supabase.from('case_tracking').upsert(
           {
             admission_id: admissionId,
