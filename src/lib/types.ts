@@ -130,3 +130,8 @@ export interface CoveragePayerPair {
   payer_name: string | null
   case_count: number
 }
+
+export interface DivisionMaster {
+  division_code: string
+  division_name: string | null
+}

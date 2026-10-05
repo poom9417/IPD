@@ -1,7 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
-import type { Admission, AdmissionDraft, CaseTrackingDraft, CoverageMaster, PayerMaster } from '../lib/types'
+import type {
+  Admission,
+  AdmissionDraft,
+  CaseTrackingDraft,
+  CoverageMaster,
+  DivisionMaster,
+  Patient,
+  PayerMaster,
+} from '../lib/types'
+import PatientSearchInput from './PatientSearchInput'
+import CreatableSelect from './CreatableSelect'
+import AddMasterPanel from './AddMasterPanel'
+
+type AddingKind = 'coverage' | 'payer' | 'division'
 
 function toDraft(a: Admission | null): AdmissionDraft {
   if (!a) {
@@ -66,6 +79,23 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const isEdit = admission !== null
   const { role } = useAuth()
 
+  // รายการหลักเก็บไว้ในฟอร์ม เพื่อให้รายการที่เพิ่งเพิ่มโผล่ทันที (Dashboard โหลดใหม่ตอนบันทึกเคส)
+  const [coverages, setCoverages] = useState<CoverageMaster[]>(coverageOptions)
+  const [payers, setPayers] = useState<PayerMaster[]>(payerOptions)
+  const [divisions, setDivisions] = useState<DivisionMaster[]>([])
+  const [adding, setAdding] = useState<{ kind: AddingKind; typed: string } | null>(null)
+  // ผู้ป่วยเดิมที่เลือกจากการค้นหา — ถ้าไม่ใช่ admin จะล็อกชื่อ/วันเกิด (ระบบไม่เขียนทับข้อมูลผู้ป่วยเดิมอยู่แล้ว)
+  const [pickedPatient, setPickedPatient] = useState<Patient | null>(null)
+  const lockPatient = pickedPatient !== null && role !== 'admin'
+
+  useEffect(() => {
+    supabase
+      .from('division_master')
+      .select('division_code, division_name')
+      .order('division_code')
+      .then(({ data }) => setDivisions((data ?? []) as DivisionMaster[]))
+  }, [])
+
   // กด Esc เพื่อปิดหน้าต่าง
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -81,6 +111,63 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
   function setCase<K extends keyof CaseTrackingDraft>(key: K, value: CaseTrackingDraft[K]) {
     setCaseDraft((d) => ({ ...d, [key]: value }))
+  }
+
+  function pickPatient(p: Patient) {
+    setPickedPatient(p)
+    setDraft((d) => ({ ...d, hn: p.hn, full_name: p.full_name, birthdate: p.birthdate ?? '' }))
+  }
+
+  function clearPatient() {
+    setPickedPatient(null)
+    setDraft((d) => ({ ...d, hn: '', full_name: '', birthdate: '' }))
+  }
+
+  // พิมพ์แก้ HN/ชื่อหลังเลือกแล้ว (เฉพาะ admin) = ถือว่าไม่ใช่ตัวเลือกเดิมอีกต่อไป
+  function typePatient(key: 'hn' | 'full_name', v: string) {
+    if (pickedPatient && v !== (key === 'hn' ? pickedPatient.hn : pickedPatient.full_name)) setPickedPatient(null)
+    set(key, v)
+  }
+
+  const byCode = <T,>(get: (x: T) => string) => (a: T, b: T) => get(a).localeCompare(get(b))
+
+  async function addCoverage(v: Record<string, string>): Promise<string | null> {
+    const code = v.code.trim()
+    const name = v.name.trim()
+    const dup = coverages.find((c) => c.coverage_code.toLowerCase() === code.toLowerCase())
+    if (dup) return `มีสิทธิ "${dup.coverage_code}" อยู่แล้ว — เลือกจากรายการได้เลย`
+    const { error: err } = await supabase.from('coverage_master').insert({ coverage_code: code, coverage_name: name })
+    if (err) return err.message
+    setCoverages((l) => [...l, { coverage_code: code, coverage_name: name }].sort(byCode((c) => c.coverage_code)))
+    set('coverage_code', code)
+    setAdding(null)
+    return null
+  }
+
+  async function addPayer(v: Record<string, string>): Promise<string | null> {
+    const id = v.id.trim()
+    const name = v.name.trim()
+    const dup = payers.find((p) => p.payer_id === id)
+    if (dup) return `มีผู้จ่ายเลข ${id} (${dup.payer_name}) อยู่แล้ว — เลือกจากรายการได้เลย`
+    const { error: err } = await supabase.from('payer_master').insert({ payer_id: id, payer_name: name })
+    if (err) return err.message
+    setPayers((l) => [...l, { payer_id: id, payer_name: name }].sort(byCode((p) => p.payer_id)))
+    set('payer_id', id)
+    setAdding(null)
+    return null
+  }
+
+  async function addDivision(v: Record<string, string>): Promise<string | null> {
+    const code = v.code.trim()
+    const name = v.name.trim() || null
+    const dup = divisions.find((d) => d.division_code.toLowerCase() === code.toLowerCase())
+    if (dup) return `มีหอผู้ป่วย "${dup.division_code}" อยู่แล้ว — เลือกจากรายการได้เลย`
+    const { error: err } = await supabase.from('division_master').insert({ division_code: code, division_name: name })
+    if (err) return err.message
+    setDivisions((l) => [...l, { division_code: code, division_name: name }].sort(byCode((d) => d.division_code)))
+    set('division_code', code)
+    setAdding(null)
+    return null
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -176,6 +263,22 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
     }
   }
 
+  const coverageSelectOptions = coverages.map((c) => ({
+    value: c.coverage_code,
+    label: `${c.coverage_code} — ${c.coverage_name}`,
+  }))
+  const payerSelectOptions = payers.map((p) => ({ value: p.payer_id, label: `${p.payer_id} — ${p.payer_name}` }))
+  // หอผู้ป่วยของเคสที่แก้ไขอยู่ ต้องอยู่ในรายการเสมอ (กรณีรหัสเก่ายังไม่เข้า division_master)
+  const divisionSelectOptions = [
+    ...divisions.map((d) => ({
+      value: d.division_code,
+      label: d.division_name ? `${d.division_code} — ${d.division_name}` : d.division_code,
+    })),
+    ...(draft.division_code && !divisions.some((d) => d.division_code === draft.division_code)
+      ? [{ value: draft.division_code, label: draft.division_code }]
+      : []),
+  ]
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
       <form
@@ -216,23 +319,52 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             </Field>
           </div>
 
-          <Field label="HN">
-            <input required value={draft.hn} onChange={(e) => set('hn', e.target.value)} className="input" />
-          </Field>
+          {!isEdit && (
+            <p className="rounded-lg bg-brand-soft/60 px-3 py-2 text-sm text-ink/70">
+              พิมพ์ HN หรือชื่อผู้ป่วยช่องใดช่องหนึ่ง แล้วเลือกจากรายการ — ระบบจะเติมข้อมูลผู้ป่วยเดิมให้ทั้งหมด
+            </p>
+          )}
 
-          <Field label="ชื่อผู้ป่วย">
-            <input
+          <FieldBox label="HN">
+            <PatientSearchInput
+              field="hn"
+              required
+              value={draft.hn}
+              onText={(v) => typePatient('hn', v)}
+              onPick={pickPatient}
+              disabled={lockPatient}
+              searchEnabled={!isEdit}
+            />
+          </FieldBox>
+
+          <FieldBox label="ชื่อผู้ป่วย">
+            <PatientSearchInput
+              field="name"
               required
               value={draft.full_name}
-              onChange={(e) => set('full_name', e.target.value)}
-              className="input"
+              onText={(v) => typePatient('full_name', v)}
+              onPick={pickPatient}
+              disabled={lockPatient}
+              searchEnabled={!isEdit}
             />
-          </Field>
+          </FieldBox>
+
+          {pickedPatient && (
+            <div className="flex items-center justify-between rounded-lg border border-line bg-paper px-3 py-1.5 text-sm">
+              <span className="text-ink/80">
+                ✓ ผู้ป่วยเดิมในระบบ{lockPatient ? ' (ล็อกข้อมูลผู้ป่วย)' : ''}
+              </span>
+              <button type="button" onClick={clearPatient} className="font-medium text-ink underline">
+                ล้างการเลือก
+              </button>
+            </div>
+          )}
 
           <Field label="วันเกิด">
             <input
               type="date"
               value={draft.birthdate}
+              disabled={lockPatient}
               onChange={(e) => set('birthdate', e.target.value)}
               className="input"
             />
@@ -278,13 +410,16 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="หอผู้ป่วย (division)">
-              <input
+            <FieldBox label="หอผู้ป่วย (division)">
+              <CreatableSelect
                 value={draft.division_code}
-                onChange={(e) => set('division_code', e.target.value)}
-                className="input"
+                options={divisionSelectOptions}
+                onChange={(v) => set('division_code', v)}
+                onAddClick={(typed) => setAdding({ kind: 'division', typed })}
+                addLabel="เพิ่มหอผู้ป่วยใหม่"
+                emptyLabel="— ไม่ระบุ —"
               />
-            </Field>
+            </FieldBox>
             <Field label="LOS (วัน)">
               <input
                 type="number"
@@ -296,29 +431,62 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="สิทธิการรักษา">
-              <select
+            <FieldBox label="สิทธิการรักษา">
+              <CreatableSelect
                 value={draft.coverage_code}
-                onChange={(e) => set('coverage_code', e.target.value)}
-                className="input"
-              >
-                {coverageOptions.map((c) => (
-                  <option key={c.coverage_code} value={c.coverage_code}>
-                    {c.coverage_code} — {c.coverage_name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="ผู้จ่าย (payer)">
-              <select value={draft.payer_id} onChange={(e) => set('payer_id', e.target.value)} className="input">
-                {payerOptions.map((p) => (
-                  <option key={p.payer_id} value={p.payer_id}>
-                    {p.payer_id} — {p.payer_name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+                options={coverageSelectOptions}
+                onChange={(v) => set('coverage_code', v)}
+                onAddClick={(typed) => setAdding({ kind: 'coverage', typed })}
+                addLabel="เพิ่มสิทธิใหม่"
+              />
+            </FieldBox>
+            <FieldBox label="ผู้จ่าย (payer)">
+              <CreatableSelect
+                value={draft.payer_id}
+                options={payerSelectOptions}
+                onChange={(v) => set('payer_id', v)}
+                onAddClick={(typed) => setAdding({ kind: 'payer', typed })}
+                addLabel="เพิ่มผู้จ่ายใหม่"
+              />
+            </FieldBox>
           </div>
+
+          {adding?.kind === 'coverage' && (
+            <AddMasterPanel
+              title="เพิ่มสิทธิการรักษาใหม่"
+              fields={[
+                { key: 'code', label: 'Coverage name (รหัสสิทธิ)', placeholder: 'เช่น GGO', required: true, mono: true },
+                { key: 'name', label: 'ชื่อเต็ม', placeholder: 'เช่น ข้าราชการ', required: true },
+              ]}
+              initial={{ code: adding.typed }}
+              onSubmit={addCoverage}
+              onCancel={() => setAdding(null)}
+            />
+          )}
+          {adding?.kind === 'payer' && (
+            <AddMasterPanel
+              title="เพิ่มผู้จ่ายใหม่"
+              fields={[
+                { key: 'id', label: 'เลข payer', placeholder: 'เช่น 50257', required: true, mono: true },
+                { key: 'name', label: 'ชื่อผู้จ่าย', placeholder: 'เช่น กรมบัญชีกลาง', required: true },
+              ]}
+              initial={/^[0-9]+$/.test(adding.typed) ? { id: adding.typed } : { name: adding.typed }}
+              onSubmit={addPayer}
+              onCancel={() => setAdding(null)}
+            />
+          )}
+          {adding?.kind === 'division' && (
+            <AddMasterPanel
+              title="เพิ่มหอผู้ป่วยใหม่"
+              fields={[
+                { key: 'code', label: 'รหัสหอผู้ป่วย', placeholder: 'เช่น CNIP5D', required: true, mono: true },
+                { key: 'name', label: 'ชื่อเต็ม (ไม่บังคับ)', placeholder: 'เช่น หอผู้ป่วยใน 5D' },
+              ]}
+              initial={{ code: adding.typed }}
+              onSubmit={addDivision}
+              onCancel={() => setAdding(null)}
+            />
+          )}
 
           <div className="border-t border-line pt-3">
             <p className="mb-2 text-sm font-semibold text-ink/80">สถานะเคลม</p>
@@ -416,5 +584,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-sm font-medium text-ink/80">{label}</span>
       {children}
     </label>
+  )
+}
+
+// เหมือน Field แต่ใช้ div แทน label — กันการคลิกในรายการ dropdown ไปกระตุ้นปุ่ม/ช่องอื่นใน label
+function FieldBox({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="block">
+      <span className="mb-1 block text-sm font-medium text-ink/80">{label}</span>
+      {children}
+    </div>
   )
 }

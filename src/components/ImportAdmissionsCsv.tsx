@@ -40,6 +40,9 @@ interface ImportSummary {
   new_patients: number
   new_coverages: number
   new_payers: number
+  updated_coverages: number
+  updated_payers: number
+  new_divisions: number
   admissions_inserted: number
   admissions_updated: number
 }
@@ -130,8 +133,14 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
             </p>
             <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
               <li>
-                เพิ่มใหม่ — ผู้ป่วย {summary.new_patients} · สิทธิ {summary.new_coverages} · ผู้จ่าย {summary.new_payers}
+                เพิ่มใหม่ — ผู้ป่วย {summary.new_patients} · สิทธิ {summary.new_coverages} · ผู้จ่าย {summary.new_payers} ·
+                หอผู้ป่วย {summary.new_divisions ?? 0}
               </li>
+              {((summary.updated_coverages ?? 0) > 0 || (summary.updated_payers ?? 0) > 0) && (
+                <li>
+                  อัพเดตชื่อตามไฟล์ล่าสุด — สิทธิ {summary.updated_coverages ?? 0} · ผู้จ่าย {summary.updated_payers ?? 0}
+                </li>
+              )}
               {summary.unk_promoted_to_real_coverage > 0 && (
                 <li>เปลี่ยนแถว UNK เป็นสิทธิจริง {summary.unk_promoted_to_real_coverage} แถว</li>
               )}
