@@ -78,6 +78,10 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const [error, setError] = useState<string | null>(null)
   const isEdit = admission !== null
   const { role } = useAuth()
+  // ลบเคส — เฉพาะ admin ในโหมดแก้ไข (ฐานข้อมูลบล็อกซ้ำอีกชั้นด้วย RLS)
+  const canDelete = isEdit && role === 'admin'
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // รายการหลักเก็บไว้ในฟอร์ม เพื่อให้รายการที่เพิ่งเพิ่มโผล่ทันที (Dashboard โหลดใหม่ตอนบันทึกเคส)
   const [coverages, setCoverages] = useState<CoverageMaster[]>(coverageOptions)
@@ -99,11 +103,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   // กด Esc เพื่อปิดหน้าต่าง
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (confirmDelete) return // dialog ยืนยันการลบจัดการ Esc/Enter เอง
       if (e.key === 'Escape' && !saving) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving])
+  }, [onClose, saving, confirmDelete])
 
   function set<K extends keyof AdmissionDraft>(key: K, value: AdmissionDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
@@ -168,6 +173,29 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
     set('division_code', code)
     setAdding(null)
     return null
+  }
+
+  async function handleDelete() {
+    if (!admission || deleting) return
+    setDeleting(true)
+    setError(null)
+    // .select() เพื่อตรวจว่าถูกลบจริง — ถ้า RLS บล็อก Supabase จะไม่ error แต่คืน 0 แถว
+    const { data, error: delErr } = await supabase
+      .from('admissions')
+      .delete()
+      .eq('admission_id', admission.admission_id)
+      .select('admission_id')
+    setDeleting(false)
+    setConfirmDelete(false)
+    if (delErr) {
+      setError(`ลบเคสไม่สำเร็จ: ${delErr.message}`)
+      return
+    }
+    if (!data || data.length === 0) {
+      setError('ลบเคสไม่สำเร็จ: ไม่พบเคสนี้ หรือคุณไม่มีสิทธิ์ลบ (เฉพาะ admin)')
+      return
+    }
+    onSaved() // ปิดฟอร์ม + โหลดตารางใหม่
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -280,6 +308,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   ]
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
       <form
         onSubmit={handleSubmit}
@@ -560,20 +589,107 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         {/* ปุ่ม — ติดขอบล่างเสมอ ไม่ต้องเลื่อน */}
         <div className="shrink-0 border-t border-line px-6 py-3">
           {error && <p className="mb-2 text-sm text-rose">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
-              ยกเลิก
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
-            >
-              {saving ? 'กำลังบันทึก…' : 'บันทึก'}
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            {/* ซ้าย: ลบเคส (admin เท่านั้น) — แยกจากปุ่มบันทึก/ยกเลิก */}
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                disabled={saving || deleting}
+                className="rounded-lg bg-alert px-4 py-2 text-sm font-semibold text-white hover:brightness-90 disabled:opacity-50"
+              >
+                ลบเคส
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
+              >
+                {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+              </button>
+            </div>
           </div>
         </div>
       </form>
+    </div>
+
+    {confirmDelete && admission && (
+      <ConfirmDeleteDialog
+        admission={admission}
+        deleting={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    )}
+    </>
+  )
+}
+
+// ยืนยันการลบเคสอีกครั้ง — Enter = ตกลง, Esc = ยกเลิก
+function ConfirmDeleteDialog({
+  admission,
+  deleting,
+  onConfirm,
+  onCancel,
+}: {
+  admission: Admission
+  deleting: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.repeat) return // กันกด Enter ค้างจากการเปิด dialog แล้วลบทันที
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (!deleting) onConfirm()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        if (!deleting) onCancel()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onConfirm, onCancel, deleting])
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
+      <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl">
+        <h3 className="text-base font-semibold text-ink">ยืนยันการลบเคส</h3>
+        <p className="mt-2 text-sm text-ink/80">
+          ต้องการลบเคส <span className="font-mono font-semibold">encounter {admission.encounter_id}</span>
+          {admission.patients?.full_name ? ` (${admission.patients.full_name})` : ''} ใช่หรือไม่?
+        </p>
+        <p className="mt-2 rounded-lg bg-rose-soft px-3 py-2 text-sm text-rose">
+          ข้อมูลสถานะเคลมและรายการ Code C ของเคสนี้จะถูกลบไปด้วย และกู้คืนไม่ได้
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft disabled:opacity-50"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            disabled={deleting}
+            className="rounded-lg bg-alert px-4 py-2 text-sm font-semibold text-white hover:brightness-90 disabled:opacity-50"
+          >
+            {deleting ? 'กำลังลบ…' : 'ตกลง'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
