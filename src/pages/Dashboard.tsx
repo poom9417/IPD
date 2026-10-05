@@ -7,6 +7,7 @@ import FilterBar from '../components/FilterBar'
 import AdmissionsTable from '../components/AdmissionsTable'
 import AdmissionForm from '../components/AdmissionForm'
 import CaseDetailModal from '../components/CaseDetailModal'
+import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Admission | null | undefined>(undefined)
   const [viewing, setViewing] = useState<Admission | null>(null)
+  const [editingReceive, setEditingReceive] = useState<Admission | null>(null)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
@@ -131,6 +133,38 @@ export default function Dashboard() {
       prev.map((x) =>
         x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
       ),
+    )
+    return true
+  }
+
+  // แก้ไข "วันที่รับเอกสาร" + "ยอด claim จาก HIS" ของเคสที่รับเอกสารแล้ว (admin + user)
+  // ส่งเฉพาะ 2 ฟิลด์นี้ — ไม่แตะ audit / ส่งเบิก; ฐานข้อมูลบันทึก updated_by/updated_at ให้อัตโนมัติ
+  async function updateReceived(a: Admission, date: string, amount: number): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('case_tracking')
+      .upsert(
+        {
+          admission_id: a.admission_id,
+          encounter_id: a.encounter_id,
+          document_received_date: date,
+          document_received_amount: amount,
+        },
+        { onConflict: 'admission_id' },
+      )
+      .select()
+      .single()
+    if (error) {
+      alert(`แก้ไขการรับเอกสารไม่สำเร็จ: ${error.message}`)
+      return false
+    }
+    setAdmissions((prev) =>
+      prev.map((x) =>
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+      ),
+    )
+    // ถ้าเปิดหน้ารายละเอียดค้างอยู่ ให้แสดงค่าใหม่ทันที
+    setViewing((v) =>
+      v && v.admission_id === a.admission_id ? { ...v, case_tracking: data as Admission['case_tracking'] } : v,
     )
     return true
   }
@@ -350,6 +384,7 @@ export default function Dashboard() {
           onEdit={(a) => setEditing(a)}
           onView={(a) => setViewing(a)}
           onReceiveDoc={receiveDocument}
+          onEditReceive={(a) => setEditingReceive(a)}
           canAudit={canMarkAudit}
           onAuditToday={auditToday}
         />
@@ -413,6 +448,15 @@ export default function Dashboard() {
                 }
               : undefined
           }
+          onEditReceive={canReceiveDoc ? (a) => setEditingReceive(a) : undefined}
+        />
+      )}
+
+      {editingReceive && (
+        <ReceiveEditModal
+          admission={editingReceive}
+          onClose={() => setEditingReceive(null)}
+          onSave={updateReceived}
         />
       )}
 

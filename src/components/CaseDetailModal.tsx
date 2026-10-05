@@ -26,10 +26,12 @@ interface Props {
   onClose: () => void
   /** ส่งมาเฉพาะ role ที่แก้ไขได้ (admin) — จะมีปุ่ม "แก้ไข" ในหน้าต่างนี้ */
   onEdit?: (a: Admission) => void
+  /** ส่งมาเฉพาะ role ที่แก้วันที่/ยอดรับเอกสารได้ (admin + user) */
+  onEditReceive?: (a: Admission) => void
 }
 
 /** หน้าต่างดูรายละเอียดเคส — หน้าตาเหมือนฟอร์มแก้ไข แต่แก้ไขไม่ได้ (read-only) */
-export default function CaseDetailModal({ admission: a, onClose, onEdit }: Props) {
+export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditReceive }: Props) {
   const ct = a.case_tracking
   const stage = getClaimStage(a)
 
@@ -55,7 +57,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit }: Props
         <div className="flex shrink-0 items-center justify-between px-6 pb-3 pt-5">
           <div>
             <h2 className="text-base font-semibold text-ink">รายละเอียดเคส</h2>
-            <p className="mt-0.5 text-sm text-ink/60">ดูข้อมูลอย่างเดียว — แก้ไขไม่ได้</p>
+            <p className="mt-0.5 text-sm text-ink/60">{onEditReceive ? 'ดูข้อมูล — แก้ได้เฉพาะวันที่/ยอดรับเอกสาร' : 'ดูข้อมูลอย่างเดียว — แก้ไขไม่ได้'}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
@@ -132,6 +134,15 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit }: Props
 
         <div className="shrink-0 border-t border-line px-6 py-3">
           <div className="flex justify-end gap-2">
+            {onEditReceive && ct?.document_received_date && (
+              <button
+                type="button"
+                onClick={() => onEditReceive(a)}
+                className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand"
+              >
+                แก้ไขวันที่/ยอดรับเอกสาร
+              </button>
+            )}
             {onEdit && (
               <button
                 type="button"

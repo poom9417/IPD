@@ -44,10 +44,12 @@ function ClaimStatus({
   onReceiveDoc,
   canAudit,
   onAuditToday,
+  onEditReceive,
 }: {
   admission: Admission
   canReceive: boolean
   onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
+  onEditReceive?: (a: Admission) => void
   canAudit: boolean
   onAuditToday: (a: Admission) => Promise<void>
 }) {
@@ -177,6 +179,16 @@ function ClaimStatus({
           >
             รับเอกสาร
           </button>
+        ) : s.key === 'doc' && s.done && canReceive && onEditReceive ? (
+          <button
+            key={s.key}
+            type="button"
+            title={`${s.title} — คลิกเพื่อแก้ไขวันที่/ยอด`}
+            onClick={() => onEditReceive(admission)}
+            className="whitespace-nowrap rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand-dark"
+          >
+            รับเอกสาร ✎
+          </button>
         ) : (
         <span
           key={s.key}
@@ -205,6 +217,8 @@ interface Props {
   onView?: (a: Admission) => void
   /** กรอกยอดรับเอกสารแล้วบันทึก — คืน true เมื่อสำเร็จ */
   onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
+  /** แก้ไขวันที่/ยอดรับเอกสารที่บันทึกไปแล้ว (admin + user) */
+  onEditReceive?: (a: Admission) => void
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
   canAudit?: boolean
   onAuditToday?: (a: Admission) => Promise<void>
@@ -212,7 +226,7 @@ interface Props {
 
 // ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
 // ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, วัน Audit, ค้างเบิก(วัน), สิทธิ, ยอด claim จาก HIS, สถานะเคลม, (แก้ไข)
-const COL_WIDTHS = [114, 82, 150, 94, 94, 94, 104, 180, 140, 215]
+const COL_WIDTHS = [114, 82, 150, 94, 94, 94, 104, 180, 140, 232]
 const EDIT_COL_WIDTH = 76
 
 export default function AdmissionsTable({
@@ -223,6 +237,7 @@ export default function AdmissionsTable({
   onEdit,
   onView,
   onReceiveDoc,
+  onEditReceive,
   canAudit = false,
   onAuditToday = async () => {},
 }: Props) {
@@ -322,7 +337,7 @@ export default function AdmissionsTable({
                 {fmtMoney(a.case_tracking?.document_received_amount)}
               </td>
               <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} canAudit={canAudit} onAuditToday={onAuditToday} />
+                <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} onEditReceive={onEditReceive} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
                 <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
