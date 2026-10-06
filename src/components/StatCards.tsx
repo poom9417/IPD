@@ -1,8 +1,11 @@
 import type { Admission } from '../lib/types'
 
 export default function StatCards({ admissions }: { admissions: Admission[] }) {
-  // 1 encounter อาจมีหลายแถว (แยกสิทธิ) — นับเคสตาม encounter_id ไม่ซ้ำ
-  const encounters = Array.from(new Map(admissions.map((a) => [a.encounter_id, a])).values())
+  // 1 encounter อาจมีหลายแถว (แยกสิทธิ/ผู้จ่าย) — นับ 1 เคส = 1 encounter_id + 1 payer
+  // (encounter เดียวกันแต่มี 2 payer นับเป็น 2 เคส)
+  const encounters = Array.from(
+    new Map(admissions.map((a) => [`${a.encounter_id}|${a.payer_id ?? ''}`, a])).values(),
+  )
   const total = encounters.length
   const avgLos =
     total === 0
