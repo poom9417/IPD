@@ -11,7 +11,7 @@ import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
-import { exportAllToExcel } from '../lib/exportExcel'
+import { exportAdmissionsToExcel } from '../lib/exportExcel'
 import { getClaimStage, type ClaimStage } from '../lib/claimStatus'
 
 const PAGE_SIZE = 50
@@ -58,7 +58,6 @@ export default function Dashboard() {
   const [showImport, setShowImport] = useState(false)
   const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
   const [onlyMine, setOnlyMine] = useState(false)
-  const [exporting, setExporting] = useState(false)
 
   const [search, setSearch] = useState('')
   const [division, setDivision] = useState('')
@@ -169,15 +168,12 @@ export default function Dashboard() {
     return true
   }
 
-  // Export ข้อมูลทั้งหมด: ดึงสดจากฐานข้อมูลทุกตาราง ไม่ผ่านตัวกรอง/ไม่จำกัดแถว
-  async function handleExport() {
-    setExporting(true)
+  // Export ตามตัวกรองบนหน้าจอ (ไม่ได้กรองอะไร = ทั้งหมด) — ทุกแถวที่กรองได้ ไม่แบ่งหน้า ไม่ตัด
+  function handleExport() {
     try {
-      await exportAllToExcel()
+      exportAdmissionsToExcel(filtered)
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
-    } finally {
-      setExporting(false)
     }
   }
 
@@ -332,11 +328,15 @@ export default function Dashboard() {
             )}
             <button
               onClick={handleExport}
-              disabled={exporting}
-              title="ส่งออกข้อมูลทั้งหมดในระบบ (ไม่ขึ้นกับตัวกรองบนหน้าจอ)"
+              disabled={loading || filtered.length === 0}
+              title={
+                hasActiveFilter
+                  ? 'ส่งออกเฉพาะรายการที่ตรงกับตัวกรองบนหน้าจอ (ทุกหน้า)'
+                  : 'ส่งออกทุกรายการ (ยังไม่ได้ตั้งตัวกรอง)'
+              }
               className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
             >
-              {exporting ? 'กำลังเตรียมไฟล์…' : '⬇ Export Excel (ทั้งหมด)'}
+              ⬇ Export Excel ({hasActiveFilter ? 'ตามตัวกรอง' : 'ทั้งหมด'} {filtered.length.toLocaleString()})
             </button>
             {isAdmin && (
               <button
