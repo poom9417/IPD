@@ -1,10 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
-import type { AppRole } from '../lib/types'
+import type { AppRole, UiRole } from '../lib/types'
 import { TOUR_VERSION } from '../lib/tourConfig'
 
 export type OnboardingState = 'unknown' | 'needed' | 'done'
+
+function viewAsKey(uid: string) {
+  return `ipd_view_as_${uid}`
+}
 
 function tourKey(uid: string) {
   return `ipd_tour_v${TOUR_VERSION}_${uid}`
@@ -12,7 +16,14 @@ function tourKey(uid: string) {
 
 interface AuthState {
   session: Session | null
-  role: AppRole | null
+  /** role ที่ใช้ตัดสินหน้าจอ/ปุ่มทั้งแอป: developer → admin (หรือ role ที่กำลังจำลอง) */
+  role: UiRole | null
+  /** role จริงใน DB (ไม่เปลี่ยนตามโหมดจำลอง) */
+  realRole: AppRole | null
+  isDeveloper: boolean
+  /** role ที่ developer กำลังจำลองอยู่ (null = ไม่ได้จำลอง) */
+  viewAs: UiRole | null
+  setViewAs: (r: UiRole | null) => void
   roleLoading: boolean
   onboarding: OnboardingState
   completeOnboarding: () => Promise<void>
@@ -27,7 +38,8 @@ const ALLOWED_DOMAIN = 'mahidol.ac.th'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
-  const [role, setRole] = useState<AppRole | null>(null)
+  const [realRole, setRealRole] = useState<AppRole | null>(null)
+  const [viewAsState, setViewAsState] = useState<UiRole | null>(null)
   const [loading, setLoading] = useState(true)
   const [roleLoading, setRoleLoading] = useState(false)
   const [onboarding, setOnboarding] = useState<OnboardingState>('unknown')
@@ -45,7 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) {
-      setRole(null)
+      setRealRole(null)
+      setViewAsState(null)
       setOnboarding('unknown')
       return
     }
@@ -64,7 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         row = (basic.data as Row | null) ?? null
         legacy = true
       }
-      setRole((row?.role as AppRole) ?? null)
+      setRealRole((row?.role as AppRole) ?? null)
+      // คืนโหมดจำลองที่ค้างไว้ในแท็บนี้ (ใช้ได้เฉพาะ developer — ตรวจซ้ำตอนคำนวณ role ด้านล่าง)
+      try {
+        const saved = sessionStorage.getItem(viewAsKey(uid)) as UiRole | null
+        setViewAsState(saved && ['admin', 'user', 'audit', 'viewer'].includes(saved) ? saved : null)
+      } catch {
+        /* ignore */
+      }
       if (!row) {
         setOnboarding('unknown')
       } else if (legacy) {
@@ -81,6 +101,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRoleLoading(false)
     })()
   }, [session])
+
+  // จำลอง role ได้เฉพาะ developer เท่านั้น (เป็นการจำลองฝั่งหน้าจอ — ไม่แตะ role จริงใน DB)
+  const isDeveloper = realRole === 'developer'
+  const viewAs: UiRole | null = isDeveloper ? viewAsState : null
+  const role: UiRole | null = realRole === null ? null : isDeveloper ? (viewAs ?? 'admin') : realRole
+
+  function setViewAs(r: UiRole | null) {
+    if (!isDeveloper) return
+    setViewAsState(r)
+    const uid = session?.user.id
+    if (!uid) return
+    try {
+      if (r) sessionStorage.setItem(viewAsKey(uid), r)
+      else sessionStorage.removeItem(viewAsKey(uid))
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function completeOnboarding() {
     const uid = session?.user.id
@@ -114,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, role, roleLoading, onboarding, completeOnboarding, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, role, realRole, isDeveloper, viewAs, setViewAs, roleLoading, onboarding, completeOnboarding, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

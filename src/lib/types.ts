@@ -1,4 +1,7 @@
-export type AppRole = 'admin' | 'user' | 'viewer' | 'audit'
+/** role จริงที่เก็บใน DB (developer = admin + จำลอง role ได้ ตั้งได้ผ่าน DB เท่านั้น) */
+export type AppRole = 'admin' | 'user' | 'viewer' | 'audit' | 'developer'
+/** role ที่ใช้ตัดสินหน้าจอ/ปุ่ม — developer จะถูกแปลงเป็น admin หรือ role ที่กำลังจำลอง */
+export type UiRole = Exclude<AppRole, 'developer'>
 
 export interface Patient {
   hn: string

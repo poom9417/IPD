@@ -1,4 +1,4 @@
-import type { AppRole } from './types'
+import type { UiRole } from './types'
 import type { PageKey } from '../components/NavMenu'
 
 /**
@@ -15,15 +15,15 @@ export interface TourStep {
   target: string
   title: string
   body: string
-  roles: AppRole[]
+  roles: UiRole[]
   /** เปิดเมนู Menu ค้างไว้ระหว่างขั้นตอนนี้ */
   menu?: boolean
 }
 
-const ALL: AppRole[] = ['admin', 'user', 'audit', 'viewer']
-const EDIT: AppRole[] = ['admin', 'user']
+const ALL: UiRole[] = ['admin', 'user', 'audit', 'viewer']
+const EDIT: UiRole[] = ['admin', 'user']
 
-export const ROLE_INTRO: Record<AppRole, { name: string; can: string[] }> = {
+export const ROLE_INTRO: Record<UiRole, { name: string; can: string[] }> = {
   admin: {
     name: 'ผู้ดูแลระบบ',
     can: [

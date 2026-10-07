@@ -73,6 +73,7 @@ export default function UserManagement({ onClose }: Props) {
                     <td className="px-3 py-2">
                       <input
                         defaultValue={u.unit ?? ''}
+                        disabled={u.role === 'developer'}
                         placeholder="เช่น หน่วยเวชระเบียน"
                         onBlur={(e) => {
                           const v = e.target.value.trim() || null
@@ -82,6 +83,14 @@ export default function UserManagement({ onClose }: Props) {
                       />
                     </td>
                     <td className="px-3 py-2">
+                      {u.role === 'developer' ? (
+                        <span
+                          title="บัญชี developer ถูกล็อก — ไม่สามารถแก้ไขสิทธิ์จากหน้านี้ได้"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm font-semibold text-ink"
+                        >
+                          🔒 Developer
+                        </span>
+                      ) : (
                       <select
                         value={u.role}
                         disabled={savingId === u.id}
@@ -93,6 +102,7 @@ export default function UserManagement({ onClose }: Props) {
                         <option value="audit">Audit</option>
                         <option value="admin">Admin</option>
                       </select>
+                      )}
                     </td>
                   </tr>
                 ))}
