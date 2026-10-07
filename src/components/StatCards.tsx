@@ -29,7 +29,7 @@ export default function StatCards({ admissions }: { admissions: Admission[] }) {
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div data-tour="stat-cards" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="rounded-xl border border-line border-l-8 border-l-brand bg-surface px-5 py-4">
           <p className="text-sm font-medium text-ink/70">{s.label}</p>

@@ -28,7 +28,7 @@ export default function Navbar({ page, onNavigate }: Props) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex flex-col items-end leading-tight">
+          <div data-tour="user-info" className="hidden sm:flex flex-col items-end leading-tight">
             <span className="text-sm text-white">{email}</span>
             <span
               className={
@@ -47,6 +47,7 @@ export default function Navbar({ page, onNavigate }: Props) {
           </div>
           {role === 'admin' && (
             <button
+              data-tour="manage-users"
               onClick={() => setShowUsers(true)}
               className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand hover:text-ink hover:border-brand transition-colors"
             >
@@ -54,6 +55,14 @@ export default function Navbar({ page, onNavigate }: Props) {
             </button>
           )}
           <button
+            onClick={() => window.dispatchEvent(new Event('ipd-tour-start'))}
+            data-tour="tour-again"
+            className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand hover:text-ink hover:border-brand transition-colors"
+          >
+            คู่มือใช้งาน
+          </button>
+          <button
+            data-tour="signout"
             onClick={signOut}
             className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand hover:text-ink hover:border-brand transition-colors"
           >

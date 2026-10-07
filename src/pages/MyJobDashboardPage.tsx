@@ -270,7 +270,7 @@ export default function MyJobDashboardPage() {
       </div>
 
       {/* ---------- Filters ---------- */}
-      <div className="space-y-3 rounded-xl border border-line bg-paper/50 p-4">
+      <div data-tour="mydash-filters" className="space-y-3 rounded-xl border border-line bg-paper/50 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-sm text-ink/70">
             <div className="mb-1">นับระยะเวลา</div>
@@ -410,7 +410,7 @@ export default function MyJobDashboardPage() {
           </div>
 
           {/* ---------- Per-case table ---------- */}
-          <section className="space-y-3">
+          <section data-tour="mydash-cases" className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="text-[15px] font-semibold text-ink">รายเคส ({rows.length.toLocaleString()})</h2>
               <div className="flex flex-wrap items-center gap-2">

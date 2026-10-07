@@ -150,7 +150,7 @@ export default function MyJobPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div data-tour="claim-stats" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-line border-l-8 border-l-brand bg-surface px-5 py-4">
           <p className="text-sm font-medium text-ink/70">รายการที่ฉันดูแล</p>
           <p className="mt-1 text-3xl font-bold text-ink">{selected.size}</p>
@@ -165,7 +165,7 @@ export default function MyJobPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div data-tour="claim-toolbar" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -206,7 +206,7 @@ export default function MyJobPage() {
       {loading ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+        <div data-tour="claim-table" className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className="bg-brand text-[13px] text-ink">

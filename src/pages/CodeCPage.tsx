@@ -409,6 +409,7 @@ export default function CodeCPage() {
         </div>
         {canReport && (
           <button
+            data-tour="codec-report"
             onClick={() => setFormOpen(true)}
             className="whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark"
           >
@@ -417,7 +418,7 @@ export default function CodeCPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div data-tour="codec-stats" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           { label: 'ทั้งหมด', value: cases.length },
           { label: 'รอ Audit แก้ไข', value: openCount },
@@ -430,7 +431,7 @@ export default function CodeCPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-tour="codec-filters" className="flex flex-wrap items-center gap-2">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -471,7 +472,7 @@ export default function CodeCPage() {
           ไม่มีรายการ Code C ที่ตรงเงื่อนไข
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+        <div data-tour="codec-table" className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full min-w-[1000px] text-left text-sm">
             <thead>
               <tr className="bg-brand text-[13px] text-ink">
@@ -540,6 +541,7 @@ export default function CodeCPage() {
                       <div className="flex justify-end gap-1.5">
                         {canReply && (
                           <button
+                            data-tour="codec-reply"
                             onClick={() => setReplying(c)}
                             className="rounded-md bg-brand px-3 py-1 text-sm font-semibold text-ink hover:bg-brand-dark"
                           >

@@ -90,9 +90,18 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
   const [expanded, setExpanded] = useState<string | null>(currentEntry?.children ? currentEntry.key : null)
 
   function close() {
+    // ระหว่างทัวร์ที่กำลังโชว์เมนู ไม่ให้เมนูปิดเอง
+    if (document.body.dataset.tourMenu === '1') return
     window.clearTimeout(timer.current)
     setOpen(false)
   }
+
+  // ทัวร์สั่งเปิด/ปิดเมนูเพื่อโชว์รายการหน้า
+  useEffect(() => {
+    const h = (e: Event) => setOpen(!!(e as CustomEvent<boolean>).detail)
+    window.addEventListener('ipd-tour-menu', h)
+    return () => window.removeEventListener('ipd-tour-menu', h)
+  }, [])
 
   function go(p: PageKey) {
     onNavigate(p)
@@ -134,6 +143,7 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
       >
         <button
           type="button"
+          data-tour="menu-btn"
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
@@ -152,7 +162,7 @@ export default function NavMenu({ page, canJob, onNavigate }: Props) {
 
         {open && (
           <div role="menu" className="menu-fade absolute left-0 top-full z-50 pt-2">
-            <ul className="w-72 rounded-xl border border-ink/10 bg-white p-1.5 text-ink shadow-xl">
+            <ul data-tour="menu-list" className="w-72 rounded-xl border border-ink/10 bg-white p-1.5 text-ink shadow-xl">
               {entries.map((e) => {
                 if (e.children) {
                   const open = expanded === e.key

@@ -258,7 +258,7 @@ export default function AdmissionsTable({
   const minWidth = widths.reduce((sum, w) => sum + w, 0)
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+    <div data-tour="cases-table" className="overflow-x-auto rounded-xl border border-line bg-surface">
       <table className="w-full table-fixed text-left text-sm" style={{ minWidth }}>
         <colgroup>
           {widths.map((w, i) => (
@@ -286,9 +286,10 @@ export default function AdmissionsTable({
           </tr>
         </thead>
         <tbody>
-          {admissions.map((a) => (
+          {admissions.map((a, rowIdx) => (
             <tr
               key={a.admission_id}
+              data-tour={rowIdx === 0 ? 'first-row' : undefined}
               onClick={() => onView?.(a)}
               onKeyDown={(e) => {
                 if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
@@ -336,12 +337,13 @@ export default function AdmissionsTable({
               <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-ink">
                 {fmtMoney(a.case_tracking?.document_received_amount)}
               </td>
-              <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+              <td className="px-3 py-2.5" data-tour={rowIdx === 0 ? 'claim-status' : undefined} onClick={(e) => e.stopPropagation()}>
                 <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} onEditReceive={onEditReceive} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
                 <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                   <button
+                    data-tour={rowIdx === 0 ? 'edit-btn' : undefined}
                     onClick={() => onEdit(a)}
                     className="rounded-md border border-ink/40 px-3 py-1 text-sm font-medium text-ink hover:bg-brand"
                   >

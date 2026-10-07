@@ -85,7 +85,7 @@ export default function FilterBar({
   ]
 
   return (
-    <div className="space-y-3">
+    <div data-tour="filters" className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <input
           value={search}

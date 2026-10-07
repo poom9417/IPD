@@ -315,6 +315,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap gap-2">
             {myPairs.size > 0 && (
               <button
+                data-tour="only-mine"
                 onClick={() => setOnlyMine((v) => !v)}
                 className={
                   'whitespace-nowrap rounded-lg border px-4 py-2 text-sm font-medium transition-colors ' +
@@ -327,6 +328,7 @@ export default function Dashboard() {
               </button>
             )}
             <button
+              data-tour="export"
               onClick={handleExport}
               disabled={loading || filtered.length === 0}
               title={
@@ -340,6 +342,7 @@ export default function Dashboard() {
             </button>
             {isAdmin && (
               <button
+                data-tour="import"
                 onClick={() => setShowImport(true)}
                 className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
               >
@@ -348,6 +351,7 @@ export default function Dashboard() {
             )}
             {canBulk && (
               <button
+                data-tour="bulk"
                 onClick={() => setShowBulk(true)}
                 className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
               >
@@ -357,6 +361,7 @@ export default function Dashboard() {
             {canEdit && (
               <>
                 <button
+                  data-tour="add-case"
                   onClick={() => setEditing(null)}
                   className="whitespace-nowrap rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark transition-colors"
                 >
