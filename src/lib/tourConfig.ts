@@ -7,6 +7,13 @@ import type { PageKey } from '../components/NavMenu'
  */
 export const TOUR_VERSION = 1
 
+/**
+ * เลขย่อยของเนื้อหาทัวร์ (v1.1, v1.2 …) — เพิ่มเมื่อเพิ่ม/แก้คำอธิบายปุ่มใหม่
+ * ไม่ทำให้ผู้ใช้เห็นทัวร์ซ้ำเอง (ซ้ำเฉพาะเมื่อ TOUR_VERSION เปลี่ยน)
+ */
+export const TOUR_MINOR = 1
+export const TOUR_LABEL = `v${TOUR_VERSION}.${TOUR_MINOR}`
+
 export interface TourStep {
   id: string
   /** หน้าที่ต้องอยู่ตอนโชว์ขั้นตอนนี้ (ทัวร์พาไปให้เอง) */
@@ -16,6 +23,8 @@ export interface TourStep {
   title: string
   body: string
   roles: UiRole[]
+  /** แสดงเฉพาะบัญชี Developer (role จริง) แม้กำลังจำลองเป็น role อื่น */
+  dev?: boolean
   /** เปิดเมนู Menu ค้างไว้ระหว่างขั้นตอนนี้ */
   menu?: boolean
 }
@@ -64,6 +73,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'แสดงอีเมลและ role ที่คุณใช้อยู่ ซึ่งกำหนดว่าปุ่มไหนใช้ได้ ถ้าต้องการเปลี่ยน role ให้แจ้งผู้ดูแลระบบ',
   },
   {
+    id: 'simulate-role', page: 'mine', target: 'simulate-role', roles: ALL, dev: true,
+    title: 'จำลองเป็น role อื่น (Developer)',
+    body: 'เลือก role เพื่อดูหน้าเว็บเหมือนเป็นคนนั้น โดย role จริงของคุณไม่ถูกเปลี่ยน มีแถบสีเหลืองด้านบนแจ้งว่ากำลังจำลองอยู่ กด "ออกจากโหมดจำลอง" เพื่อกลับมา และคนอื่นแก้ role Developer ของคุณไม่ได้',
+  },
+  {
     id: 'menu-edit', page: 'mine', target: 'menu-list', menu: true, roles: EDIT,
     title: 'เมนูหน้าต่างๆ',
     body: 'หน้าหลัก = รับเอกสาร/ส่งเบิกเคสทั้งหมด · Code C = เคสที่ติด C หลังส่งเบิก · My job = งานของสิทธิที่คุณดูแล (Dashboard ระยะเวลาส่งเบิก และ My claim เลือกสิทธิ) เลื่อนเมาส์ไปที่ปุ่ม Menu เพื่อเปิด',
@@ -96,9 +110,14 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'แสดงเฉพาะเคสของสิทธิ+ผู้จ่ายที่คุณเลือกดูแลไว้ที่ My job ปุ่มนี้จะโผล่เมื่อคุณเลือกสิทธิที่ดูแลแล้ว',
   },
   {
-    id: 'export', page: 'mine', target: 'export', roles: ALL,
+    id: 'export', page: 'mine', target: 'export', roles: ['admin', 'user', 'viewer'],
     title: 'Export Excel',
     body: 'ส่งออกเคสเป็นไฟล์ Excel ตามตัวกรองบนหน้าจอ ถ้าไม่ได้ตั้งตัวกรองจะส่งออกทั้งหมด',
+  },
+  {
+    id: 'export-audit', page: 'mine', target: 'export', roles: ['audit'],
+    title: 'Export Excel (สำหรับ Audit)',
+    body: 'ส่งออกเป็น Excel ตามตัวกรองบนหน้าจอ โดย role Audit จะได้เฉพาะคอลัมน์ HN, AN, encounter_id, ชื่อผู้ป่วย, coverage_code, payer_id, วันที่จำหน่าย',
   },
   {
     id: 'import', page: 'mine', target: 'import', roles: ['admin'],
@@ -150,7 +169,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'codec-report', page: 'codec', target: 'codec-report', roles: EDIT,
     title: '+ แจ้งเคสติด C',
-    body: 'เลือกเคสที่ส่งเบิกแล้ว (ค้นด้วยชื่อหรือ encounter_id) แล้วระบุสาเหตุที่ติด C และ dateline ระบบประทับวันเวลาและชื่อผู้บันทึกให้อัตโนมัติ',
+    body: 'เลือกเคสที่ส่งเบิกแล้ว (ค้นด้วยชื่อหรือ encounter_id) แล้วระบุสาเหตุที่ติด C ส่วน dateline ระบบนับให้เองจากวันจำหน่าย + 7 วัน ไม่ต้องกรอก และประทับวันเวลาพร้อมชื่อผู้บันทึกให้อัตโนมัติ',
   },
   {
     id: 'codec-stats', page: 'codec', target: 'codec-stats', roles: ALL,
@@ -165,12 +184,17 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'codec-table', page: 'codec', target: 'codec-table', roles: ALL,
     title: 'รายการเคสติด C',
-    body: 'ฝั่งซ้ายคือสาเหตุที่ user แจ้ง ฝั่งขวาคือวิธีแก้ที่ Audit ตอบ ทั้งสองฝั่งมีวันเวลาและชื่อผู้บันทึกกำกับ',
+    body: 'ฝั่งซ้ายคือสาเหตุที่ user แจ้ง ฝั่งขวาคือวิธีแก้ที่ Audit ตอบ ทั้งสองฝั่งมีวันเวลาและชื่อผู้บันทึกกำกับ คอลัมน์ dateline แสดง "วันที่ x / 7" นับจากวันจำหน่าย ถ้าเกินจะขึ้นสีแดง เคสที่ถูกส่งกลับจะมี "รอบที่ N" และเปิดดู "ประวัติการแก้ไข" ได้ว่าเคยแก้อะไรไปแล้ว',
   },
   {
     id: 'codec-reply', page: 'codec', target: 'codec-reply', roles: ['admin', 'audit'],
     title: 'ตอบวิธีแก้ไข',
-    body: 'Audit กดตอบเพื่อบันทึกว่าแก้ไขอย่างไร ระบบบันทึกวันที่ตอบแยกจากฝั่ง user ตอบแล้วแก้คำตอบได้ภายหลัง',
+    body: 'Audit กดตอบเพื่อบันทึกว่าแก้ไขอย่างไร ระบบบันทึกวันที่ตอบแยกจากฝั่ง user เมื่อตอบแล้วถือว่าผ่านโดยอัตโนมัติ ถ้า user ส่งกลับ ปุ่มจะเป็น "ตอบรอบที่ N" และเห็นคำตอบเดิมกับวันที่ แก้คำตอบภายหลังได้ คำตอบเดิมเก็บไว้ในประวัติ',
+  },
+  {
+    id: 'codec-reopen', page: 'codec', target: 'codec-reopen', roles: ['user'],
+    title: 'ไม่ผ่านการแก้ C',
+    body: 'ใช้เมื่อ Audit ตอบแล้วแต่เคสยังติด C กดแล้วเคสจะกลับเป็น "รอ Audit แก้ไข" รอบถัดไป (มีหน้าต่างยืนยัน และใส่เหตุผลได้ ไม่บังคับ) dateline นับต่อโดยไม่รีเซ็ต ถ้าการแก้ไม่มีปัญหา ไม่ต้องกดอะไร ระบบถือว่าผ่านแล้ว ปุ่มนี้จะโผล่เมื่อ Audit ตอบเคสแล้ว',
   },
 
   // ---------- My job ----------

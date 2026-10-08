@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { ROLE_INTRO, TOUR_STEPS } from '../lib/tourConfig'
+import { ROLE_INTRO, TOUR_LABEL, TOUR_STEPS } from '../lib/tourConfig'
 import type { PageKey } from './NavMenu'
 
 type Phase = 'off' | 'welcome' | 'tour' | 'final'
@@ -19,7 +19,7 @@ function setMenu(open: boolean) {
 }
 
 export default function OnboardingTour({ page, onNavigate }: Props) {
-  const { role, onboarding, completeOnboarding } = useAuth()
+  const { role, isDeveloper, onboarding, completeOnboarding } = useAuth()
   const [phase, setPhase] = useState<Phase>('off')
   const [replay, setReplay] = useState(false)
   const [i, setI] = useState(0)
@@ -32,7 +32,10 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
   const tipRef = useRef<HTMLDivElement>(null)
   const autoStarted = useRef(false)
 
-  const steps = useMemo(() => TOUR_STEPS.filter((s) => role && s.roles.includes(role)), [role])
+  const steps = useMemo(
+    () => TOUR_STEPS.filter((s) => role && s.roles.includes(role) && (!s.dev || isDeveloper)),
+    [role, isDeveloper],
+  )
   const step = phase === 'tour' ? steps[i] : undefined
 
   // เริ่มอัตโนมัติ: login ครั้งแรก (หรือ version ใหม่) — ทำครั้งเดียวต่อการเปิดหน้าเว็บ
@@ -209,6 +212,9 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
               <li key={c}>{c}</li>
             ))}
           </ul>
+          {isDeveloper && (
+            <p className="mt-2 text-sm">คุณเป็น <b>Developer</b> (สิทธิ์ Admin + จำลองเป็น role อื่นได้) ทัวร์นี้แสดงตาม role ที่กำลังใช้อยู่</p>
+          )}
           <p className="mt-3 text-sm text-ink/70">
             ทัวร์สั้นๆ นี้จะอธิบายว่าปุ่มแต่ละปุ่มทำอะไร และพาไปดูทุกหน้าที่คุณใช้ได้ ระหว่างทัวร์ปุ่มจะยังไม่ถูกกด ไม่มีข้อมูลใดถูกเปลี่ยน
           </p>
@@ -218,6 +224,7 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
                 ปิด
               </button>
             )}
+            <span className="mr-auto self-center text-xs text-ink/50">คู่มือ {TOUR_LABEL}</span>
             <button
               autoFocus
               onClick={() => {
@@ -240,6 +247,7 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
       <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
         <div className="w-full max-w-md rounded-2xl border-4 border-brand bg-white p-6 text-ink shadow-2xl">
           <h2 className="text-xl font-bold">ทัวร์จบแล้ว</h2>
+          <p className="text-xs text-ink/50">คู่มือ {TOUR_LABEL}</p>
           <p className="mt-2 text-sm">ตอนนี้คุณรู้แล้วว่าแต่ละปุ่มทำอะไร และเข้าหน้าไหนได้บ้าง เปิดคู่มือนี้ซ้ำได้ที่ปุ่ม "คู่มือใช้งาน" ด้านบน</p>
           {!replay && (
             <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-medium">
