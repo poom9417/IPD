@@ -467,6 +467,8 @@ export default function CodeCPage() {
   const canReport = role === 'admin' || role === 'user'
   const canReply = role === 'admin' || role === 'audit'
   const canReopen = role === 'user' // developer ทดสอบผ่านโหมดจำลอง user
+  // ปุ่ม "เฉพาะสิทธิของฉัน": เฉพาะ role ที่มีสิทธิ์ที่ดูแลของตัวเอง (My job) — audit / viewer ไม่มี จึงไม่แสดงปุ่ม
+  const canFilterMine = role === 'admin' || role === 'user'
 
   const [cases, setCases] = useState<CodeCCase[]>([])
   const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
@@ -515,7 +517,7 @@ export default function CodeCPage() {
       const done = c.status === 'answered'
       if (status === 'open' && done) return false
       if (status === 'done' && !done) return false
-      if (onlyMine && !myPairs.has(pairKey(c.admissions?.coverage_code, c.admissions?.payer_id))) return false
+      if (canFilterMine && onlyMine && !myPairs.has(pairKey(c.admissions?.coverage_code, c.admissions?.payer_id))) return false
       if (
         q &&
         !(
@@ -527,7 +529,7 @@ export default function CodeCPage() {
         return false
       return true
     })
-  }, [cases, status, onlyMine, myPairs, search])
+  }, [cases, status, onlyMine, myPairs, search, canFilterMine])
 
   const isOverdue = (c: CodeCCase) => {
     const dl = calcDateline(c, today)
@@ -588,7 +590,7 @@ export default function CodeCPage() {
           <option value="open">รอ Audit แก้ไข</option>
           <option value="done">แก้ไขแล้ว</option>
         </select>
-        {myPairs.size > 0 && (
+        {canFilterMine && myPairs.size > 0 && (
           <button
             onClick={() => setOnlyMine((v) => !v)}
             className={
