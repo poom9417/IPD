@@ -39,6 +39,8 @@ export default function Dashboard() {
   const { role, session } = useAuth()
   const isAdmin = role === 'admin'
   const isAudit = role === 'audit'
+  // ปุ่ม "เฉพาะสิทธิของฉัน": เฉพาะ admin / user — audit / viewer ไม่มีสิทธิที่ดูแลของตัวเอง
+  const canFilterMine = role === 'admin' || role === 'user'
   // audit: อัพโหลดได้เฉพาะขั้น Audit + กดบันทึกวัน Audit ได้ | user: อัพโหลดได้เฉพาะรับเอกสาร/ส่งเบิก (ฐานข้อมูลบังคับซ้ำอีกชั้น)
   const canBulk = role === 'admin' || role === 'user' || isAudit
   const canMarkAudit = isAdmin || isAudit
@@ -239,12 +241,12 @@ export default function Dashboard() {
       }
 
       if (coverages.length > 0 && !coverages.includes(a.coverage_code)) return false
-      if (onlyMine && !myPairs.has(pairKey(a.coverage_code, a.payer_id))) return false
+      if (canFilterMine && onlyMine && !myPairs.has(pairKey(a.coverage_code, a.payer_id))) return false
       if (payer && a.payer_id !== payer) return false
       if (claimStage && getClaimStage(a) !== claimStage) return false
       return true
     })
-  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage, onlyMine, myPairs])
+  }, [admissions, search, division, dischargeFrom, dischargeTo, coverages, payer, claimStage, onlyMine, myPairs, canFilterMine])
 
   // เปลี่ยน filter แล้วกลับไปหน้า 1
   useEffect(() => {
@@ -266,7 +268,7 @@ export default function Dashboard() {
     coverages.length ||
     payer ||
     claimStage ||
-    onlyMine
+    (canFilterMine && onlyMine)
   )
 
   function clearFilters() {
@@ -313,7 +315,7 @@ export default function Dashboard() {
             แสดง {filtered.length.toLocaleString()} จาก {admissions.length.toLocaleString()} รายการ
           </div>
           <div className="flex flex-wrap gap-2">
-            {myPairs.size > 0 && (
+            {canFilterMine && myPairs.size > 0 && (
               <button
                 data-tour="only-mine"
                 onClick={() => setOnlyMine((v) => !v)}
