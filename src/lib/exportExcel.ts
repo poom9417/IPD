@@ -13,9 +13,17 @@ const HEADERS = [
   'ยอดส่งเบิก', 'claim_no', 'admission_id', 'coverage_code', 'payer_id', 'hospital_status_code', 'สถานะเคลม',
 ]
 
+// role audit: ส่งออกเฉพาะ 7 คอลัมน์นี้ (เรียงตามนี้)
+const AUDIT_HEADERS = ['HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'coverage_code', 'payer_id', 'วันที่จำหน่าย']
+
 // ส่งออกเฉพาะรายการที่ส่งเข้ามา (Dashboard ส่ง `filtered` = ตามตัวกรองบนหน้าจอ; ถ้าไม่ได้กรองอะไรก็คือทั้งหมด)
 // เรียงตามลำดับเดียวกับที่เห็นบนหน้าจอ
-export function exportAdmissionsToExcel(admissions: Admission[], fileName = 'ipd-ar-discharge'): { admissions: number } {
+export function exportAdmissionsToExcel(
+  admissions: Admission[],
+  fileName = 'ipd-ar-discharge',
+  opts: { auditOnly?: boolean } = {},
+): { admissions: number } {
+  const headers = opts.auditOnly ? AUDIT_HEADERS : HEADERS
   const rows: Row[] = admissions.map((a) => {
     const ct = a.case_tracking
     return {
@@ -46,8 +54,10 @@ export function exportAdmissionsToExcel(admissions: Admission[], fileName = 'ipd
     }
   })
 
-  const ws = XLSX.utils.json_to_sheet(rows, { header: HEADERS })
-  ws['!cols'] = HEADERS.map((h) => {
+  // json_to_sheet จะต่อคีย์ที่ไม่อยู่ใน header ท้ายตารางเอง → ตัดให้เหลือเฉพาะคอลัมน์ที่ต้องการก่อน
+  const outRows = rows.map((r) => Object.fromEntries(headers.map((h) => [h, r[h]])))
+  const ws = XLSX.utils.json_to_sheet(outRows, { header: headers })
+  ws['!cols'] = headers.map((h) => {
     const longest = rows.reduce((m, r) => Math.max(m, String(r[h] ?? '').length), h.length)
     return { wch: Math.min(Math.max(longest + 2, 10), 60) }
   })

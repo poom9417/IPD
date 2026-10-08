@@ -171,7 +171,7 @@ export default function Dashboard() {
   // Export ตามตัวกรองบนหน้าจอ (ไม่ได้กรองอะไร = ทั้งหมด) — ทุกแถวที่กรองได้ ไม่แบ่งหน้า ไม่ตัด
   function handleExport() {
     try {
-      exportAdmissionsToExcel(filtered)
+      exportAdmissionsToExcel(filtered, 'ipd-ar-discharge', { auditOnly: isAudit })
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
     }
