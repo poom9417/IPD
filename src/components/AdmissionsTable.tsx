@@ -6,7 +6,7 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
-// ---- จำนวนวันหลัง Audit ----
+// ---- จำนวนวันค้างเบิก (นับจากวันจำหน่าย) ----
 // นับเป็น "วันตามปฏิทิน" (ตัดเวลาออก) กันเลื่อนเพราะ timezone
 function dayNumber(ymd: string | null | undefined): number | null {
   const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd) : null
@@ -19,18 +19,22 @@ function todayDayNumber(): number {
 }
 
 /**
- * ยังไม่ส่งเบิก  → วันนี้ − วัน Audit        (pending = true: ค้างอยู่ ตัวเลขยังเดินต่อ)
- * ส่งเบิกแล้ว    → วันส่งเบิก − วัน Audit    (pending = false: ตัวเลขนิ่งแล้ว)
- * ยังไม่มีวัน Audit → null (แสดง —)
+ * ยังไม่ส่งเบิก  → วันนี้ − วันจำหน่าย         (pending = true: ค้างอยู่ ตัวเลขยังเดินต่อ)
+ * ส่งเบิกแล้ว    → วันส่งเบิก − วันจำหน่าย     (pending = false: ตัวเลขนิ่งแล้ว)
+ * ยังไม่มีวันจำหน่าย → null (แสดง —)
+ * ไม่เกี่ยวกับวัน Audit แล้ว
  */
-function daysAfterAudit(
+function daysAfterDischarge(
+  dischargeDate: string | null | undefined,
   ct: Admission['case_tracking'],
   today: number,
 ): { days: number; pending: boolean } | null {
-  const audit = dayNumber(ct?.audit_date)
-  if (audit === null) return null
+  const discharge = dayNumber(dischargeDate)
+  if (discharge === null) return null
   const submitted = dayNumber(ct?.submission_date)
-  return submitted === null ? { days: today - audit, pending: true } : { days: submitted - audit, pending: false }
+  return submitted === null
+    ? { days: today - discharge, pending: true }
+    : { days: submitted - discharge, pending: false }
 }
 
 function fmtMoney(n: number | null | undefined) {
@@ -275,7 +279,7 @@ export default function AdmissionsTable({
             <th className="whitespace-nowrap px-3 py-3 font-semibold">วัน Audit</th>
             <th
               className="whitespace-nowrap px-3 py-3 text-right font-semibold"
-              title="ยังไม่ส่งเบิก = วันนี้ − วัน Audit · ส่งเบิกแล้ว = วันส่งเบิก − วัน Audit"
+              title="ยังไม่ส่งเบิก = วันนี้ − วันจำหน่าย · ส่งเบิกแล้ว = วันส่งเบิก − วันจำหน่าย"
             >
               ค้างเบิก (วัน)
             </th>
@@ -311,19 +315,19 @@ export default function AdmissionsTable({
               <td className="whitespace-nowrap px-3 py-2.5 text-ink">{fmtDate(a.case_tracking?.audit_date ?? null)}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink">
                 {(() => {
-                  const aging = daysAfterAudit(a.case_tracking, today)
+                  const aging = daysAfterDischarge(a.discharge_date, a.case_tracking, today)
                   if (!aging) return '—'
                   return aging.pending ? (
                     <span
                       className="inline-block min-w-8 rounded-full bg-alert px-2.5 py-0.5 text-center font-bold text-white"
-                      title={`ยังไม่ส่งเบิก — Audit มาแล้ว ${aging.days} วัน`}
+                      title={`ยังไม่ส่งเบิก — จำหน่ายมาแล้ว ${aging.days} วัน`}
                     >
                       {aging.days}
                     </span>
                   ) : (
                     <span
                       className="inline-block min-w-8 rounded-full bg-brand px-2.5 py-0.5 text-center font-bold text-ink"
-                      title={`ส่งเบิกแล้ว — ใช้เวลา ${aging.days} วันหลัง Audit`}
+                      title={`ส่งเบิกแล้ว — ใช้เวลา ${aging.days} วันหลังจำหน่าย`}
                     >
                       {aging.days}
                     </span>
