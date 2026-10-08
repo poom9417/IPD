@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabaseClient'
 import type { Admission, BulkStage } from '../lib/types'
@@ -66,6 +66,22 @@ interface ParsedRow {
   skip?: string
 }
 
+type ExistingMap = Map<number, Record<string, string | number | null>>
+type DupMode = 'skip' | 'overwrite'
+type TargetState = 'new' | 'same' | 'conflict'
+interface TargetCheck {
+  state: TargetState
+  /** คำอธิบายค่าเดิมที่มีอยู่ในระบบ (ใช้แสดงเมื่อ state = conflict) */
+  old?: string
+}
+
+function fmtOld(ex: Record<string, string | number | null>, dateCol: string, amountCol?: string, withClaim?: boolean) {
+  const parts: string[] = [ex[dateCol] ? String(ex[dateCol]).slice(0, 10) : '—']
+  if (amountCol) parts.push(ex[amountCol] == null ? '—' : Number(ex[amountCol]).toLocaleString('th-TH', { maximumFractionDigits: 2 }))
+  if (withClaim) parts.push(ex.claim_no ? `claim ${ex.claim_no}` : 'ไม่มี claim_no')
+  return parts.join(' · ')
+}
+
 export default function BulkClaimUpload({ admissions, onClose, onDone, allowedStages }: Props) {
   const stageList = (Object.keys(STAGE_CONFIG) as BulkStage[]).filter((s) => !allowedStages || allowedStages.includes(s))
   const [stage, setStage] = useState<BulkStage>(stageList.includes('audit') ? 'audit' : stageList[0])
@@ -73,8 +89,59 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
   const [fileName, setFileName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  // ตรวจข้อมูลซ้ำ: ค่าที่มีอยู่แล้วใน case_tracking ของเคสเป้าหมาย + ตัวเลือกของผู้อัพโหลด (ค่าเริ่มต้น = ข้าม)
+  const [existing, setExisting] = useState<ExistingMap>(new Map())
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
+  const [dupMode, setDupMode] = useState<DupMode>('skip')
 
   const cfg = STAGE_CONFIG[stage]
+  const stageCols = [cfg.dateCol, ...(cfg.amountCol ? [cfg.amountCol] : []), ...(cfg.needsPayerCheck ? ['claim_no'] : [])]
+
+  // ไฟล์เปลี่ยน → ดึงค่าเดิมของเคสเป้าหมายมาเทียบ (ดึงเฉพาะคอลัมน์ของขั้นตอนนี้)
+  useEffect(() => {
+    const ids = [
+      ...new Set(rows.filter((r) => !r.error && !r.skip).flatMap((r) => r.targets.map((t) => t.admission_id))),
+    ]
+    if (ids.length === 0) {
+      setExisting(new Map())
+      setChecking(false)
+      setCheckError(null)
+      return
+    }
+    let cancelled = false
+    setChecking(true)
+    setCheckError(null)
+    const cols = ['admission_id', ...stageCols].join(',')
+    const CHUNK = 300
+    const chunks: number[][] = []
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
+    Promise.all(
+      chunks.map(async (c) => {
+        const { data, error } = await supabase.from('case_tracking').select(cols).in('admission_id', c)
+        if (error) throw error
+        return (data ?? []) as unknown as Record<string, string | number | null>[]
+      }),
+    )
+      .then((parts) => {
+        if (cancelled) return
+        const map: ExistingMap = new Map()
+        for (const row of parts.flat()) map.set(Number(row.admission_id), row)
+        setExisting(map)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setExisting(new Map())
+        setCheckError(`ตรวจข้อมูลเดิมไม่สำเร็จ: ${e instanceof Error ? e.message : String(e)}`)
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
   // 1 encounter อาจมีหลายแถว (แยกสิทธิ/ผู้จ่าย)
   const byEncounter = new Map<number, Admission[]>()
   for (const a of admissions) {
@@ -130,6 +197,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
   function handleFile(file: File) {
     setFileName(file.name)
     setResult(null)
+    setDupMode('skip')
     if (stage === 'submission') {
       void handleGgoFile(file)
       return
@@ -191,24 +259,63 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
     })
   }
 
+  // เทียบค่าในไฟล์กับค่าเดิมในระบบ ทีละแถวสิทธิ (target)
+  function checkTarget(r: ParsedRow, t: Target): TargetCheck {
+    const ex = existing.get(t.admission_id)
+    if (!ex) return { state: 'new' }
+    const hasAny = stageCols.some((c) => ex[c] !== null && ex[c] !== undefined && ex[c] !== '')
+    if (!hasAny) return { state: 'new' }
+    const oldDate = ex[cfg.dateCol] ? String(ex[cfg.dateCol]).slice(0, 10) : null
+    const sameDate = oldDate === (r.date || '').slice(0, 10)
+    const sameAmount = !cfg.amountCol || (ex[cfg.amountCol] == null ? null : Number(ex[cfg.amountCol])) === (r.amount ?? null)
+    const sameClaim = !cfg.needsPayerCheck || String(ex.claim_no ?? '') === (r.claimNo ?? '')
+    if (sameDate && sameAmount && sameClaim) return { state: 'same' }
+    return { state: 'conflict', old: fmtOld(ex, cfg.dateCol, cfg.amountCol, cfg.needsPayerCheck) }
+  }
+
+  // ผลตรวจรายแถว (index ตรงกับ rows) — แถว error/skip ไม่มี target
+  const analysis: TargetCheck[][] = rows.map((r) => (r.error || r.skip ? [] : r.targets.map((t) => checkTarget(r, t))))
+  const flat = analysis.flat()
+  const newN = flat.filter((c) => c.state === 'new').length
+  const sameN = flat.filter((c) => c.state === 'same').length
+  const conflictN = flat.filter((c) => c.state === 'conflict').length
+  const writeCount = newN + (dupMode === 'overwrite' ? conflictN : 0)
+
+  // เคสเดียวกันซ้ำหลายแถวในไฟล์ → ระบบใช้แถวหลังสุด
+  const dupInFile = (() => {
+    const seen = new Map<number, number>()
+    rows.forEach((r) => {
+      if (r.error || r.skip) return
+      for (const t of r.targets) seen.set(t.admission_id, (seen.get(t.admission_id) ?? 0) + 1)
+    })
+    return [...seen.values()].filter((n) => n > 1).length
+  })()
+
   async function handleConfirm() {
-    const valid = rows.filter((r) => !r.error && !r.skip)
-    if (valid.length === 0) return
+    if (writeCount === 0 || checking || checkError) return
     setUploading(true)
     setResult(null)
 
     // 1 แถวในไฟล์ อาจลงได้หลายแถวในระบบ (ทุกสิทธิของ encounter) — คีย์คือ admission_id
-    const payload = valid.flatMap((r) =>
-      r.targets.map((t) => {
-        const base: Record<string, string | number | null> = {
-          admission_id: t.admission_id,
-          encounter_id: t.encounter_id,
-        }
-        base[cfg.dateCol] = r.date
-        if (cfg.amountCol) base[cfg.amountCol] = r.amount ?? null
-        if (cfg.needsPayerCheck) base.claim_no = r.claimNo || null
-        return base
-      }),
+    // ตัดแถวสิทธิที่ค่าเหมือนเดิม และแถวที่มีข้อมูลเดิมแต่ผู้อัพโหลดเลือก "ข้าม" ออกก่อนบันทึก
+    const payload = rows.flatMap((r, i) =>
+      r.error || r.skip
+        ? []
+        : r.targets
+            .filter((_, j) => {
+              const st = analysis[i][j].state
+              return st === 'new' || (st === 'conflict' && dupMode === 'overwrite')
+            })
+            .map((t) => {
+              const base: Record<string, string | number | null> = {
+                admission_id: t.admission_id,
+                encounter_id: t.encounter_id,
+              }
+              base[cfg.dateCol] = r.date
+              if (cfg.amountCol) base[cfg.amountCol] = r.amount ?? null
+              if (cfg.needsPayerCheck) base.claim_no = r.claimNo || null
+              return base
+            }),
     )
 
     // กัน admission_id ซ้ำในชุดเดียว (Postgres ไม่ให้ upsert แถวเดิมสองครั้งในคำสั่งเดียว) — ใช้แถวหลังสุด
@@ -222,18 +329,22 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
     if (error) {
       setResult(`เกิดข้อผิดพลาด: ${error.message}`)
     } else {
-      setResult(`บันทึกสำเร็จ ${count ?? unique.length} รายการ (แถวสิทธิ)`)
+      const skippedDup = dupMode === 'skip' ? conflictN : 0
+      setResult(
+        `บันทึกสำเร็จ ${count ?? unique.length} รายการ (แถวสิทธิ)` +
+          (skippedDup > 0 ? ` · ข้ามเคสที่มีข้อมูลเดิม ${skippedDup}` : '') +
+          (sameN > 0 ? ` · ข้อมูลเหมือนเดิม ไม่ต้องบันทึก ${sameN}` : ''),
+      )
       onDone()
     }
   }
 
   const skipCount = rows.filter((r) => r.skip).length
   const errorCount = rows.filter((r) => r.error).length
-  const validCount = rows.length - skipCount - errorCount
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-surface p-6 shadow-xl">
+      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-y-auto rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">อัพโหลดสถานะเคลมแบบ Bulk</h2>
           <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
@@ -249,6 +360,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
             setRows([])
             setFileName('')
             setResult(null)
+            setDupMode('skip')
           }}
           className="input mb-3"
         >
@@ -300,7 +412,25 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
                       ) : r.error ? (
                         <span className="text-rose">{r.error}</span>
                       ) : (
-                        <span className="text-ink font-semibold">พร้อมบันทึก</span>
+                        (() => {
+                          const checks = analysis[i] ?? []
+                          const conflicts = checks.filter((c) => c.state === 'conflict')
+                          if (checking) return <span className="text-ink/50">กำลังตรวจข้อมูลเดิม…</span>
+                          if (conflicts.length > 0) {
+                            return (
+                              <span>
+                                <span className="font-semibold text-alert">
+                                  {dupMode === 'skip' ? 'มีข้อมูลเดิม — จะข้าม' : 'มีข้อมูลเดิม — จะเขียนทับ'}
+                                </span>
+                                <span className="block text-ink/60">เดิม: {conflicts[0].old}</span>
+                              </span>
+                            )
+                          }
+                          if (checks.length > 0 && checks.every((c) => c.state === 'same')) {
+                            return <span className="text-ink/50">เหมือนเดิม — ไม่ต้องบันทึก</span>
+                          }
+                          return <span className="text-ink font-semibold">พร้อมบันทึก</span>
+                        })()
                       )}
                     </td>
                   </tr>
@@ -312,10 +442,38 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
 
         {rows.length > 0 && (
           <p className="mb-3 text-sm text-ink/70">
-            พร้อมบันทึก {validCount} แถว
+            {checking ? 'กำลังตรวจข้อมูลเดิมในระบบ…' : (
+              <>
+                ใหม่ {newN} · มีข้อมูลเดิมและต่างจากไฟล์ {conflictN} · เหมือนเดิม {sameN} (นับเป็นแถวสิทธิ)
+              </>
+            )}
             {skipCount > 0 && <span> · ข้าม (ยกเลิก X) {skipCount} แถว</span>}
             {errorCount > 0 && <span className="text-rose"> · ผิดพลาด {errorCount} แถว</span>}
           </p>
+        )}
+
+        {dupInFile > 0 && (
+          <p className="mb-3 text-sm text-alert">
+            พบเคสเดียวกันซ้ำหลายแถวในไฟล์ {dupInFile} เคส — ระบบจะใช้แถวหลังสุดของแต่ละเคส
+          </p>
+        )}
+
+        {checkError && <p className="mb-3 text-sm text-rose">{checkError} (ปิดแล้วลองอัพโหลดใหม่)</p>}
+
+        {!checking && conflictN > 0 && (
+          <div className="mb-3 rounded-lg border border-alert bg-paper px-3 py-2.5 text-sm text-ink">
+            <p className="mb-1.5 font-semibold">
+              พบ {conflictN} เคสที่เคยบันทึกขั้น “{cfg.label}” ไว้แล้ว และค่าต่างจากไฟล์ — ต้องการทำอย่างไร
+            </p>
+            <label className="mb-1 flex cursor-pointer items-start gap-2">
+              <input type="radio" name="dupMode" checked={dupMode === 'skip'} onChange={() => setDupMode('skip')} className="mt-1" />
+              <span>ข้ามเคสที่มีข้อมูลเดิม (เก็บค่าเดิมไว้ บันทึกเฉพาะเคสใหม่)</span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2">
+              <input type="radio" name="dupMode" checked={dupMode === 'overwrite'} onChange={() => setDupMode('overwrite')} className="mt-1" />
+              <span>เขียนทับด้วยค่าจากไฟล์ (ค่าเดิมจะหายไป)</span>
+            </label>
+          </div>
         )}
 
         {result && <p className="mb-3 text-sm text-ink">{result}</p>}
@@ -326,10 +484,10 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
           </button>
           <button
             onClick={handleConfirm}
-            disabled={validCount === 0 || uploading}
+            disabled={writeCount === 0 || uploading || checking || !!checkError}
             className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
-            {uploading ? 'กำลังบันทึก…' : `บันทึก ${validCount} เคส`}
+            {uploading ? 'กำลังบันทึก…' : `บันทึก ${writeCount} เคส`}
           </button>
         </div>
       </div>
