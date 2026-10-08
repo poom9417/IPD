@@ -93,6 +93,16 @@ export interface AdmissionDraft {
 }
 
 // ---- Code C (เคสที่ส่งเบิกแล้วแต่ติด C) ----
+export interface CodeCHistory {
+  id: number
+  round_no: number
+  kind: 'reason' | 'answer' | 'edit' | 'reopen'
+  body: string | null
+  prev_body: string | null
+  by_email: string | null
+  at: string
+}
+
 export interface CodeCCase {
   id: number
   admission_id: number
@@ -106,8 +116,15 @@ export interface CodeCCase {
   fix_by: string | null
   fix_by_email: string | null
   fix_at: string | null
+  /** pending = รอ Audit แก้ไข · answered = Audit ตอบแล้ว (ถือว่าผ่านอัตโนมัติจนกว่า user จะกด "ไม่ผ่านการแก้ C") */
+  status: 'pending' | 'answered'
+  round_no: number
+  /** true = dateline ระบบคำนวณเอง (วันจำหน่าย + 7) · false = เคสเก่าที่ user กรอกเอง */
+  auto_deadline: boolean
+  code_c_history: CodeCHistory[] | null
   admissions: {
     hn: string
+    discharge_date: string | null
     coverage_code: string
     payer_id: string
     patients: { full_name: string } | null
