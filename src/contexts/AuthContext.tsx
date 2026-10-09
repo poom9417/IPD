@@ -21,7 +21,7 @@ interface AuthState {
   /** role จริงใน DB (ไม่เปลี่ยนตามโหมดจำลอง) */
   realRole: AppRole | null
   isDeveloper: boolean
-  /** เลือกสิทธิ (My claim) ให้ผู้อื่นได้: audit หรือ developer ที่ไม่ได้จำลอง role อื่น (ฐานข้อมูลเช็ค role จริงซ้ำ) */
+  /** เลือกสิทธิ (My claim) ให้ผู้อื่นได้: เฉพาะ developer ที่ไม่ได้จำลอง role อื่น (ฐานข้อมูลเช็ค role จริงซ้ำ) */
   canAssign: boolean
   /** role ที่ developer กำลังจำลองอยู่ (null = ไม่ได้จำลอง) */
   viewAs: UiRole | null
@@ -109,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const viewAs: UiRole | null = isDeveloper ? viewAsState : null
   const role: UiRole | null = realRole === null ? null : isDeveloper ? (viewAs ?? 'admin') : realRole
 
-  const canAssign = role === 'audit' || (isDeveloper && viewAs === null)
+  const canAssign = isDeveloper && viewAs === null
 
   function setViewAs(r: UiRole | null) {
     if (!isDeveloper) return

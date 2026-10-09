@@ -29,9 +29,9 @@ export default function Dashboard() {
   const isAudit = role === 'audit'
   // ปุ่ม "เฉพาะสิทธิของฉัน": เฉพาะ admin / user — audit / viewer ไม่มีสิทธิที่ดูแลของตัวเอง
   const canFilterMine = role === 'admin' || role === 'user'
-  // audit: อัพโหลดได้เฉพาะขั้น Audit + กดบันทึกวัน Audit ได้ | user: อัพโหลดได้เฉพาะรับเอกสาร/ส่งเบิก (ฐานข้อมูลบังคับซ้ำอีกชั้น)
-  const canBulk = role === 'admin' || role === 'user' || isAudit
-  const canMarkAudit = isAdmin || isAudit
+  // audit: ดูข้อมูล + Export เท่านั้น (บันทึกวัน Audit / อัพโหลดไม่ได้) | user: อัพโหลดได้เฉพาะรับเอกสาร/ส่งเบิก (ฐานข้อมูลบังคับซ้ำอีกชั้น)
+  const canBulk = role === 'admin' || role === 'user'
+  const canMarkAudit = isAdmin
   // admin + user: เพิ่มเคส / อัพโหลดสถานะเคลม (CSV) / กดรับเอกสาร ได้  |  เฉพาะ admin: นำเข้าเคส, แก้ไขเคส, จัดการผู้ใช้
   const canEdit = role === 'admin' || role === 'user'
   const canReceiveDoc = canEdit
@@ -389,7 +389,7 @@ export default function Dashboard() {
                 disabled={bulkPreparing}
                 className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
               >
-                {bulkPreparing ? 'กำลังเตรียมข้อมูล…' : isAudit ? 'อัพโหลดวัน Audit (CSV)' : 'อัพโหลดสถานะเคลม (CSV)'}
+                {bulkPreparing ? 'กำลังเตรียมข้อมูล…' : 'อัพโหลดสถานะเคลม (CSV)'}
               </button>
             )}
             {canEdit && (
@@ -468,7 +468,7 @@ export default function Dashboard() {
       {showBulk && (
         <BulkClaimUpload
           admissions={bulkLookup}
-          allowedStages={isAudit ? ['audit'] : role === 'user' ? ['document', 'submission'] : undefined}
+          allowedStages={role === 'user' ? ['document', 'submission'] : undefined}
           onClose={() => setShowBulk(false)}
           onDone={() => {
             setShowBulk(false)

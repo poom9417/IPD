@@ -75,7 +75,7 @@ const MENU: Entry[] = [
 interface Props {
   page: PageKey
   canJob: boolean
-  /** Audit / Developer: เข้า My job ได้เฉพาะหน้า My claim เพื่อเลือกสิทธิให้ผู้อื่น */
+  /** Developer: เข้า My job ได้เฉพาะหน้า My claim เพื่อเลือกสิทธิให้ผู้อื่น (audit / viewer ไม่เห็นเมนู My job) */
   canAssign?: boolean
   onNavigate: (p: PageKey) => void
 }

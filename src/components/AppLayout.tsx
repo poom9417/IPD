@@ -23,7 +23,7 @@ export default function AppLayout() {
 
   // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob-dashboard / #myjob-claim ใน URL เอง)
   const canJob = role === 'admin' || role === 'user'
-  // My claim เปิดให้ Audit / Developer ด้วย (ไว้เลือกสิทธิให้ผู้อื่น) — ส่วน My job Dashboard ยังเฉพาะ admin / user
+  // My claim เปิดให้ Developer ด้วย (ไว้เลือกสิทธิให้ผู้อื่น) — audit / viewer เข้า My job ไม่ได้เลย
   const canClaimPage = canJob || canAssign
 
   // เก็บหน้าปัจจุบันไว้ใน URL hash — refresh แล้วยังอยู่หน้าเดิม

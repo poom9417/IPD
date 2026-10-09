@@ -11,7 +11,7 @@ export const TOUR_VERSION = 1
  * เลขย่อยของเนื้อหาทัวร์ (v1.1, v1.2 …) — เพิ่มเมื่อเพิ่ม/แก้คำอธิบายปุ่มใหม่
  * ไม่ทำให้ผู้ใช้เห็นทัวร์ซ้ำเอง (ซ้ำเฉพาะเมื่อ TOUR_VERSION เปลี่ยน)
  */
-export const TOUR_MINOR = 1
+export const TOUR_MINOR = 2
 export const TOUR_LABEL = `v${TOUR_VERSION}.${TOUR_MINOR}`
 
 export interface TourStep {
@@ -54,9 +54,8 @@ export const ROLE_INTRO: Record<UiRole, { name: string; can: string[] }> = {
   audit: {
     name: 'Audit',
     can: [
-      'บันทึกวัน Audit (ทีละเคส หรืออัพโหลดไฟล์)',
-      'ตอบวิธีแก้ไขเคสที่ติด Code C',
-      'ดูข้อมูลเคสและ Export Excel',
+      'ตอบวิธีแก้ไขเคสที่ติด Code C (เพิ่มเคส Code C เองไม่ได้)',
+      'ดูข้อมูลเคสที่หน้าหลัก (ดูอย่างเดียว) และ Export Excel',
     ],
   },
   viewer: {
@@ -130,11 +129,6 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'อัปเดตสถานะหลายเคสพร้อมกันจากไฟล์ เช่น วันที่ส่งเบิกจากไฟล์ตั้งเบิกของ GGO ผู้ใช้ทั่วไปอัปโหลดได้เฉพาะขั้นรับเอกสารและส่งเบิก',
   },
   {
-    id: 'bulk-audit', page: 'mine', target: 'bulk', roles: ['audit'],
-    title: 'อัพโหลดวัน Audit (CSV)',
-    body: 'บันทึกวัน Audit หลายเคสพร้อมกันจากไฟล์ ใช้ encounter_id เป็นตัวจับคู่',
-  },
-  {
     id: 'add-case', page: 'mine', target: 'add-case', roles: EDIT,
     title: '+ เพิ่มเคส',
     body: 'พิมพ์ HN หรือชื่อเพื่อค้นผู้ป่วยเดิม ระบบจะเติมข้อมูลที่เหลือให้ สิทธิ ผู้จ่าย และหอผู้ป่วยที่ยังไม่มีในรายการเพิ่มใหม่เองได้',
@@ -150,12 +144,7 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'ป้ายสถานะมี 3 ขั้น: รับเอกสาร → Audit → ส่งเบิก กดป้าย "รับเอกสาร" แล้วกรอกยอดและยืนยัน ระบบบันทึกวันที่รับเอกสารเป็นวันนี้ ถ้ากรอกผิดกดป้ายเดิมอีกครั้งเพื่อแก้วันที่/ยอด',
   },
   {
-    id: 'claim-audit', page: 'mine', target: 'claim-status', roles: ['audit'],
-    title: 'สถานะเคลม: Audit',
-    body: 'ป้ายสถานะมี 3 ขั้น: รับเอกสาร → Audit → ส่งเบิก กดป้าย Audit เพื่อบันทึกว่า Audit เคสนี้แล้ววันนี้ (ขั้นอื่นดูได้อย่างเดียว)',
-  },
-  {
-    id: 'claim-view', page: 'mine', target: 'claim-status', roles: ['viewer'],
+    id: 'claim-view', page: 'mine', target: 'claim-status', roles: ['audit', 'viewer'],
     title: 'สถานะเคลม',
     body: 'ป้ายสถานะมี 3 ขั้น: รับเอกสาร → Audit → ส่งเบิก ที่ติ๊กแล้วคือขั้นที่เสร็จแล้ว บัญชีนี้ดูได้อย่างเดียว',
   },
