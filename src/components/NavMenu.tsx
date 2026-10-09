@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 export type PageKey = 'mine' | 'codec' | 'myjob-dashboard' | 'myjob-claim'
 
-type Child = { page: PageKey; label: string; sub: string }
+type Child = { page: PageKey; label: string; sub: string; /** ต้องมีสิทธิ์ใช้ My job เต็ม (admin / user) */ needsJob?: boolean }
 
 type Entry = {
   /** หน้าที่เปิดเมื่อกด (เมนูที่มี children จะเป็นหัวข้อ กดแล้วกางเมนูย่อยแทน) */
@@ -59,7 +59,7 @@ const MENU: Entry[] = [
     sub: 'งานของสิทธิที่ฉันดูแล',
     needsJob: true,
     children: [
-      { page: 'myjob-dashboard', label: 'Dashboard', sub: 'ระยะเวลาส่งเบิก — ภาพรวมและรายเคส' },
+      { page: 'myjob-dashboard', label: 'Dashboard', sub: 'ระยะเวลาส่งเบิก — ภาพรวมและรายเคส', needsJob: true },
       { page: 'myjob-claim', label: 'My claim', sub: 'เลือกสิทธิที่ฉันดูแล' },
     ],
     icon: svg(
@@ -75,15 +75,19 @@ const MENU: Entry[] = [
 interface Props {
   page: PageKey
   canJob: boolean
+  /** Audit / Developer: เข้า My job ได้เฉพาะหน้า My claim เพื่อเลือกสิทธิให้ผู้อื่น */
+  canAssign?: boolean
   onNavigate: (p: PageKey) => void
 }
 
-export default function NavMenu({ page, canJob, onNavigate }: Props) {
+export default function NavMenu({ page, canJob, canAssign = false, onNavigate }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const timer = useRef<number | undefined>(undefined)
 
-  const entries = MENU.filter((e) => !e.needsJob || canJob)
+  const entries = MENU.filter((e) => !e.needsJob || canJob || canAssign).map((e) =>
+    e.children ? { ...e, children: e.children.filter((c) => !c.needsJob || canJob) } : e,
+  )
   const currentEntry = MENU.find((e) => e.page === page || e.children?.some((c) => c.page === page))
   const currentChild = currentEntry?.children?.find((c) => c.page === page)
   // เมนูย่อยที่กางอยู่ — เริ่มต้นกางตามหน้าปัจจุบัน

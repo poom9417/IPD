@@ -25,7 +25,7 @@ interface Props {
 }
 
 export default function Navbar({ page, onNavigate }: Props) {
-  const { session, role, isDeveloper, viewAs, setViewAs, signOut } = useAuth()
+  const { session, role, isDeveloper, canAssign, viewAs, setViewAs, signOut } = useAuth()
   const email = session?.user.email ?? ''
   const [showUsers, setShowUsers] = useState(false)
   // My job: เฉพาะ admin และ user
@@ -39,7 +39,7 @@ export default function Navbar({ page, onNavigate }: Props) {
             <BrandLogo className="h-10 w-10" />
             <p className="hidden text-base font-semibold leading-none text-white md:block">IPD AR Discharge</p>
           </div>
-          <NavMenu page={page} canJob={canJob} onNavigate={onNavigate} />
+          <NavMenu page={page} canJob={canJob} canAssign={canAssign} onNavigate={onNavigate} />
         </div>
 
         <div className="flex items-center gap-3">

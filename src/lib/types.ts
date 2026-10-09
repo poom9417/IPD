@@ -142,6 +142,25 @@ export interface CoverageAssignment {
   user_email: string | null
 }
 
+// คำขอที่ Audit / Developer เลือกสิทธิให้ผู้ใช้ — รอผู้รับกดยืนยันก่อนจึงเป็นผู้ดูแลจริง
+export interface AssignmentRequest {
+  id: number
+  coverage_code: string
+  payer_id: string
+  user_id: string
+  user_email: string | null
+  assigned_by_email: string | null
+  created_at: string
+}
+
+// ผู้รับที่ Audit / Developer เลือกได้ (จาก list_assignable_users)
+export interface AssignableUser {
+  id: string
+  email: string
+  unit: string | null
+  role: string
+}
+
 // สิทธิ + ผู้จ่าย (payer) ที่มีอยู่จริงในข้อมูลเคส — หน่วยที่ใช้กำหนดผู้ดูแลในหน้า My claim
 export interface CoveragePayerPair {
   coverage_code: string

@@ -10,6 +10,7 @@ import CaseDetailModal from '../components/CaseDetailModal'
 import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
+import PendingAssignmentsBanner from '../components/PendingAssignmentsBanner'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 import { exportAdmissionsToExcel } from '../lib/exportExcel'
 import type { ClaimStage } from '../lib/claimStatus'
@@ -57,6 +58,8 @@ export default function Dashboard() {
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
+  // เพิ่มค่านี้เมื่อยืนยันรับสิทธิจากแบนเนอร์ → โหลด "สิทธิของฉัน" ใหม่
+  const [pairsTick, setPairsTick] = useState(0)
   const [onlyMine, setOnlyMine] = useState(false)
 
   const [search, setSearch] = useState('')
@@ -111,7 +114,7 @@ export default function Dashboard() {
       .then(({ data }) =>
         setMyPairs(new Set((data ?? []).map((r) => pairKey(r.coverage_code as string, r.payer_id as string)))),
       )
-  }, [session])
+  }, [session, pairsTick])
 
 
   // กดปุ่ม "รับเอกสาร" + กรอกยอด → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) และยอดรับเอกสารลง case_tracking
@@ -310,6 +313,9 @@ export default function Dashboard() {
   return (
     <div>
       <main className="w-full space-y-5 px-4 py-6 sm:px-8">
+        {/* แจ้งเตือน: สิทธิที่ Audit / Developer เลือกให้ รอยืนยัน (เฉพาะ admin / user) */}
+        {canFilterMine && <PendingAssignmentsBanner onChanged={() => setPairsTick((t) => t + 1)} />}
+
         {/* สถิติคิดจากรายการที่กรองอยู่ */}
         <StatCards stats={stats} />
 
