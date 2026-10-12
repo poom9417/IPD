@@ -11,6 +11,8 @@ import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import PendingAssignmentsBanner from '../components/PendingAssignmentsBanner'
+import SheetSyncButtons from '../components/SheetSyncButtons'
+import { useSheetPush } from '../lib/sheetSync'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 import { exportAdmissionsToExcel } from '../lib/exportExcel'
 import type { ClaimStage } from '../lib/claimStatus'
@@ -35,6 +37,8 @@ export default function Dashboard() {
   // admin + user: เพิ่มเคส / อัพโหลดสถานะเคลม (CSV) / กดรับเอกสาร ได้  |  เฉพาะ admin: นำเข้าเคส, แก้ไขเคส, จัดการผู้ใช้
   const canEdit = role === 'admin' || role === 'user'
   const canReceiveDoc = canEdit
+  // ซิงก์ Google Sheet: เฉพาะ admin / developer (ตอน developer จำลอง role อื่น role จะไม่ใช่ admin → ปุ่มและการส่งอัตโนมัติปิด)
+  const sheetPush = useSheetPush(isAdmin)
 
   // admissions = เฉพาะแถวของหน้าที่แสดงอยู่ (ค้นหา/กรอง/เรียง/แบ่งหน้า ทำที่ DB ผ่าน search_admissions)
   const [admissions, setAdmissions] = useState<Admission[]>([])
@@ -382,6 +386,9 @@ export default function Dashboard() {
                 นำเข้าเคสใหม่ (CSV)
               </button>
             )}
+            {isAdmin && (
+              <SheetSyncButtons status={sheetPush.status} onPush={() => void sheetPush.push()} onPulled={loadData} />
+            )}
             {canBulk && (
               <button
                 data-tour="bulk"
@@ -457,10 +464,13 @@ export default function Dashboard() {
 
       {showImport && (
         <ImportAdmissionsCsv
+          sheetStatus={sheetPush.status}
           onClose={() => setShowImport(false)}
           onDone={() => {
             // ไม่ปิด modal เพื่อให้เห็นสรุปผลการนำเข้า
             loadData()
+            // นำเข้าสำเร็จ → ส่งข้อมูลล่าสุดไป Google Sheet ต่อทันที (ไม่ผูกกับตัวนำเข้า: ถ้า Google ขัดข้อง การนำเข้ายังสำเร็จ)
+            void sheetPush.push()
           }}
         />
       )}
@@ -511,6 +521,7 @@ export default function Dashboard() {
           onSaved={() => {
             setEditing(undefined)
             loadData()
+            void sheetPush.push()
           }}
         />
       )}

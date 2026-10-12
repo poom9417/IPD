@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabaseClient'
+import type { PushStatus } from '../lib/sheetSync'
 
 interface Props {
   onClose: () => void
   onDone: () => void
+  /** สถานะการส่งต่อไป Google Sheet หลังนำเข้า (ไม่ใส่ = ไม่แสดง) */
+  sheetStatus?: PushStatus | null
 }
 
 // คอลัมน์ตามไฟล์ export จาก HIS ต้นฉบับ (รูปแบบเดียวกับที่ใช้ตอน seed ข้อมูลชุดแรก)
@@ -47,7 +50,7 @@ interface ImportSummary {
   admissions_updated: number
 }
 
-export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
+export default function ImportAdmissionsCsv({ onClose, onDone, sheetStatus }: Props) {
   const [rows, setRows] = useState<Row[]>([])
   const [fileName, setFileName] = useState('')
   const [missingCols, setMissingCols] = useState<string[]>([])
@@ -154,6 +157,12 @@ export default function ImportAdmissionsCsv({ onClose, onDone }: Props) {
                 <li className="text-rose">ข้ามแถวข้อมูลไม่ครบ (HN/AN/encounter_id/วันรับ) {summary.invalid_skipped} แถว</li>
               )}
             </ul>
+            {sheetStatus && sheetStatus.phase !== 'idle' && (
+              <p className={`mt-1.5 text-sm ${sheetStatus.phase === 'error' ? 'text-rose' : 'text-ink/70'}`}>
+                {sheetStatus.message}
+                {sheetStatus.phase === 'error' && ' — กดปุ่ม “ส่งไป Google Sheet” ที่หน้าหลักเพื่อส่งซ้ำได้ ข้อมูลที่นำเข้าบันทึกในระบบเรียบร้อยแล้ว'}
+              </p>
+            )}
           </div>
         )}
 
