@@ -96,7 +96,7 @@ export interface AdmissionDraft {
 export interface CodeCHistory {
   id: number
   round_no: number
-  kind: 'reason' | 'answer' | 'edit' | 'reopen'
+  kind: 'reason' | 'answer' | 'edit' | 'reopen' | 'pass'
   body: string | null
   prev_body: string | null
   by_email: string | null
@@ -116,8 +116,11 @@ export interface CodeCCase {
   fix_by: string | null
   fix_by_email: string | null
   fix_at: string | null
-  /** pending = รอ Audit แก้ไข · answered = Audit ตอบแล้ว (ถือว่าผ่านอัตโนมัติจนกว่า user จะกด "ไม่ผ่านการแก้ C") */
-  status: 'pending' | 'answered'
+  /** pending = รอ Audit แก้ไข · answered = Audit ตอบแล้ว (รอ user กด "ผ่านการแก้ C" หรือ "ไม่ผ่านการแก้ C") · passed = user กดผ่านแล้ว (สถานะสุดท้าย แก้ไขไม่ได้) */
+  status: 'pending' | 'answered' | 'passed'
+  passed_at: string | null
+  passed_by: string | null
+  passed_by_email: string | null
   round_no: number
   /** true = dateline ระบบคำนวณเอง (วันจำหน่าย + 7) · false = เคสเก่าที่ user กรอกเอง */
   auto_deadline: boolean

@@ -43,7 +43,7 @@ function dayDiff(from: string, to: string) {
 function calcDateline(c: CodeCCase, today: string) {
   const dis = c.admissions?.discharge_date ?? null
   if (!c.auto_deadline || !dis) return null
-  const end = c.status === 'answered' && c.fix_at ? bkkDate(c.fix_at) : today
+  const end = (c.status === 'answered' || c.status === 'passed') && c.fix_at ? bkkDate(c.fix_at) : today
   const elapsed = dayDiff(dis, end)
   return { elapsed, overdue: Math.max(elapsed - DEADLINE_DAYS, 0), due: c.deadline_date }
 }
@@ -53,6 +53,7 @@ const KIND_LABEL: Record<CodeCHistory['kind'], string> = {
   answer: 'Audit ตอบ',
   edit: 'Audit แก้คำตอบ',
   reopen: 'user กด "ไม่ผ่านการแก้ C"',
+  pass: 'user กด "ผ่านการแก้ C" (ปิดเคส)',
 }
 
 function sortedHistory(c: CodeCCase) {
@@ -457,8 +458,66 @@ function ReopenConfirm({
   )
 }
 
+/* ---------- Modal: user กด "ผ่านการแก้ C" (สถานะสุดท้าย ยืนยันก่อนเสมอ) ---------- */
+function PassConfirm({
+  item,
+  onClose,
+  onDone,
+}: {
+  item: CodeCCase
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function confirm() {
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    const { error } = await supabase.rpc('code_c_pass', { p_case_id: item.id })
+    setSaving(false)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+      <div className="w-full max-w-md rounded-2xl border-t-8 border-brand bg-surface shadow-xl">
+        <div className="space-y-3 px-6 py-5">
+          <h2 className="text-base font-semibold text-ink">ยืนยัน "ผ่านการแก้ C" ?</h2>
+          <p className="rounded-lg bg-paper px-3 py-2 text-sm text-ink">
+            encounter_id <span className="font-mono font-semibold">{item.encounter_id}</span> ·{' '}
+            {item.admissions?.patients?.full_name ?? '—'}
+          </p>
+          <p className="text-sm text-ink/80">
+            เคสนี้จะถูกปิดเป็น <span className="font-semibold">ผ่านแล้ว</span> และเป็นสถานะสุดท้าย Audit แก้คำตอบไม่ได้
+            และกด "ไม่ผ่านการแก้ C" ย้อนกลับไม่ได้
+          </p>
+          {error && <p className="text-sm text-rose">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-line px-6 py-4">
+          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+            ยกเลิก
+          </button>
+          <button
+            onClick={confirm}
+            disabled={saving}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
+          >
+            {saving ? 'กำลังบันทึก…' : 'ตกลง ผ่านแล้ว'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ---------- หน้า Code C ---------- */
-type StatusFilter = '' | 'open' | 'done'
+type StatusFilter = '' | 'open' | 'done' | 'passed'
 
 export default function CodeCPage() {
   const { role, session } = useAuth()
@@ -481,6 +540,7 @@ export default function CodeCPage() {
   const [editing, setEditing] = useState<CodeCCase | null>(null)
   const [replying, setReplying] = useState<CodeCCase | null>(null)
   const [reopening, setReopening] = useState<CodeCCase | null>(null)
+  const [passing, setPassing] = useState<CodeCCase | null>(null)
 
   async function load() {
     setLoading(true)
@@ -514,9 +574,9 @@ export default function CodeCPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return cases.filter((c) => {
-      const done = c.status === 'answered'
-      if (status === 'open' && done) return false
-      if (status === 'done' && !done) return false
+      if (status === 'open' && c.status !== 'pending') return false
+      if (status === 'done' && c.status !== 'answered') return false
+      if (status === 'passed' && c.status !== 'passed') return false
       if (canFilterMine && onlyMine && !myPairs.has(pairKey(c.admissions?.coverage_code, c.admissions?.payer_id))) return false
       if (
         q &&
@@ -551,7 +611,7 @@ export default function CodeCPage() {
         <div>
           <h1 className="text-xl font-bold text-ink">Code C — เคสติด C หลังส่งเบิก</h1>
           <p className="mt-1 text-sm text-ink/70">
-            user แจ้งสาเหตุที่ติด C → audit ตอบว่าแก้ไขอย่างไร (ถือว่าผ่านอัตโนมัติ) · ถ้าแก้แล้วยังไม่ผ่าน user กด "ไม่ผ่านการแก้ C" เพื่อส่งกลับให้ audit แก้ซ้ำ · dateline นับจากวันจำหน่าย + 7 วันให้เอง
+            user แจ้งสาเหตุที่ติด C → audit ตอบว่าแก้ไขอย่างไร → user กด "ผ่านการแก้ C" เพื่อปิดเคส (สถานะสุดท้าย) หรือ "ไม่ผ่านการแก้ C" เพื่อส่งกลับให้ audit แก้ซ้ำ · dateline นับจากวันจำหน่าย + 7 วันให้เอง
           </p>
         </div>
         {canReport && (
@@ -588,7 +648,8 @@ export default function CodeCPage() {
         <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className="input w-auto">
           <option value="">ทุกสถานะ</option>
           <option value="open">รอ Audit แก้ไข</option>
-          <option value="done">แก้ไขแล้ว</option>
+          <option value="done">Audit ตอบแล้ว (รอ user ยืนยัน)</option>
+          <option value="passed">ผ่านแล้ว</option>
         </select>
         {canFilterMine && myPairs.size > 0 && (
           <button
@@ -634,7 +695,8 @@ export default function CodeCPage() {
             </thead>
             <tbody>
               {filtered.map((c) => {
-                const done = c.status === 'answered'
+                const passed = c.status === 'passed'
+                const done = c.status === 'answered' || passed
                 const dl = calcDateline(c, today)
                 const overdue = isOverdue(c)
                 const canEditReason = !done && (isAdmin || (role === 'user' && c.reason_by === myId))
@@ -693,6 +755,14 @@ export default function CodeCPage() {
                           <p className="mt-1 text-xs text-ink/60">
                             {c.fix_by_email ?? '—'} · {fmtStamp(c.fix_at)}
                           </p>
+                          {passed && (
+                            <p className="mt-2">
+                              <span className="rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink">ผ่านแล้ว</span>
+                              <span className="ml-1.5 text-xs text-ink/60">
+                                {c.passed_by_email ?? '—'} · {fmtStamp(c.passed_at)}
+                              </span>
+                            </p>
+                          )}
                         </>
                       ) : (
                         <span className="text-ink/45">
@@ -712,7 +782,7 @@ export default function CodeCPage() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1.5">
-                        {canReply && (
+                        {canReply && !passed && (
                           <button
                             data-tour="codec-reply"
                             onClick={() => setReplying(c)}
@@ -721,7 +791,15 @@ export default function CodeCPage() {
                             {done ? 'แก้คำตอบ' : c.round_no > 1 ? `ตอบรอบที่ ${c.round_no}` : 'ตอบ'}
                           </button>
                         )}
-                        {canReopen && done && (
+                        {canReopen && c.status === 'answered' && (
+                          <button
+                            onClick={() => setPassing(c)}
+                            className="rounded-md border border-ink bg-brand px-3 py-1 text-sm font-semibold text-ink hover:bg-brand-dark"
+                          >
+                            ผ่านการแก้ C
+                          </button>
+                        )}
+                        {canReopen && c.status === 'answered' && (
                           <button
                             data-tour="codec-reopen"
                             onClick={() => setReopening(c)}
@@ -782,6 +860,16 @@ export default function CodeCPage() {
           onClose={() => setReopening(null)}
           onDone={() => {
             setReopening(null)
+            load()
+          }}
+        />
+      )}
+      {passing && (
+        <PassConfirm
+          item={passing}
+          onClose={() => setPassing(null)}
+          onDone={() => {
+            setPassing(null)
             load()
           }}
         />
