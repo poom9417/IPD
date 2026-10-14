@@ -1,6 +1,7 @@
 import { HttpError } from './common.ts'
 
 const enc = new TextEncoder()
+let saEmail = 'อีเมล Service Account'
 
 function b64url(input: ArrayBuffer | Uint8Array | string): string {
   const bytes = typeof input === 'string' ? enc.encode(input) : new Uint8Array(input)
@@ -44,6 +45,7 @@ function pemToDer(pem: string): ArrayBuffer {
 }
 
 export async function getAccessToken(sa: ServiceAccount): Promise<string> {
+  saEmail = sa.client_email
   const now = Math.floor(Date.now() / 1000)
   const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
   const claim = b64url(
@@ -95,6 +97,12 @@ async function sheetsFetch(token: string, path: string, init: RequestInit = {}):
   }
   if (!res.ok) {
     const msg: string = body?.error?.message ?? text.slice(0, 200)
+    if (res.status === 400 && /protected cell|protected range|protected sheet/i.test(msg)) {
+      throw new HttpError(
+        502,
+        `แท็บนี้ถูกตั้งป้องกัน (Protected) และ Service Account ไม่อยู่ในรายชื่อผู้แก้ไขได้ — ไปที่ ข้อมูล > ชีตและช่วงที่ป้องกัน > เลือกแท็บนี้ > ตั้งค่าสิทธิ์ > จำกัดผู้ที่แก้ไขได้ แล้วเพิ่ม ${saEmail} จากนั้นกดส่งใหม่`,
+      )
+    }
     if (res.status === 403) {
       throw new HttpError(502, 'Service Account ไม่มีสิทธิ์เข้าชีต — แชร์ชีตให้อีเมล Service Account เป็นผู้แก้ไข (Editor) แล้วลองใหม่')
     }

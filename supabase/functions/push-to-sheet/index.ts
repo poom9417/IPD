@@ -1,4 +1,4 @@
-// ส่งข้อมูลเคสทั้งหมดจากระบบ → แท็บ "ทะเบียนคุมเอกสารสิทธิ 70" ใน Google Sheet
+// ส่งข้อมูลเคส (จำหน่ายตั้งแต่ 1 ต.ค. 2026 ไม่ใช่สิทธิ UNK และไม่ใช่สิทธิ DIS...) จากระบบ → แท็บ "ทะเบียนคุมเอกสารสิทธิ 70" ใน Google Sheet
 // วิธีทำงาน: วางทับทั้งหมด (แถวหัวคงเดิม) เรียงวันจำหน่ายใหม่สุดอยู่บน — ระบบเป็นต้นฉบับ ชีตเป็นสำเนา
 // เรียกซ้ำกี่ครั้งผลก็เหมือนเดิม (idempotent)
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
@@ -19,6 +19,8 @@ import {
 const DATA_TAB = 'ทะเบียนคุมเอกสารสิทธิ 70'
 const HEADERS = ['HN', 'AN', 'encounter_id', 'name', 'สิทธิ', 'payer', 'discharge_date']
 const PAGE = 1000
+// ระบบนี้ใกล้เลิกใช้: ส่งเฉพาะเคสที่จำหน่ายตั้งแต่วันนี้เป็นต้นไป (ปรับวันได้ที่นี่) ไม่ส่งเคสสิทธิ UNK และสิทธิที่ขึ้นต้นด้วย DIS
+const MIN_DISCHARGE_DATE = '2026-10-01'
 
 type Row = {
   admission_id: number
@@ -51,6 +53,9 @@ Deno.serve(async (req) => {
       const { data, error } = await admin
         .from('admissions')
         .select('admission_id,hn,an,encounter_id,coverage_code,payer_id,discharge_date,patients(full_name)')
+        .gte('discharge_date', MIN_DISCHARGE_DATE) // ตัดเคสที่ยังไม่จำหน่าย (วันที่ว่าง) และเคสก่อนวันที่กำหนด
+        .neq('coverage_code', 'UNK')
+        .not('coverage_code', 'ilike', 'DIS%') // สิทธิส่วนลด/ส่วนเกิน (DIS_...) ไม่ต้องส่งให้ Audit
         .order('discharge_date', { ascending: false, nullsFirst: false })
         .order('admission_id', { ascending: false })
         .range(from, from + PAGE - 1)

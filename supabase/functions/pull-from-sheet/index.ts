@@ -25,6 +25,8 @@ interface Item {
   audit_date: string | null
   status: 'ok' | 'warn' | 'error'
   messages: string[]
+  /** รหัสเรื่องที่ต้องตรวจ: cov_mismatch | cov_not_master | before_discharge | other */
+  flags: string[]
   targets: Target[]
   /** แถวที่ถูกตัดออกเพราะซ้ำกับแถวอื่นในชีต (ไม่นำเข้า) */
   ignored?: string
@@ -120,6 +122,7 @@ Deno.serve(async (req) => {
         audit_date: d.iso,
         status: 'ok',
         messages: [],
+        flags: [],
         targets: [],
         ...(enc === null ? { _e: 'เลข encounter_id ไม่ถูกต้อง' } : {}),
         ...(d.err ? { _d: d.err } : {}),
@@ -159,16 +162,19 @@ Deno.serve(async (req) => {
 
       let matched: Adm[] = []
       const warns: string[] = []
+      const flags: string[] = []
       if (cands.length > 0) {
         const exact = cands.filter((a) => a.coverage_code.toLowerCase() === it.sithi.toLowerCase())
         if (exact.length > 0) {
           matched = exact
         } else if (cands.length === 1) {
           matched = cands
+          const notMaster = !it.sithi || !covSet.has(it.sithi.toLowerCase())
           warns.push(
             `สิทธิไม่ตรง (ระบบ: ${cands[0].coverage_code} / Audit: ${it.sithi || 'ว่าง'})` +
-              (it.sithi && !covSet.has(it.sithi.toLowerCase()) ? ' และสิทธินี้ไม่อยู่ใน coverage_master' : ''),
+              (notMaster ? ' และสิทธินี้ไม่อยู่ใน coverage_master' : ''),
           )
+          flags.push(notMaster ? 'cov_not_master' : 'cov_mismatch')
         } else {
           errs.push(`encounter นี้แยกหลายสิทธิ แต่สิทธิในชีต (${it.sithi || 'ว่าง'}) ไม่ตรงกับแถวไหนเลย (ระบบ: ${cands.map((a) => a.coverage_code).join(', ')})`)
         }
@@ -180,18 +186,20 @@ Deno.serve(async (req) => {
         continue
       }
 
-      if (matched.length > 1) warns.push(`พบ ${matched.length} แถวในระบบที่สิทธิเดียวกัน (คนละผู้จ่าย) — จะลงวัน Audit ให้ทุกแถว`)
+      if (matched.length > 1) warns.push(`พบ ${matched.length} แถวในระบบที่สิทธิเดียวกัน (คนละผู้จ่าย) — จะลงวัน Audit ให้ทุกแถว`), flags.push('other')
       const a0 = matched[0]
       const p = one(a0.patients)
-      if (it.hn && normHn(it.hn) !== normHn(a0.hn)) warns.push(`HN ไม่ตรง (ระบบ: ${a0.hn} / ชีต: ${it.hn})`)
-      if (it.an !== null && it.an !== a0.an) warns.push(`AN ไม่ตรง (ระบบ: ${a0.an} / ชีต: ${it.an})`)
+      if (it.hn && normHn(it.hn) !== normHn(a0.hn)) { warns.push(`HN ไม่ตรง (ระบบ: ${a0.hn} / ชีต: ${it.hn})`); flags.push('other') }
+      if (it.an !== null && it.an !== a0.an) { warns.push(`AN ไม่ตรง (ระบบ: ${a0.an} / ชีต: ${it.an})`); flags.push('other') }
       if (it.name && p?.full_name && normName(it.name) !== normName(p.full_name)) {
         warns.push(`ชื่อไม่ตรง (ระบบ: ${p.full_name} / ชีต: ${it.name})`)
+        flags.push('other')
       }
       const aud = it.audit_date as string
-      if (aud > today) warns.push(`วัน Audit อยู่ในอนาคต (${fmtThai(aud)})`)
+      if (aud > today) { warns.push(`วัน Audit อยู่ในอนาคต (${fmtThai(aud)})`); flags.push('other') }
       if (a0.discharge_date && aud < a0.discharge_date) {
         warns.push(`วัน Audit (${fmtThai(aud)}) ก่อนวันจำหน่าย (${fmtThai(a0.discharge_date)})`)
+        flags.push('before_discharge')
       }
 
       it.targets = matched.map((a) => {
@@ -205,6 +213,7 @@ Deno.serve(async (req) => {
         } as Target
       })
       it.messages = warns
+      it.flags = flags
       it.status = warns.length > 0 ? 'warn' : 'ok'
     }
 
@@ -223,6 +232,7 @@ Deno.serve(async (req) => {
       const dates = [...new Set(g.map((x) => x.audit_date as string))]
       if (dates.length > 1) {
         primary.messages.push(`ซ้ำ ${g.length} แถวในชีต วัน Audit ต่างกัน (${dates.map(fmtThai).join(', ')}) — ใช้วันล่าสุด`)
+        primary.flags.push('other')
         if (primary.status === 'ok') primary.status = 'warn'
       }
       for (const x of g) if (x !== primary) x.ignored = `ซ้ำกับแถว ${primary.row} ในชีต`

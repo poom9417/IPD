@@ -26,6 +26,8 @@ export interface PullItem {
   audit_date: string | null
   status: 'ok' | 'warn' | 'error'
   messages: string[]
+  /** รหัสเรื่องที่ต้องตรวจ (ฟังก์ชันรุ่นเก่าอาจไม่ส่งมา) */
+  flags?: string[]
   targets: PullTarget[]
   ignored?: string
 }

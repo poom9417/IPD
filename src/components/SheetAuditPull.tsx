@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { fmtIsoDate, previewSheetAudit, type PullItem, type PullResult, type PullTarget } from '../lib/sheetSync'
+import { fmtIsoDate, previewSheetAudit, type PullItem, type PullResult } from '../lib/sheetSync'
 
 interface Props {
   onClose: () => void
@@ -8,38 +8,72 @@ interface Props {
   onDone: () => void
 }
 
-type Tab = 'ok' | 'warn' | 'error' | 'ignored' | 'all'
-type DupMode = 'skip' | 'overwrite'
+type Tab = 'ok' | 'recorded' | 'warn' | 'error' | 'ignored' | 'all'
 
 const PAGE_SIZE = 100
 const WRITE_CHUNK = 500
 
 const TAB_LABEL: Record<Tab, string> = {
-  ok: 'พร้อมนำเข้า',
+  ok: 'พร้อมนำเข้า (ยังไม่เคยบันทึก)',
+  recorded: 'เคยบันทึกแล้ว',
   warn: 'มีข้อควรตรวจ',
   error: 'ผิดพลาด (ไม่นำเข้า)',
   ignored: 'ซ้ำในชีต (ตัดออก)',
   all: 'ทั้งหมด',
 }
 
+/** มีแถวสิทธิในระบบอย่างน้อย 1 แถวที่ยังไม่เคยบันทึกวัน Audit */
+const hasNew = (i: PullItem) => i.targets.some((t) => t.state === 'new')
+/** เคสที่ทุกแถวสิทธิเคยบันทึกวัน Audit ไว้แล้ว (ไม่ผิดพลาด ไม่ถูกตัดเพราะซ้ำ) */
+const isRecorded = (i: PullItem) => !i.ignored && i.status !== 'error' && i.targets.length > 0 && !hasNew(i)
+
 function inTab(i: PullItem, tab: Tab): boolean {
   if (tab === 'all') return true
   if (tab === 'ignored') return !!i.ignored
   if (i.ignored) return false
-  return i.status === tab
+  if (tab === 'recorded') return isRecorded(i)
+  if (tab === 'error') return i.status === 'error'
+  return i.status === tab && !isRecorded(i) // ok / warn = ยังมีส่วนที่ยังไม่เคยบันทึก
 }
 
-/** แถวที่เลือกได้ = ไม่ผิดพลาด ไม่ถูกตัดเพราะซ้ำ และมีเคสเป้าหมายในระบบ */
-const selectable = (i: PullItem) => !i.ignored && i.status !== 'error' && i.targets.length > 0
+// กลุ่มเรื่องที่ต้องตรวจ (แท็บ "มีข้อควรตรวจ") — 1 เคสอยู่ 1 กลุ่ม เรียงตามความร้ายแรง
+type WarnGroup = 'cov_mismatch' | 'cov_not_master' | 'before_discharge' | 'other'
+const WARN_GROUPS: WarnGroup[] = ['cov_mismatch', 'cov_not_master', 'before_discharge', 'other']
+const GROUP_LABEL: Record<WarnGroup, string> = {
+  cov_mismatch: 'สิทธิไม่ตรง',
+  cov_not_master: 'สิทธิไม่อยู่ใน coverage_master',
+  before_discharge: 'วัน Audit ก่อนวันจำหน่าย (ไม่ควรเกิด)',
+  other: 'อื่น ๆ (HN/AN/ชื่อไม่ตรง, วันอนาคต, ซ้ำ ฯลฯ)',
+}
+const GROUP_HINT: Record<WarnGroup, string> = {
+  cov_mismatch: 'ระบบมีสิทธิเดียวที่ encounter นี้ แต่ชีตลงสิทธิอื่น (ที่อยู่ใน coverage_master) — เจอบ่อย สุ่มตรวจแล้วติ๊กผ่านทั้งกลุ่มได้',
+  cov_not_master: 'สิทธิในชีตไม่มีใน coverage_master (มักเป็นรหัสที่ audit พิมพ์เอง) — เจอบ่อย สุ่มตรวจแล้วติ๊กผ่านทั้งกลุ่มได้',
+  before_discharge: 'วัน Audit เกิดก่อนวันจำหน่าย ซึ่งไม่ควรเป็นไปได้ — ตรวจและติ๊กเลือกทีละเคส',
+  other: 'เรื่องอื่นที่ควรดูทีละเคส — ติ๊กเลือกทีละเคส',
+}
+/** กลุ่มที่ติ๊กผ่านทั้งกลุ่มได้ (เจอบ่อยและเสี่ยงต่ำ) */
+const BULK_GROUPS: WarnGroup[] = ['cov_mismatch', 'cov_not_master']
+
+function warnGroup(i: PullItem): WarnGroup {
+  const f = i.flags
+  if (!f || f.length === 0) return 'other' // ฟังก์ชันรุ่นเก่าไม่ส่ง flags → ให้ตรวจทีละเคสไว้ก่อน
+  if (f.includes('before_discharge')) return 'before_discharge'
+  if (f.includes('other')) return 'other'
+  if (f.includes('cov_not_master')) return 'cov_not_master'
+  return 'cov_mismatch'
+}
+
+/** แถวที่เลือกได้ = ยังไม่เคยบันทึก (ระบบไม่เขียนทับเคสที่เคยบันทึกวัน Audit แล้ว) */
+const selectable = (i: PullItem) => !i.ignored && i.status !== 'error' && hasNew(i)
 
 export default function SheetAuditPull({ onClose, onDone }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<PullResult | null>(null)
   const [tab, setTab] = useState<Tab>('ok')
+  const [grp, setGrp] = useState<WarnGroup>('cov_mismatch')
   const [page, setPage] = useState(1)
   const [included, setIncluded] = useState<Set<number>>(new Set())
-  const [dupMode, setDupMode] = useState<DupMode>('skip')
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -54,7 +88,8 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
         setData(res)
         // ค่าเริ่มต้น: เลือกเฉพาะแถวที่ไม่มีข้อควรตรวจ — แถวที่มีคำเตือนต้องให้คนตัดสินใจเอง
         setIncluded(new Set(res.items.filter((i) => selectable(i) && i.status === 'ok').map((i) => i.row)))
-        setTab(res.summary.ok > 0 ? 'ok' : res.summary.warn > 0 ? 'warn' : 'error')
+        const cnt = (t: Tab) => res.items.filter((i) => inTab(i, t)).length
+        setTab(cnt('ok') > 0 ? 'ok' : cnt('recorded') > 0 ? 'recorded' : cnt('warn') > 0 ? 'warn' : 'error')
         setPage(1)
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -64,33 +99,27 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
   useEffect(load, [])
 
   const items = data?.items ?? []
-  const shown = useMemo(() => items.filter((i) => inTab(i, tab)), [items, tab])
+  const shown = useMemo(
+    () => items.filter((i) => inTab(i, tab) && (tab !== 'warn' || warnGroup(i) === grp)),
+    [items, tab, grp],
+  )
+  const groupCount = (g: WarnGroup) => items.filter((i) => inTab(i, 'warn') && warnGroup(i) === g).length
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
   const curPage = Math.min(page, pageCount)
   const pageRows = shown.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE)
 
   const tabCount = (t: Tab) => items.filter((i) => inTab(i, t)).length
 
-  // แถวสิทธิ (target) ที่จะถูกเขียนจริง ตามแถวที่เลือก + โหมดจัดการค่าเดิม
-  const writesOf = (i: PullItem): PullTarget[] =>
-    i.targets.filter((t) => t.state === 'new' || (t.state === 'conflict' && dupMode === 'overwrite'))
-
-  const stats = useMemo(() => {
+  // จำนวนแถวสิทธิที่จะบันทึกจริง = เฉพาะแถวสิทธิที่ยังไม่เคยบันทึก ของแถวที่ติ๊กเลือกไว้
+  const writeCount = useMemo(() => {
     let n = 0
-    let same = 0
-    let conflict = 0
     for (const i of items) {
       if (!included.has(i.row) || !selectable(i)) continue
-      for (const t of i.targets) {
-        if (t.state === 'new') n++
-        else if (t.state === 'same') same++
-        else conflict++
-      }
+      n += i.targets.filter((t) => t.state === 'new').length
     }
-    return { n, same, conflict }
+    return n
   }, [items, included])
-
-  const writeCount = stats.n + (dupMode === 'overwrite' ? stats.conflict : 0)
+  const recordedCount = items.filter(isRecorded).length
 
   function toggle(row: number) {
     setIncluded((prev) => {
@@ -123,7 +152,7 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
     const payload = new Map<number, { admission_id: number; encounter_id: number; audit_date: string }>()
     for (const i of items) {
       if (!included.has(i.row) || !selectable(i) || i.encounter_id === null || !i.audit_date) continue
-      for (const t of writesOf(i)) {
+      for (const t of i.targets.filter((x) => x.state === 'new')) {
         payload.set(t.admission_id, { admission_id: t.admission_id, encounter_id: i.encounter_id, audit_date: i.audit_date })
       }
     }
@@ -138,11 +167,9 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
       }
       // บันทึกเวลาดึงล่าสุด (ถ้ายังไม่ได้สร้างฟังก์ชันนี้ใน DB ก็ไม่ถือเป็นความผิดพลาด)
       await supabase.rpc('mark_sheet_pull', { p_rows: done })
-      const skipped = dupMode === 'skip' ? stats.conflict : 0
       setResult(
         `บันทึกวัน Audit สำเร็จ ${done.toLocaleString()} รายการ (แถวสิทธิ)` +
-          (skipped > 0 ? ` · ข้ามเคสที่มีวัน Audit เดิม ${skipped}` : '') +
-          (stats.same > 0 ? ` · เหมือนเดิม ไม่ต้องบันทึก ${stats.same}` : ''),
+          (recordedCount > 0 ? ` · เคสที่เคยบันทึกแล้ว ${recordedCount.toLocaleString()} ไม่ถูกแตะ` : ''),
       )
       setSaved(true)
       onDone()
@@ -183,20 +210,22 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
         {!loading && data && (
           <>
             <p className="mb-2 text-sm text-ink/70">
-              อ่านจากแท็บ AUDIT_VIEW {data.summary.total.toLocaleString()} แถว · พร้อมนำเข้า {data.summary.ok.toLocaleString()} · มีข้อควรตรวจ{' '}
-              {data.summary.warn.toLocaleString()} · ผิดพลาด {data.summary.error.toLocaleString()}
+              อ่านจากแท็บ AUDIT_VIEW {data.summary.total.toLocaleString()} แถว · ยังไม่เคยบันทึก {tabCount('ok').toLocaleString()} · เคยบันทึกแล้ว{' '}
+              {tabCount('recorded').toLocaleString()} · มีข้อควรตรวจ {tabCount('warn').toLocaleString()} · ผิดพลาด {data.summary.error.toLocaleString()}
               {data.summary.ignored > 0 && <> · ซ้ำในชีต {data.summary.ignored.toLocaleString()}</>}
             </p>
             <p className="mb-3 text-xs text-ink/50">
-              แถวที่พร้อมนำเข้าถูกเลือกไว้ให้แล้ว ส่วนแถวที่มีข้อควรตรวจ (เช่น สิทธิ/HN/ชื่อไม่ตรง) ไม่ถูกเลือก ต้องติ๊กเองหลังตรวจดู — การจับคู่ใช้ encounter_id + สิทธิ
+              นำเข้าเฉพาะเคสที่ยังไม่เคยบันทึกวัน Audit — แถวที่พร้อมนำเข้าถูกเลือกไว้ให้แล้ว ส่วนแถวที่มีข้อควรตรวจ (เช่น สิทธิ/HN/ชื่อไม่ตรง) ต้องติ๊กเองหลังตรวจดู
+              เคสที่เคยบันทึกแล้วอยู่ในแท็บ “เคยบันทึกแล้ว” ระบบไม่เขียนทับ — การจับคู่ใช้ encounter_id + สิทธิ
             </p>
 
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              {(['ok', 'warn', 'error', 'ignored', 'all'] as Tab[]).map((t) => (
+              {(['ok', 'recorded', 'warn', 'error', 'ignored', 'all'] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => {
                     setTab(t)
+                    if (t === 'warn') setGrp(WARN_GROUPS.find((g) => groupCount(g) > 0) ?? 'cov_mismatch')
                     setPage(1)
                   }}
                   className={
@@ -207,12 +236,42 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                   {TAB_LABEL[t]} ({tabCount(t).toLocaleString()})
                 </button>
               ))}
-              {tabRows.length > 0 && (
+              {tab !== 'warn' && tabRows.length > 0 && (
                 <button onClick={toggleTab} className="ml-auto rounded-lg border border-ink/30 px-3 py-1.5 text-sm text-ink hover:bg-brand-soft">
                   {allTabOn ? 'ยกเลิกเลือกทั้งแท็บนี้' : `เลือกทั้งแท็บนี้ (${tabRows.length.toLocaleString()})`}
                 </button>
               )}
             </div>
+
+            {tab === 'warn' && (
+              <div className="mb-3 rounded-lg border border-line bg-paper px-3 py-2">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {WARN_GROUPS.map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => {
+                        setGrp(g)
+                        setPage(1)
+                      }}
+                      className={
+                        'rounded-lg border px-3 py-1 text-sm transition-colors ' +
+                        (grp === g ? 'border-ink bg-brand font-semibold text-ink' : 'border-ink/30 text-ink hover:bg-brand-soft')
+                      }
+                    >
+                      {GROUP_LABEL[g]} ({groupCount(g).toLocaleString()})
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-ink/60">
+                  <span>{GROUP_HINT[grp]}</span>
+                  {BULK_GROUPS.includes(grp) && tabRows.length > 0 && (
+                    <button onClick={toggleTab} className="ml-auto rounded-lg border border-ink/40 px-3 py-1 text-sm font-medium text-ink hover:bg-brand-soft">
+                      {allTabOn ? 'ยกเลิกติ๊กทั้งกลุ่ม' : `ติ๊กผ่านทั้งกลุ่ม (${tabRows.length.toLocaleString()})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="mb-3 max-h-[46vh] overflow-auto rounded-lg border border-line text-xs">
               <table className="w-full text-left">
@@ -257,12 +316,12 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                                 <span key={t.admission_id} className="block">
                                   {i.targets.length > 1 && <span className="text-ink/50">{t.coverage_code}/{t.payer_id}: </span>}
                                   {t.state === 'new' ? (
-                                    <span>ยังไม่มีวัน Audit</span>
+                                    <span>ยังไม่เคยบันทึก</span>
                                   ) : t.state === 'same' ? (
-                                    <span className="text-ink/50">เหมือนเดิม</span>
+                                    <span className="text-ink/50">เคยบันทึกแล้ว {fmtIsoDate(t.existing)} (ตรงกับชีต)</span>
                                   ) : (
-                                    <span className="font-semibold text-alert">
-                                      {dupMode === 'skip' ? 'มีเดิม — จะข้าม' : 'มีเดิม — จะเขียนทับ'} ({fmtIsoDate(t.existing)})
+                                    <span className="text-alert">
+                                      เคยบันทึกแล้ว {fmtIsoDate(t.existing)} · <span className="font-semibold">ชีตเป็น {fmtIsoDate(i.audit_date)}</span>
                                     </span>
                                   )}
                                 </span>
@@ -311,23 +370,9 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
             )}
 
             <p className="mb-3 text-sm text-ink/70">
-              ที่เลือกไว้: ใหม่ {stats.n.toLocaleString()} · มีวัน Audit เดิมและต่างจากชีต {stats.conflict.toLocaleString()} · เหมือนเดิม{' '}
-              {stats.same.toLocaleString()} (นับเป็นแถวสิทธิ)
+              ที่เลือกไว้จะบันทึก {writeCount.toLocaleString()} แถวสิทธิ (เฉพาะที่ยังไม่เคยบันทึกวัน Audit)
+              {tab === 'recorded' && ' — แท็บนี้แสดงไว้ให้ดูเท่านั้น ไม่มีการนำเข้า ถ้าวันในชีตต่างจากที่บันทึกไว้จะแสดงเป็นสีแดง'}
             </p>
-
-            {stats.conflict > 0 && (
-              <div className="mb-3 rounded-lg border border-alert bg-paper px-3 py-2.5 text-sm text-ink">
-                <p className="mb-1.5 font-semibold">พบ {stats.conflict} เคสที่มีวัน Audit ในระบบอยู่แล้วและต่างจากชีต — ต้องการทำอย่างไร</p>
-                <label className="mb-1 flex cursor-pointer items-start gap-2">
-                  <input type="radio" name="pullDup" checked={dupMode === 'skip'} onChange={() => setDupMode('skip')} className="mt-1" />
-                  <span>ข้ามเคสที่มีข้อมูลเดิม (เก็บค่าเดิมไว้ บันทึกเฉพาะเคสใหม่)</span>
-                </label>
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input type="radio" name="pullDup" checked={dupMode === 'overwrite'} onChange={() => setDupMode('overwrite')} className="mt-1" />
-                  <span>เขียนทับด้วยวันจากชีต (ค่าเดิมจะหายไป)</span>
-                </label>
-              </div>
-            )}
           </>
         )}
 
