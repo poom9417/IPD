@@ -103,28 +103,39 @@ export interface CodeCHistory {
   at: string
 }
 
-export interface CodeCCase {
+export type CodeType = 'disease' | 'device'
+
+/** 1 แถว = 1 รหัสที่ติด C (1 เคส/encounter มีได้หลายแถว) — Audit ตอบ/ผ่าน/ไม่ผ่านทีละแถว */
+export interface CodeCItem {
   id: number
-  admission_id: number
-  encounter_id: number
+  case_id: number
+  seq: number
+  code_type: CodeType | null
+  code: string | null
   reason: string
-  deadline_date: string
-  reason_by: string | null
-  reason_by_email: string | null
-  reason_at: string
+  added_by: string | null
+  added_by_email: string | null
+  added_at: string
+  /** pending = รอ Audit แก้ไข · answered = Audit ตอบแล้ว (รอ user กด "ผ่านการแก้ C" หรือ "ไม่ผ่านการแก้ C") · passed = ผ่านแล้ว (สถานะสุดท้าย) */
+  status: 'pending' | 'answered' | 'passed'
+  round_no: number
   fix_detail: string | null
   fix_by: string | null
   fix_by_email: string | null
   fix_at: string | null
-  /** pending = รอ Audit แก้ไข · answered = Audit ตอบแล้ว (รอ user กด "ผ่านการแก้ C" หรือ "ไม่ผ่านการแก้ C") · passed = user กดผ่านแล้ว (สถานะสุดท้าย แก้ไขไม่ได้) */
-  status: 'pending' | 'answered' | 'passed'
+  user_ack_at: string | null
   passed_at: string | null
-  passed_by: string | null
   passed_by_email: string | null
-  round_no: number
-  /** true = dateline ระบบคำนวณเอง (วันจำหน่าย + 7) · false = เคสเก่าที่ user กรอกเอง */
-  auto_deadline: boolean
   code_c_history: CodeCHistory[] | null
+}
+
+/** เคส (encounter × สิทธิ) ที่ติด C — เป็นตัวเก็บแถวรหัสหลายแถว */
+export interface CodeCCase {
+  id: number
+  admission_id: number
+  encounter_id: number
+  reason_at: string
+  code_c_items: CodeCItem[] | null
   admissions: {
     hn: string
     discharge_date: string | null
