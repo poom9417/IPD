@@ -86,3 +86,41 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .mode-pill { transition: none; }
 }
+
+/* เมนู Menu แบบ Dropdown Origin Reveal (อ้างอิง motion-reference "dropdown-origin")
+   เปิด: พื้นแผงยืดจากขอบบน 0.48 วิ outCubic แล้วรายการไล่ขึ้นทีละ 24ms (เริ่มหลัง 0.22 วิ)
+   ปิด: หุบกลับ 0.26 วิ inCubic รายการหายใน 80ms */
+.menu-panel-bg {
+  transform-origin: top;
+  transform: scaleY(0.08);
+  opacity: 0;
+  transition: transform 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+.menu-shown .menu-panel-bg {
+  transform: scaleY(1);
+  opacity: 1;
+  transition-duration: 0.48s;
+  transition-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.menu-item {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.08s linear, transform 0.08s linear;
+}
+.menu-shown .menu-item {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.18s cubic-bezier(0.215, 0.61, 0.355, 1) calc(0.22s + var(--i, 0) * 24ms),
+    transform 0.18s cubic-bezier(0.215, 0.61, 0.355, 1) calc(0.22s + var(--i, 0) * 24ms);
+}
+.menu-chevron {
+  transition: transform 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+.menu-chevron.is-open {
+  transform: rotate(180deg);
+  transition-duration: 0.48s;
+  transition-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-panel-bg, .menu-item, .menu-chevron { transition: none !important; }
+}

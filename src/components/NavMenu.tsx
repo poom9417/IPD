@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ModeTabs, { type MineMode } from './ModeTabs'
 
 export type PageKey = 'mine' | 'codec' | 'myjob-dashboard' | 'myjob-claim'
@@ -87,6 +87,9 @@ interface Props {
 
 export default function NavMenu({ page, canJob, canAssign = false, onNavigate, mode, onModeChange }: Props) {
   const [open, setOpen] = useState(false)
+  // เปิด/ปิดแบบ Dropdown Origin Reveal: mounted = ยังวาดแผงอยู่ (รวมช่วงปิด), shown = อยู่ในท่าเปิด
+  const [mounted, setMounted] = useState(false)
+  const [shown, setShown] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const timer = useRef<number | undefined>(undefined)
 
@@ -136,6 +139,24 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
+  // เปิด: วาดแผงในท่าปิดก่อน แล้วค่อยสลับเป็นท่าเปิดเพื่อให้ transition เล่น / ปิด: เล่นท่าปิดให้จบ (0.26 วิ) แล้วค่อยถอดแผงออก
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      let r2 = 0
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setShown(true))
+      })
+      return () => {
+        cancelAnimationFrame(r1)
+        cancelAnimationFrame(r2)
+      }
+    }
+    setShown(false)
+    const t = window.setTimeout(() => setMounted(false), 280)
+    return () => window.clearTimeout(t)
+  }, [open])
+
   return (
     <>
       <div
@@ -163,21 +184,33 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
               : 'border-white/30 text-white hover:border-brand hover:bg-brand hover:text-ink')
           }
         >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-            <path d="M4 7h16M4 12h16M4 17h16" />
-          </svg>
           Menu
+          <svg
+            className={'menu-chevron h-4 w-4 ' + (open ? 'is-open' : '')}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </button>
 
-        {open && (
-          <div role="menu" className="menu-fade absolute left-0 top-full z-50 pt-2">
-            <ul data-tour="menu-list" className="w-72 rounded-xl border border-ink/10 bg-white p-1.5 text-ink shadow-xl">
-              {entries.map((e) => {
+        {mounted && (
+          <div role="menu" className={'absolute left-0 top-full z-50 pt-2 ' + (shown ? 'menu-shown' : 'pointer-events-none')}>
+            <div data-tour="menu-list" className="relative w-72">
+              {/* พื้นหลังแผง: ยืดลงจากขอบบน (transform-origin: top) — รายการข้างในไม่ถูกบีบ */}
+              <div aria-hidden className="menu-panel-bg absolute inset-0 rounded-xl border border-ink/10 bg-white shadow-xl" />
+              <ul className="relative p-1.5 text-ink">
+              {entries.map((e, idx) => {
                 if (e.children) {
                   const open = expanded === e.key
                   const groupCur = e.children.some((c) => c.page === page)
                   return (
-                    <li key={e.key}>
+                    <li key={e.key} className="menu-item" style={{ '--i': idx } as CSSProperties}>
                       <button
                         type="button"
                         role="menuitem"
@@ -234,7 +267,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
                 }
                 const cur = e.page === page
                 return (
-                  <li key={e.key}>
+                  <li key={e.key} className="menu-item" style={{ '--i': idx } as CSSProperties}>
                     <button
                       type="button"
                       role="menuitem"
@@ -254,7 +287,8 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
                   </li>
                 )
               })}
-            </ul>
+              </ul>
+            </div>
           </div>
         )}
       </div>
