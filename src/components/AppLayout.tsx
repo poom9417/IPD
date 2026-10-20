@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Navbar from './Navbar'
 import { type PageKey } from './NavMenu'
-import Dashboard from '../pages/Dashboard'
+import MinePage from '../pages/MinePage'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
 import MyJobDashboardPage from '../pages/MyJobDashboardPage'
@@ -53,7 +53,7 @@ export default function AppLayout() {
       <OnboardingTour page={page} onNavigate={go} />
       <CodeCNotifier onNavigate={go} />
       <div className="min-w-0">
-        {page === 'mine' && <Dashboard />}
+        {page === 'mine' && <MinePage />}
         {page === 'codec' && <CodeCPage />}
         {page === 'myjob-dashboard' && canJob && <MyJobDashboardPage />}
         {page === 'myjob-claim' && canClaimPage && <MyJobPage />}
