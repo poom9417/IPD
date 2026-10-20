@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Navbar from './Navbar'
-import { type PageKey } from './NavMenu'
+import { type PageKey, type MineMode } from './NavMenu'
 import MinePage from '../pages/MinePage'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
@@ -21,6 +21,8 @@ function readHash(): PageKey {
 export default function AppLayout() {
   const { role, roleLoading, canAssign } = useAuth()
   const [page, setPage] = useState<PageKey>(readHash)
+  // โหมดของหน้าหลัก (Main / Dashboard) — อยู่ที่นี่เพราะปุ่มสลับอยู่บน Navbar ส่วนเนื้อหาอยู่ใน MinePage
+  const [mineMode, setMineMode] = useState<MineMode>('main')
 
   // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob-dashboard / #myjob-claim ใน URL เอง)
   const canJob = role === 'admin' || role === 'user'
@@ -49,11 +51,11 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <Navbar page={page} onNavigate={go} />
+      <Navbar page={page} onNavigate={go} mode={mineMode} onModeChange={setMineMode} />
       <OnboardingTour page={page} onNavigate={go} />
       <CodeCNotifier onNavigate={go} />
       <div className="min-w-0">
-        {page === 'mine' && <MinePage />}
+        {page === 'mine' && <MinePage mode={mineMode} />}
         {page === 'codec' && <CodeCPage />}
         {page === 'myjob-dashboard' && canJob && <MyJobDashboardPage />}
         {page === 'myjob-claim' && canClaimPage && <MyJobPage />}

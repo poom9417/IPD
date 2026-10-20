@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import BrandLogo from './BrandLogo'
 import UserManagement from './UserManagement'
-import NavMenu, { type PageKey } from './NavMenu'
+import NavMenu, { type PageKey, type MineMode } from './NavMenu'
 import type { UiRole } from '../lib/types'
 
 const SIM_OPTIONS: { value: UiRole; label: string }[] = [
@@ -22,9 +22,11 @@ const SIM_LABEL: Record<UiRole, string> = {
 interface Props {
   page: PageKey
   onNavigate: (p: PageKey) => void
+  mode: MineMode
+  onModeChange: (m: MineMode) => void
 }
 
-export default function Navbar({ page, onNavigate }: Props) {
+export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) {
   const { session, role, isDeveloper, canAssign, viewAs, setViewAs, signOut } = useAuth()
   const email = session?.user.email ?? ''
   const [showUsers, setShowUsers] = useState(false)
@@ -39,7 +41,7 @@ export default function Navbar({ page, onNavigate }: Props) {
             <BrandLogo className="h-10 w-10" />
             <p className="hidden text-base font-semibold leading-none text-white md:block">IPD AR Discharge</p>
           </div>
-          <NavMenu page={page} canJob={canJob} canAssign={canAssign} onNavigate={onNavigate} />
+          <NavMenu page={page} canJob={canJob} canAssign={canAssign} onNavigate={onNavigate} mode={mode} onModeChange={onModeChange} />
         </div>
 
         <div className="flex items-center gap-3">
