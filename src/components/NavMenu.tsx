@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import ModeTabs, { type MineMode } from './ModeTabs'
 
 export type PageKey = 'mine' | 'codec' | 'myjob-dashboard' | 'myjob-claim'
-export type MineMode = 'main' | 'dashboard'
-
-const MINE_MODES: { key: MineMode; label: string }[] = [
-  { key: 'main', label: 'Main' },
-  { key: 'dashboard', label: 'Dashboard' },
-]
+export type { MineMode }
 
 type Child = { page: PageKey; label: string; sub: string; /** ต้องมีสิทธิ์ใช้ My job เต็ม (admin / user) */ needsJob?: boolean }
 
@@ -265,39 +261,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
 
       {page === 'mine' ? (
         <div className="flex items-center border-l border-white/25 pl-3">
-          <div
-            data-tour="mode-tabs"
-            role="tablist"
-            aria-label="โหมดหน้าหลัก"
-            className="inline-flex rounded-lg border border-white/30 p-0.5 text-sm"
-            onKeyDown={(e) => {
-              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-              e.preventDefault()
-              const i = MINE_MODES.findIndex((m) => m.key === mode)
-              const next = MINE_MODES[(i + (e.key === 'ArrowRight' ? 1 : MINE_MODES.length - 1)) % MINE_MODES.length]
-              onModeChange(next.key)
-            }}
-          >
-            {MINE_MODES.map((m) => {
-              const active = mode === m.key
-              return (
-                <button
-                  key={m.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  tabIndex={active ? 0 : -1}
-                  onClick={() => onModeChange(m.key)}
-                  className={
-                    'rounded-md px-3 py-1 font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand sm:px-4 ' +
-                    (active ? 'bg-brand text-ink' : 'text-white/75 hover:bg-white/10 hover:text-white')
-                  }
-                >
-                  {m.label}
-                </button>
-              )
-            })}
-          </div>
+          <ModeTabs mode={mode} onChange={onModeChange} />
         </div>
       ) : (
         currentEntry && (
