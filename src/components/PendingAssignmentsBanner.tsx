@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import type { AssignmentRequest, CoveragePayerPair } from '../lib/types'
+import NoticeCard, { btnDanger, btnGhost, btnPrimary } from './NoticeCard'
 
 interface Props {
   /** เรียกหลังยืนยัน/ปฏิเสธสำเร็จ — ให้หน้าหลักโหลด "สิทธิของฉัน" ใหม่ */
@@ -14,9 +15,18 @@ function fmtDate(iso: string) {
 
 const nameOf = (email: string | null) => (email ? email.split('@')[0] : '—')
 
+function ShieldCheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true">
+      <path d="M12 3.5 5 6v5.5c0 4.2 2.8 7.3 7 9 4.2-1.7 7-4.8 7-9V6l-7-2.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="m8.8 12 2.4 2.4 4.2-4.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 /**
- * แจ้งเตือนบนหน้าหลัก: สิทธิ (สิทธิ+ผู้จ่าย) ที่ Audit / Developer เลือกให้ฉันดูแล แต่ฉันยังไม่ได้ยืนยัน
- * ไม่มีรายการรอ = ไม่แสดงอะไรเลย
+ * แจ้งเตือนมุมขวาบน: สิทธิ (สิทธิ+ผู้จ่าย) ที่ Audit / Developer เลือกให้ฉันดูแล แต่ฉันยังไม่ได้ยืนยัน
+ * กด "ตรวจสอบ" เปิดหน้าต่างรายการเพื่อยืนยัน/ปฏิเสธรายตัว — ไม่มีรายการรอ = ไม่แสดงอะไรเลย
  */
 export default function PendingAssignmentsBanner({ onChanged }: Props) {
   const { session } = useAuth()
@@ -26,6 +36,9 @@ export default function PendingAssignmentsBanner({ onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [declining, setDeclining] = useState<number | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const [open, setOpen] = useState(false)
+  // "ไว้ทีหลัง" ซ่อนการ์ดจนกว่าจะโหลดหน้าใหม่ — ไม่ทิ้งงานค้างเพราะกลับเข้าหน้าหลักแล้วขึ้นอีก
+  const [snoozed, setSnoozed] = useState(false)
 
   const load = useCallback(async () => {
     if (!myId) return
@@ -86,99 +99,132 @@ export default function PendingAssignmentsBanner({ onChanged }: Props) {
     onChanged?.()
   }
 
-  if (items.length === 0 && !message) return null
+  const first = items[0]
+  const firstInfo = first ? names.get(`${first.coverage_code}|${first.payer_id}`) : undefined
+  const desc = first
+    ? `${first.coverage_code} · ผู้จ่าย ${first.payer_id}${items.length > 1 ? ` และอีก ${items.length - 1} รายการ` : ''}`
+    : ''
 
   return (
-    <section
-      role="alert"
-      className="rounded-xl border border-line border-l-8 border-l-brand bg-brand-soft/60 px-5 py-4"
-    >
-      {items.length > 0 && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-[15px] font-bold text-ink">
-                มีสิทธิรอให้คุณยืนยัน {items.length.toLocaleString()} รายการ
-              </h2>
-              <p className="mt-0.5 text-sm text-ink/70">
+    <>
+      {items.length > 0 && !snoozed && !open && (
+        <div className="pointer-events-none fixed left-4 right-4 top-[max(1rem,env(safe-area-inset-top))] z-[60] sm:left-auto sm:w-[360px]">
+          <NoticeCard
+            label="สิทธิรอให้คุณยืนยัน"
+            icon={<ShieldCheckIcon />}
+            count={items.length}
+            title="มีสิทธิรอให้คุณยืนยัน"
+            onClosed={() => setSnoozed(true)}
+            actions={(close) => (
+              <>
+                <button type="button" className={btnGhost} onClick={close}>
+                  ไว้ทีหลัง
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  onClick={() => {
+                    setMessage(null)
+                    setOpen(true)
+                  }}
+                >
+                  ตรวจสอบ
+                </button>
+              </>
+            )}
+          >
+            <p className="truncate" title={desc}>
+              {desc}
+            </p>
+            {firstInfo?.coverage_name && <p className="truncate text-xs text-ink/60">{firstInfo.coverage_name}</p>}
+          </NoticeCard>
+        </div>
+      )}
+
+      {open && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/40 px-4">
+          {(
+            <div className="np-card flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-ink">สิทธิรอให้คุณยืนยัน {items.length.toLocaleString()} รายการ</h2>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="ปิด"
+                  className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="mb-3 text-sm text-ink/70">
                 Audit / Developer เลือกสิทธิเหล่านี้ให้คุณดูแล — เมื่อยืนยันแล้วจะกลายเป็นงานของคุณและยกเลิกเองไม่ได้
               </p>
+              {message && (
+                <p className={'mb-3 text-sm ' + (message.ok ? 'font-semibold text-ink' : 'text-rose')}>{message.text}</p>
+              )}
+              {items.length === 0 ? (
+                <p className="py-8 text-center text-sm text-ink/70">ไม่มีรายการรอยืนยันแล้ว</p>
+              ) : (
+                <ul className="divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                  {items.map((r) => {
+                    const info = names.get(`${r.coverage_code}|${r.payer_id}`)
+                    return (
+                      <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+                        <div className="min-w-0 text-sm">
+                          <p className="text-ink">
+                            <span className="font-mono text-[13px] font-semibold">{r.coverage_code}</span>{' '}
+                            {info?.coverage_name ?? ''}
+                          </p>
+                          <p className="text-ink/70">
+                            ผู้จ่าย <span className="font-mono text-[13px]">{r.payer_id}</span> {info?.payer_name ?? ''} ·
+                            เลือกโดย {nameOf(r.assigned_by_email)} · {fmtDate(r.created_at)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {declining === r.id ? (
+                            <>
+                              <span className="text-sm text-ink/80">ปฏิเสธรายการนี้?</span>
+                              <button type="button" disabled={busy} onClick={() => respond([r.id], false)} className={btnDanger}>
+                                ปฏิเสธ
+                              </button>
+                              <button type="button" onClick={() => setDeclining(null)} className={btnGhost}>
+                                ไม่
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" disabled={busy} onClick={() => respond([r.id], true)} className={btnPrimary}>
+                                ยืนยัน
+                              </button>
+                              <button type="button" disabled={busy} onClick={() => setDeclining(r.id)} className={btnGhost}>
+                                ปฏิเสธ
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setOpen(false)} className={btnGhost}>
+                  ปิด
+                </button>
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => respond(items.map((i) => i.id), true)}
+                    className={btnPrimary}
+                  >
+                    {busy ? 'กำลังบันทึก…' : 'ยืนยันทั้งหมด'}
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => respond(items.map((i) => i.id), true)}
-              className="rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-ink ring-1 ring-ink/30 hover:bg-brand-dark disabled:opacity-40"
-            >
-              {busy ? 'กำลังบันทึก…' : 'ยืนยันทั้งหมด'}
-            </button>
-          </div>
-
-          <ul className="mt-3 divide-y divide-ink/10 rounded-lg border border-line bg-surface">
-            {items.map((r) => {
-              const info = names.get(`${r.coverage_code}|${r.payer_id}`)
-              return (
-                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0 text-sm">
-                    <p className="text-ink">
-                      <span className="font-mono text-[13px] font-semibold">{r.coverage_code}</span>{' '}
-                      {info?.coverage_name ?? ''}
-                    </p>
-                    <p className="text-ink/70">
-                      ผู้จ่าย <span className="font-mono text-[13px]">{r.payer_id}</span> {info?.payer_name ?? ''} ·
-                      เลือกโดย {nameOf(r.assigned_by_email)} · {fmtDate(r.created_at)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {declining === r.id ? (
-                      <>
-                        <span className="text-sm text-ink/80">ปฏิเสธรายการนี้?</span>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => respond([r.id], false)}
-                          className="rounded-lg bg-alert px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
-                        >
-                          ปฏิเสธ
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeclining(null)}
-                          className="rounded-lg border border-ink/30 px-3 py-1.5 text-sm font-medium text-ink hover:bg-brand-soft"
-                        >
-                          ไม่
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => respond([r.id], true)}
-                          className="rounded-lg bg-brand px-4 py-1.5 text-sm font-semibold text-ink ring-1 ring-ink/30 hover:bg-brand-dark disabled:opacity-40"
-                        >
-                          ยืนยัน
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setDeclining(r.id)}
-                          className="rounded-lg border border-ink/30 px-3 py-1.5 text-sm font-medium text-ink hover:bg-brand-soft disabled:opacity-40"
-                        >
-                          ปฏิเสธ
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </>
+          )}
+        </div>
       )}
-      {message && (
-        <p className={'mt-2 text-sm ' + (message.ok ? 'font-semibold text-ink' : 'text-rose')}>{message.text}</p>
-      )}
-    </section>
+    </>
   )
 }

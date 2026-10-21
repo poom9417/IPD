@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
+import NewUserPopup from './NewUserPopup'
+import { btnGhost, btnPrimary } from './NoticeCard'
 
 type PickRole = 'viewer' | 'user' | 'audit' | 'admin'
 
@@ -52,6 +54,7 @@ export default function ApprovalBell() {
 
   return (
     <>
+      <NewUserPopup users={pending} onReview={() => { setOpen(true); load() }} />
       <button
         data-tour="approval-bell"
         onClick={() => {
@@ -71,10 +74,10 @@ export default function ApprovalBell() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-          <div className="w-full max-w-2xl rounded-2xl border-t-8 border-brand bg-surface p-6 text-ink shadow-xl">
+          <div className="np-card w-full max-w-2xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 text-ink shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">อีเมลที่รออนุมัติ</h2>
-              <button onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-lg leading-none hover:bg-brand">
+              <button onClick={() => setOpen(false)} aria-label="ปิด" className="rounded-md px-2 py-1 text-lg leading-none hover:bg-brand">
                 ✕
               </button>
             </div>
@@ -120,7 +123,7 @@ export default function ApprovalBell() {
                           <button
                             disabled={busyId === u.id}
                             onClick={() => decide(u, 'approved')}
-                            className="mr-2 rounded-lg border border-ink bg-brand px-3 py-1.5 text-sm font-semibold hover:bg-brand-dark disabled:opacity-50"
+                            className={btnPrimary + " mr-2 !min-h-9 !px-3"}
                           >
                             ยืนยัน
                           </button>
@@ -129,7 +132,7 @@ export default function ApprovalBell() {
                             onClick={() => {
                               if (window.confirm(`ปฏิเสธ ${u.email} ?`)) decide(u, 'rejected')
                             }}
-                            className="rounded-lg border border-ink/40 px-3 py-1.5 text-sm font-medium hover:bg-rose-soft disabled:opacity-50"
+                            className={btnGhost + " !min-h-9 !px-3"}
                           >
                             ปฏิเสธ
                           </button>
@@ -141,7 +144,7 @@ export default function ApprovalBell() {
               </div>
             )}
             <div className="mt-4 flex justify-end">
-              <button onClick={() => setOpen(false)} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium hover:bg-brand-soft">
+              <button onClick={() => setOpen(false)} className={btnGhost}>
                 ปิด
               </button>
             </div>
