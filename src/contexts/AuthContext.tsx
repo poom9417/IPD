@@ -5,6 +5,7 @@ import type { AppRole, UiRole } from '../lib/types'
 import { TOUR_VERSION } from '../lib/tourConfig'
 
 export type OnboardingState = 'unknown' | 'needed' | 'done'
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 function viewAsKey(uid: string) {
   return `ipd_view_as_${uid}`
@@ -27,6 +28,8 @@ interface AuthState {
   viewAs: UiRole | null
   setViewAs: (r: UiRole | null) => void
   roleLoading: boolean
+  /** สถานะการอนุมัติเข้าใช้งาน (null = ยังโหลดไม่เสร็จ) */
+  approval: ApprovalStatus | null
   onboarding: OnboardingState
   completeOnboarding: () => Promise<void>
   loading: boolean
@@ -45,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [roleLoading, setRoleLoading] = useState(false)
   const [onboarding, setOnboarding] = useState<OnboardingState>('unknown')
+  const [approval, setApproval] = useState<ApprovalStatus | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -62,12 +66,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRealRole(null)
       setViewAsState(null)
       setOnboarding('unknown')
+      setApproval(null)
       return
     }
     const uid = session.user.id
     setRoleLoading(true)
     type Row = { role: string; onboarded_at?: string | null; tour_version?: number | null }
     ;(async () => {
+      // ตรวจสถานะอนุมัติก่อน — ถ้ายังไม่อนุมัติ ไม่ต้องโหลดอย่างอื่น
+      const ap = await supabase.from('app_users').select('approval_status').eq('id', uid).maybeSingle()
+      // คอลัมน์ยังไม่ถูกสร้าง (ยังไม่ได้รัน add_user_approval.sql) → ถือว่าอนุมัติแล้ว เพื่อไม่ให้ทุกคนถูกล็อกออก
+      const status: ApprovalStatus = ap.error
+        ? 'approved'
+        : ((ap.data as { approval_status?: ApprovalStatus } | null)?.approval_status ?? 'pending')
+      setApproval(status)
+      if (status !== 'approved') {
+        setRealRole(null)
+        setRoleLoading(false)
+        return
+      }
       let row: Row | null = null
       let legacy = false
       const full = await supabase.from('app_users').select('role, onboarded_at, tour_version').eq('id', uid).single()
@@ -103,6 +120,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRoleLoading(false)
     })()
   }, [session])
+
+  // ระหว่างรออนุมัติ: เช็กสถานะซ้ำทุก 15 วินาที พออนุมัติแล้วเข้าได้เองโดยไม่ต้องล็อกอินใหม่
+  useEffect(() => {
+    if (!session || approval === null || approval === 'approved') return
+    const uid = session.user.id
+    const t = setInterval(async () => {
+      const { data } = await supabase.from('app_users').select('approval_status').eq('id', uid).maybeSingle()
+      const next = (data as { approval_status?: ApprovalStatus } | null)?.approval_status
+      if (next === 'approved') {
+        // โหลดใหม่ทั้งหน้าเพื่อดึง role/ข้อมูลล่าสุดให้ครบ
+        window.location.reload()
+      } else if (next && next !== approval) {
+        setApproval(next)
+      }
+    }, 15000)
+    return () => clearInterval(t)
+  }, [session, approval])
 
   // จำลอง role ได้เฉพาะ developer เท่านั้น (เป็นการจำลองฝั่งหน้าจอ — ไม่แตะ role จริงใน DB)
   const isDeveloper = realRole === 'developer'
@@ -156,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, role, realRole, isDeveloper, canAssign, viewAs, setViewAs, roleLoading, onboarding, completeOnboarding, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, role, realRole, isDeveloper, canAssign, viewAs, setViewAs, roleLoading, approval, onboarding, completeOnboarding, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   )

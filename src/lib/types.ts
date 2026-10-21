@@ -37,6 +37,8 @@ export interface AppUser {
   role: AppRole
   unit: string | null
   created_at: string
+  approval_status?: 'pending' | 'approved' | 'rejected'
+  approved_at?: string | null
 }
 
 export interface Admission {

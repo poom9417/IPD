@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import BrandLogo from './BrandLogo'
 import UserManagement from './UserManagement'
+import ApprovalBell from './ApprovalBell'
 import NavMenu, { type PageKey, type MineMode } from './NavMenu'
 import type { UiRole } from '../lib/types'
 
@@ -84,6 +85,7 @@ export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) 
               </select>
             </label>
           )}
+          {role === 'admin' && <ApprovalBell />}
           {role === 'admin' && (
             <button
               data-tour="manage-users"

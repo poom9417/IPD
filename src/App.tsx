@@ -1,12 +1,13 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './components/Login'
 import AppLayout from './components/AppLayout'
+import PendingApprovalPage from './components/PendingApprovalPage'
 import { supabaseConfigError } from './lib/supabaseClient'
 
 function Shell() {
-  const { session, loading } = useAuth()
+  const { session, loading, approval, roleLoading } = useAuth()
 
-  if (loading) {
+  if (loading || (session && (approval === null || (roleLoading && approval === 'approved')))) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-ink/50">
         กำลังโหลด…
@@ -14,7 +15,9 @@ function Shell() {
     )
   }
 
-  return session ? <AppLayout /> : <Login />
+  if (!session) return <Login />
+  if (approval !== 'approved') return <PendingApprovalPage />
+  return <AppLayout />
 }
 
 export default function App() {

@@ -36,6 +36,19 @@ export default function UserManagement({ onClose }: Props) {
     setSavingId(null)
   }
 
+  async function setApproval(u: AppUser, status: 'pending' | 'approved' | 'rejected') {
+    setSavingId(u.id)
+    setError(null)
+    const { error } = await supabase.rpc('set_user_approval', {
+      p_user: u.id,
+      p_status: status,
+      p_role: status === 'approved' ? u.role : null,
+    })
+    if (error) setError(error.message)
+    else setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, approval_status: status } : x)))
+    setSavingId(null)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
       <div className="w-full max-w-3xl rounded-2xl border-t-8 border-brand bg-surface p-6 shadow-xl">
@@ -64,6 +77,7 @@ export default function UserManagement({ onClose }: Props) {
                   <th className="px-3 py-2.5 font-semibold">อีเมล</th>
                   <th className="px-3 py-2.5 font-semibold">หน่วยงาน</th>
                   <th className="px-3 py-2.5 font-semibold">สิทธิ์</th>
+                  <th className="px-3 py-2.5 font-semibold">การอนุมัติ</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,6 +116,35 @@ export default function UserManagement({ onClose }: Props) {
                         <option value="audit">Audit</option>
                         <option value="admin">Admin</option>
                       </select>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {u.role === 'developer' ? (
+                        <span className="text-sm text-ink/60">—</span>
+                      ) : (u.approval_status ?? 'approved') === 'approved' ? (
+                        <button
+                          disabled={savingId === u.id}
+                          onClick={() => {
+                            if (window.confirm(`เปลี่ยน ${u.email} กลับเป็น "รออนุมัติ" ? (จะเข้าใช้งานไม่ได้จนกว่าจะอนุมัติใหม่)`))
+                              setApproval(u, 'pending')
+                          }}
+                          className="rounded-lg border border-ink/40 px-2.5 py-1 text-sm font-medium hover:bg-rose-soft disabled:opacity-50"
+                        >
+                          ✓ อนุมัติแล้ว · ยกเลิก
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-sm font-semibold text-rose">
+                            {u.approval_status === 'rejected' ? 'ถูกปฏิเสธ' : 'รออนุมัติ'}
+                          </span>
+                          <button
+                            disabled={savingId === u.id}
+                            onClick={() => setApproval(u, 'approved')}
+                            className="rounded-lg border border-ink bg-brand px-2.5 py-1 text-sm font-semibold hover:bg-brand-dark disabled:opacity-50"
+                          >
+                            อนุมัติ
+                          </button>
+                        </span>
                       )}
                     </td>
                   </tr>
