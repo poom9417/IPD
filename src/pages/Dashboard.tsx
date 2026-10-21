@@ -29,6 +29,8 @@ export default function Dashboard() {
   const { role, session } = useAuth()
   const isAdmin = role === 'admin'
   const isAudit = role === 'audit'
+  // viewer (ผู้บริหาร): ดูข้อมูลได้ แต่ Export ออกไม่ได้ (นโยบายความปลอดภัยข้อมูล)
+  const canExport = role !== 'viewer'
   // ปุ่ม "เฉพาะสิทธิของฉัน": เฉพาะ admin / user — audit / viewer ไม่มีสิทธิที่ดูแลของตัวเอง
   const canFilterMine = role === 'admin' || role === 'user'
   // audit: ดูข้อมูล + Export เท่านั้น (บันทึกวัน Audit / อัพโหลดไม่ได้) | user: อัพโหลดได้เฉพาะรับเอกสาร/ส่งเบิก (ฐานข้อมูลบังคับซ้ำอีกชั้น)
@@ -187,10 +189,11 @@ export default function Dashboard() {
 
   // Export ตามตัวกรองบนหน้าจอ (ไม่ได้กรองอะไร = ทั้งหมด) — ดึงทุกแถวที่ตรงตัวกรองจาก DB ตอนกดปุ่ม ไม่แบ่งหน้า ไม่ตัด
   async function handleExport() {
+    if (!canExport) return
     setExporting(true)
     try {
       const rows = await fetchAllMatching({ ...filters, search: search.trim() })
-      exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit })
+      exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit, role })
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
     } finally {
@@ -364,19 +367,21 @@ export default function Dashboard() {
                 เฉพาะสิทธิของฉัน ({myPairs.size})
               </button>
             )}
-            <button
-              data-tour="export"
-              onClick={handleExport}
-              disabled={loading || exporting || total === 0}
-              title={
-                hasActiveFilter
-                  ? 'ส่งออกเฉพาะรายการที่ตรงกับตัวกรองบนหน้าจอ (ทุกหน้า)'
-                  : 'ส่งออกทุกรายการ (ยังไม่ได้ตั้งตัวกรอง)'
-              }
-              className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
-            >
-              {exporting ? 'กำลังส่งออก…' : `⬇ Export Excel (${hasActiveFilter ? 'ตามตัวกรอง' : 'ทั้งหมด'} ${total.toLocaleString()})`}
-            </button>
+            {canExport && (
+              <button
+                data-tour="export"
+                onClick={handleExport}
+                disabled={loading || exporting || total === 0}
+                title={
+                  hasActiveFilter
+                    ? 'ส่งออกเฉพาะรายการที่ตรงกับตัวกรองบนหน้าจอ (ทุกหน้า)'
+                    : 'ส่งออกทุกรายการ (ยังไม่ได้ตั้งตัวกรอง)'
+                }
+                className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
+              >
+                {exporting ? 'กำลังส่งออก…' : `⬇ Export Excel (${hasActiveFilter ? 'ตามตัวกรอง' : 'ทั้งหมด'} ${total.toLocaleString()})`}
+              </button>
+            )}
             {isAdmin && (
               <button
                 data-tour="import"

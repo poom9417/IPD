@@ -11,7 +11,7 @@ export const TOUR_VERSION = 1
  * เลขย่อยของเนื้อหาทัวร์ (v1.1, v1.2 …) — เพิ่มเมื่อเพิ่ม/แก้คำอธิบายปุ่มใหม่
  * ไม่ทำให้ผู้ใช้เห็นทัวร์ซ้ำเอง (ซ้ำเฉพาะเมื่อ TOUR_VERSION เปลี่ยน)
  */
-export const TOUR_MINOR = 3
+export const TOUR_MINOR = 4
 export const TOUR_LABEL = `v${TOUR_VERSION}.${TOUR_MINOR}`
 
 export interface TourStep {
@@ -60,7 +60,7 @@ export const ROLE_INTRO: Record<UiRole, { name: string; can: string[] }> = {
   },
   viewer: {
     name: 'ผู้ดูข้อมูล (ดูอย่างเดียว)',
-    can: ['ดูข้อมูลเคสและรายละเอียด', 'กรองข้อมูล และ Export Excel', 'ดูหน้า Code C'],
+    can: ['ดูข้อมูลเคสและรายละเอียด', 'กรองข้อมูล (ส่งออกข้อมูล/Export ไม่ได้)', 'ดูหน้า Code C'],
   },
 }
 
@@ -109,7 +109,7 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'แสดงเฉพาะเคสของสิทธิ+ผู้จ่ายที่คุณเลือกดูแลไว้ที่ My job ปุ่มนี้จะโผล่เมื่อคุณเลือกสิทธิที่ดูแลแล้ว',
   },
   {
-    id: 'export', page: 'mine', target: 'export', roles: ['admin', 'user', 'viewer'],
+    id: 'export', page: 'mine', target: 'export', roles: ['admin', 'user'],
     title: 'Export Excel',
     body: 'ส่งออกเคสเป็นไฟล์ Excel ตามตัวกรองบนหน้าจอ ถ้าไม่ได้ตั้งตัวกรองจะส่งออกทั้งหมด',
   },

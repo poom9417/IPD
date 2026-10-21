@@ -21,8 +21,10 @@ const AUDIT_HEADERS = ['HN', 'AN', 'encounter_id', 'ชื่อผู้ป่�
 export function exportAdmissionsToExcel(
   admissions: Admission[],
   fileName = 'ipd-ar-discharge',
-  opts: { auditOnly?: boolean } = {},
+  opts: { auditOnly?: boolean; role?: string | null } = {},
 ): { admissions: number } {
+  // viewer ห้ามส่งออกข้อมูล (กันไว้อีกชั้นนอกเหนือจากการซ่อนปุ่มที่หน้าจอ)
+  if (opts.role === 'viewer') throw new Error('role ผู้ดูข้อมูล (viewer) ไม่มีสิทธิ์ Export')
   const headers = opts.auditOnly ? AUDIT_HEADERS : HEADERS
   const rows: Row[] = admissions.map((a) => {
     const ct = a.case_tracking
