@@ -75,9 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ;(async () => {
       // ตรวจสถานะอนุมัติก่อน — ถ้ายังไม่อนุมัติ ไม่ต้องโหลดอย่างอื่น
       const ap = await supabase.from('app_users').select('approval_status').eq('id', uid).maybeSingle()
-      // คอลัมน์ยังไม่ถูกสร้าง (ยังไม่ได้รัน add_user_approval.sql) → ถือว่าอนุมัติแล้ว เพื่อไม่ให้ทุกคนถูกล็อกออก
+      // อ่านสถานะไม่ได้ (error) → ถือว่ายังไม่อนุมัติ (fail-closed) เพื่อความปลอดภัยของข้อมูลผู้ป่วย
       const status: ApprovalStatus = ap.error
-        ? 'approved'
+        ? 'pending'
         : ((ap.data as { approval_status?: ApprovalStatus } | null)?.approval_status ?? 'pending')
       setApproval(status)
       if (status !== 'approved') {

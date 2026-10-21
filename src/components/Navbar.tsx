@@ -28,11 +28,13 @@ interface Props {
 }
 
 export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) {
-  const { session, role, isDeveloper, canAssign, viewAs, setViewAs, signOut } = useAuth()
+  const { session, role, realRole, isDeveloper, canAssign, viewAs, setViewAs, signOut } = useAuth()
   const email = session?.user.email ?? ''
   const [showUsers, setShowUsers] = useState(false)
   // My job: เฉพาะ admin และ user
   const canJob = role === 'admin' || role === 'user'
+  // อนุมัติผู้ใช้ / จัดการสิทธิ์: เฉพาะ Audit และ Developer (admin ทำไม่ได้ — ฐานข้อมูลบังคับซ้ำ)
+  const canApprove = realRole === 'audit' || (isDeveloper && (viewAs === null || viewAs === 'audit'))
 
   return (
     <header className="border-b-4 border-brand bg-ink text-white">
@@ -85,8 +87,8 @@ export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) 
               </select>
             </label>
           )}
-          {role === 'admin' && <ApprovalBell />}
-          {role === 'admin' && (
+          {canApprove && <ApprovalBell />}
+          {canApprove && (
             <button
               data-tour="manage-users"
               onClick={() => setShowUsers(true)}

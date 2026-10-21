@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Props {
   onClose: () => void
 }
 
 export default function UserManagement({ onClose }: Props) {
+  const { session, isDeveloper } = useAuth()
+  const myId = session?.user.id
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -42,7 +45,7 @@ export default function UserManagement({ onClose }: Props) {
     const { error } = await supabase.rpc('set_user_approval', {
       p_user: u.id,
       p_status: status,
-      p_role: status === 'approved' ? u.role : null,
+      p_role: status === 'approved' && isDeveloper ? u.role : null,
     })
     if (error) setError(error.message)
     else setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, approval_status: status } : x)))
@@ -107,7 +110,8 @@ export default function UserManagement({ onClose }: Props) {
                       ) : (
                       <select
                         value={u.role}
-                        disabled={savingId === u.id}
+                        disabled={savingId === u.id || !isDeveloper || u.id === myId}
+                        title={!isDeveloper ? 'เฉพาะ Developer กำหนด role ได้' : u.id === myId ? 'เปลี่ยน role ของตัวเองไม่ได้' : undefined}
                         onChange={(e) => updateUser(u.id, { role: e.target.value as AppUser['role'] })}
                         className="input py-1.5 text-sm"
                       >

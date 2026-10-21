@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
-import NewUserPopup from './NewUserPopup'
+import { useAuth } from '../contexts/AuthContext'
 
 type PickRole = 'viewer' | 'user' | 'audit' | 'admin'
 
@@ -12,12 +12,10 @@ const ROLE_OPTIONS: { value: PickRole; label: string }[] = [
   { value: 'admin', label: 'Admin' },
 ]
 
-/**
- * แจ้งเตือนอีเมลใหม่ที่รออนุมัติ (developer / admin)
- * ไม่มีปุ่มบน Navbar อีกแล้ว — จะเด้ง popup มุมขวาบนเฉพาะตอนมีผู้ใช้ใหม่ กด "ตรวจสอบ" แล้วเปิดหน้าต่างเลือก role + ยืนยัน
- * (อนุมัติจากเมนู "จัดการผู้ใช้" ได้เหมือนเดิมเสมอ)
- */
+/** ป้ายแจ้งเตือนอีเมลใหม่ที่รออนุมัติ + หน้าต่างเลือก role แล้วยืนยัน (audit / developer) — กำหนด role ได้เฉพาะ developer; audit อนุมัติได้แต่ไม่กำหนด role */
 export default function ApprovalBell() {
+  const { isDeveloper } = useAuth()
+  const roleOptions = ROLE_OPTIONS
   const [pending, setPending] = useState<AppUser[]>([])
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Record<string, PickRole>>({})
@@ -45,7 +43,7 @@ export default function ApprovalBell() {
     const { error } = await supabase.rpc('set_user_approval', {
       p_user: u.id,
       p_status: status,
-      p_role: status === 'approved' ? (picked[u.id] ?? 'viewer') : null,
+      p_role: status === 'approved' && isDeveloper ? (picked[u.id] ?? 'viewer') : null,
     })
     if (error) setError(error.message)
     else await load()
@@ -54,13 +52,22 @@ export default function ApprovalBell() {
 
   return (
     <>
-      <NewUserPopup
-        users={pending.map((u) => ({ id: u.id, email: u.email }))}
-        onReview={() => {
+      <button
+        data-tour="approval-bell"
+        onClick={() => {
           setOpen(true)
           load()
         }}
-      />
+        title="อีเมลใหม่ที่รออนุมัติ"
+        className="relative rounded-lg border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand hover:text-ink hover:border-brand transition-colors"
+      >
+        🔔 รออนุมัติ
+        {pending.length > 0 && (
+          <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose px-1 text-xs font-bold text-white">
+            {pending.length}
+          </span>
+        )}
+      </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
@@ -93,17 +100,21 @@ export default function ApprovalBell() {
                           {new Date(u.created_at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
                         </td>
                         <td className="px-3 py-2">
+                          {!isDeveloper ? (
+                            <span className="text-ink/60" title="เฉพาะ Developer กำหนด role ได้">ดูอย่างเดียว (เริ่มต้น)</span>
+                          ) : (
                           <select
                             value={picked[u.id] ?? 'viewer'}
                             onChange={(e) => setPicked((p) => ({ ...p, [u.id]: e.target.value as PickRole }))}
                             className="input py-1.5 text-sm"
                           >
-                            {ROLE_OPTIONS.map((o) => (
+                            {roleOptions.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}
                               </option>
                             ))}
                           </select>
+                          )}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-right">
                           <button
