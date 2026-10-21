@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
+import NewUserPopup from './NewUserPopup'
 
 type PickRole = 'viewer' | 'user' | 'audit' | 'admin'
 
@@ -11,7 +12,11 @@ const ROLE_OPTIONS: { value: PickRole; label: string }[] = [
   { value: 'admin', label: 'Admin' },
 ]
 
-/** ป้ายแจ้งเตือนอีเมลใหม่ที่รออนุมัติ + หน้าต่างเลือก role แล้วยืนยัน (developer / admin) */
+/**
+ * แจ้งเตือนอีเมลใหม่ที่รออนุมัติ (developer / admin)
+ * ไม่มีปุ่มบน Navbar อีกแล้ว — จะเด้ง popup มุมขวาบนเฉพาะตอนมีผู้ใช้ใหม่ กด "ตรวจสอบ" แล้วเปิดหน้าต่างเลือก role + ยืนยัน
+ * (อนุมัติจากเมนู "จัดการผู้ใช้" ได้เหมือนเดิมเสมอ)
+ */
 export default function ApprovalBell() {
   const [pending, setPending] = useState<AppUser[]>([])
   const [open, setOpen] = useState(false)
@@ -49,22 +54,13 @@ export default function ApprovalBell() {
 
   return (
     <>
-      <button
-        data-tour="approval-bell"
-        onClick={() => {
+      <NewUserPopup
+        users={pending.map((u) => ({ id: u.id, email: u.email }))}
+        onReview={() => {
           setOpen(true)
           load()
         }}
-        title="อีเมลใหม่ที่รออนุมัติ"
-        className="relative rounded-lg border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand hover:text-ink hover:border-brand transition-colors"
-      >
-        🔔 รออนุมัติ
-        {pending.length > 0 && (
-          <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose px-1 text-xs font-bold text-white">
-            {pending.length}
-          </span>
-        )}
-      </button>
+      />
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
