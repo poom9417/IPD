@@ -33,6 +33,11 @@ type Row = {
   patients: { full_name: string } | { full_name: string }[] | null
 }
 
+// ในชีตแสดงรหัสสิทธิแบบตัด "_ตัวเลข" ท้ายรหัสออก (เช่น SEP_18 → SEP) — ในระบบยังเป็นรหัสเต็มเหมือนเดิม
+function sheetCoverage(code: string): string {
+  return code.replace(/_\d+$/, '')
+}
+
 function patientName(p: Row['patients']): string {
   if (!p) return ''
   return Array.isArray(p) ? (p[0]?.full_name ?? '') : p.full_name
@@ -72,7 +77,7 @@ Deno.serve(async (req) => {
       r.an,
       r.encounter_id,
       patientName(r.patients),
-      r.coverage_code,
+      sheetCoverage(r.coverage_code),
       /^\d+$/.test(r.payer_id) ? Number(r.payer_id) : r.payer_id, // payer เป็นเลข (เช่น 50257) ส่วน UNK เป็นข้อความ
       r.discharge_date ? isoToSerial(r.discharge_date) : '',
     ])
