@@ -33,9 +33,9 @@ type Row = {
   patients: { full_name: string } | { full_name: string }[] | null
 }
 
-// ในชีตแสดงรหัสสิทธิแบบตัด "_ตัวเลข" ท้ายรหัสออก (เช่น SEP_18 → SEP) — ในระบบยังเป็นรหัสเต็มเหมือนเดิม
+// ในชีตแสดงรหัสสิทธิแบบตัด "_" และทุกอย่างหลังจากนั้นออก (เช่น SEP_18 → SEP, ONHSI_P2 → ONHSI) — ในระบบยังเป็นรหัสเต็มเหมือนเดิม
 function sheetCoverage(code: string): string {
-  return code.replace(/_\d+$/, '')
+  return code.replace(/_.*$/, '')
 }
 
 function patientName(p: Row['patients']): string {
