@@ -35,8 +35,8 @@ export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) 
   const canJob = role === 'admin' || role === 'user'
   // Dashboard (สรุปยอดเงินค้างส่งเบิก): audit ไม่เห็นข้อมูลการเงิน → ไม่มีโหมดนี้
   const canDashboard = role !== 'audit'
-  // อนุมัติผู้ใช้ / จัดการสิทธิ์: เฉพาะ Audit และ Developer (admin ทำไม่ได้ — ฐานข้อมูลบังคับซ้ำ)
-  const canApprove = realRole === 'audit' || (isDeveloper && (viewAs === null || viewAs === 'audit'))
+  // อนุมัติผู้ใช้ / จัดการสิทธิ์: เฉพาะ Developer (ตอนไม่ได้จำลอง role อื่น) — admin และ audit ทำไม่ได้ ฐานข้อมูลบังคับซ้ำ
+  const canApprove = isDeveloper && viewAs === null
 
   return (
     <header className="border-b-4 border-brand bg-ink text-white">
