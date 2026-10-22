@@ -158,7 +158,7 @@ export async function fetchSummaryRows(): Promise<SummaryRow[]> {
     offsets.map(async (o) => {
       const { data, error } = await supabase
         .from('admissions')
-        .select('coverage_code, payer_id, discharge_date, case_tracking(submission_date, document_received_amount)')
+        .select('coverage_code, payer_id, discharge_date, case_tracking:case_tracking_v(submission_date, document_received_amount)')
         .order('admission_id')
         .range(o, o + CHUNK - 1)
       if (error) throw error

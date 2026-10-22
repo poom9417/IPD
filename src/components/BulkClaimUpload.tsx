@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabaseClient'
+import { saveCaseTracking, type CaseTrackingRow } from '../lib/caseTracking'
 import type { Admission, BulkStage } from '../lib/types'
 import { parseGgoClaimFile } from '../lib/ggoClaimFile'
 
@@ -118,7 +119,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
     for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
     Promise.all(
       chunks.map(async (c) => {
-        const { data, error } = await supabase.from('case_tracking').select(cols).in('admission_id', c)
+        const { data, error } = await supabase.from('case_tracking_v').select(cols).in('admission_id', c)
         if (error) throw error
         return (data ?? []) as unknown as Record<string, string | number | null>[]
       }),
@@ -321,9 +322,13 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
     // กัน admission_id ซ้ำในชุดเดียว (Postgres ไม่ให้ upsert แถวเดิมสองครั้งในคำสั่งเดียว) — ใช้แถวหลังสุด
     const unique = [...new Map(payload.map((p) => [p.admission_id, p])).values()]
 
-    const { error, count } = await supabase
-      .from('case_tracking')
-      .upsert(unique, { onConflict: 'admission_id', count: 'exact' })
+    let error: { message: string } | null = null
+    let count: number | null = null
+    try {
+      count = await saveCaseTracking(unique as CaseTrackingRow[])
+    } catch (err) {
+      error = { message: (err as { message?: string })?.message ?? String(err) }
+    }
 
     setUploading(false)
     if (error) {

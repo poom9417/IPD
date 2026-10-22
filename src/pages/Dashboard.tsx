@@ -10,6 +10,7 @@ import CaseDetailModal from '../components/CaseDetailModal'
 import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
+import { saveCaseTracking, fetchCaseTracking } from '../lib/caseTracking'
 import PendingAssignmentsBanner from '../components/PendingAssignmentsBanner'
 import SheetSyncButtons from '../components/SheetSyncButtons'
 import { useSheetPush } from '../lib/sheetSync'
@@ -128,26 +129,24 @@ export default function Dashboard() {
   async function receiveDocument(a: Admission, amount: number): Promise<boolean> {
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const { data, error } = await supabase
-      .from('case_tracking')
-      .upsert(
+    let data: Admission['case_tracking']
+    try {
+      await saveCaseTracking([
         {
           admission_id: a.admission_id,
           encounter_id: a.encounter_id,
           document_received_date: today,
           document_received_amount: amount,
         },
-        { onConflict: 'admission_id' },
-      )
-      .select()
-      .single()
-    if (error) {
-      alert(`บันทึกรับเอกสารไม่สำเร็จ: ${error.message}`)
+      ])
+      data = await fetchCaseTracking(a.admission_id)
+    } catch (err) {
+      alert(`บันทึกรับเอกสารไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
       return false
     }
     setAdmissions((prev) =>
       prev.map((x) =>
-        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data } : x,
       ),
     )
     reload()
@@ -157,31 +156,29 @@ export default function Dashboard() {
   // แก้ไข "วันที่รับเอกสาร" + "ยอด claim จาก HIS" ของเคสที่รับเอกสารแล้ว (admin + user)
   // ส่งเฉพาะ 2 ฟิลด์นี้ — ไม่แตะ audit / ส่งเบิก; ฐานข้อมูลบันทึก updated_by/updated_at ให้อัตโนมัติ
   async function updateReceived(a: Admission, date: string, amount: number): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('case_tracking')
-      .upsert(
+    let data: Admission['case_tracking']
+    try {
+      await saveCaseTracking([
         {
           admission_id: a.admission_id,
           encounter_id: a.encounter_id,
           document_received_date: date,
           document_received_amount: amount,
         },
-        { onConflict: 'admission_id' },
-      )
-      .select()
-      .single()
-    if (error) {
-      alert(`แก้ไขการรับเอกสารไม่สำเร็จ: ${error.message}`)
+      ])
+      data = await fetchCaseTracking(a.admission_id)
+    } catch (err) {
+      alert(`แก้ไขการรับเอกสารไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
       return false
     }
     setAdmissions((prev) =>
       prev.map((x) =>
-        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data } : x,
       ),
     )
     // ถ้าเปิดหน้ารายละเอียดค้างอยู่ ให้แสดงค่าใหม่ทันที
     setViewing((v) =>
-      v && v.admission_id === a.admission_id ? { ...v, case_tracking: data as Admission['case_tracking'] } : v,
+      v && v.admission_id === a.admission_id ? { ...v, case_tracking: data } : v,
     )
     reload()
     return true
@@ -218,21 +215,17 @@ export default function Dashboard() {
   async function auditToday(a: Admission) {
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const { data, error } = await supabase
-      .from('case_tracking')
-      .upsert(
-        { admission_id: a.admission_id, encounter_id: a.encounter_id, audit_date: today },
-        { onConflict: 'admission_id' },
-      )
-      .select()
-      .single()
-    if (error) {
-      alert(`บันทึกวัน Audit ไม่สำเร็จ: ${error.message}`)
+    let data: Admission['case_tracking']
+    try {
+      await saveCaseTracking([{ admission_id: a.admission_id, encounter_id: a.encounter_id, audit_date: today }])
+      data = await fetchCaseTracking(a.admission_id)
+    } catch (err) {
+      alert(`บันทึกวัน Audit ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
       return
     }
     setAdmissions((prev) =>
       prev.map((x) =>
-        x.admission_id === a.admission_id ? { ...x, case_tracking: data as Admission['case_tracking'] } : x,
+        x.admission_id === a.admission_id ? { ...x, case_tracking: data } : x,
       ),
     )
     reload()

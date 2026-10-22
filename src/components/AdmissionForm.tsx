@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { saveCaseTracking, savePatient } from '../lib/caseTracking'
 import { useAuth } from '../contexts/AuthContext'
 import type {
   Admission,
@@ -205,15 +206,8 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
     try {
       // admin: เพิ่ม/แก้ข้อมูลผู้ป่วยได้  |  user: เพิ่ม HN ใหม่ได้อย่างเดียว (HN ที่มีอยู่แล้วจะไม่ถูกเขียนทับ)
-      const { error: patientErr } = await supabase.from('patients').upsert(
-        {
-          hn: draft.hn.trim(),
-          full_name: draft.full_name.trim(),
-          birthdate: draft.birthdate || null,
-        },
-        role === 'admin' ? undefined : { onConflict: 'hn', ignoreDuplicates: true },
-      )
-      if (patientErr) throw patientErr
+      // (ฟังก์ชันบนฐานข้อมูลตรวจสิทธิ์ซ้ำ: admin แก้ได้, user เพิ่ม HN ใหม่ได้อย่างเดียว)
+      await savePatient(draft.hn.trim(), draft.full_name.trim(), draft.birthdate || null)
 
       const fields = {
         an: Number(draft.an),
@@ -261,7 +255,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
       // (ไม่งั้นการลบค่าสุดท้ายออกจะไม่ถูกส่งไปที่ DB — ค่าเดิมจึงไม่หาย)
       const hadCaseRow = !!admission?.case_tracking
       if (hasCaseData || hadCaseRow) {
-        const { error: caseErr } = await supabase.from('case_tracking').upsert(
+        await saveCaseTracking([
           {
             admission_id: admissionId,
             encounter_id: Number(draft.encounter_id),
@@ -273,9 +267,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
             claim_no: caseDraft.claim_no || null,
           },
-          { onConflict: 'admission_id' },
-        )
-        if (caseErr) throw caseErr
+        ])
       }
 
       onSaved()

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { saveCaseTracking } from '../lib/caseTracking'
 import { fmtIsoDate, previewSheetAudit, type PullItem, type PullResult } from '../lib/sheetSync'
 
 interface Props {
@@ -388,8 +389,7 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
     try {
       for (let k = 0; k < rows.length; k += WRITE_CHUNK) {
         const chunk = rows.slice(k, k + WRITE_CHUNK)
-        const { error: e } = await supabase.from('case_tracking').upsert(chunk, { onConflict: 'admission_id' })
-        if (e) throw e
+        await saveCaseTracking(chunk)
         done += chunk.length
       }
       // บันทึกเวลาดึงล่าสุด (ถ้ายังไม่ได้สร้างฟังก์ชันนี้ใน DB ก็ไม่ถือเป็นความผิดพลาด)

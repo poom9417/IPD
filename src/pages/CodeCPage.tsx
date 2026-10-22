@@ -108,7 +108,7 @@ function HistoryList({ item, skipCurrentAnswer }: { item: CodeCItem; skipCurrent
 }
 
 const SELECT_CASES =
-  '*, code_c_items(*, code_c_history(id, round_no, kind, body, prev_body, by_email, at)), admissions(hn, discharge_date, coverage_code, payer_id, patients(full_name), coverage_master(coverage_name), payer_master(payer_name), case_tracking(submission_date, claim_no))'
+  '*, code_c_items(*, code_c_history(id, round_no, kind, body, prev_body, by_email, at)), admissions(hn, discharge_date, coverage_code, payer_id, patients:patients_v(full_name), coverage_master(coverage_name), payer_master(payer_name), case_tracking(submission_date, claim_no))'
 
 async function fetchCases(): Promise<CodeCCase[]> {
   const all: CodeCCase[] = []
@@ -132,7 +132,7 @@ async function fetchSubmitted(): Promise<Admission[]> {
   for (let from = 0; ; from += FETCH_CHUNK) {
     const { data, error } = await supabase
       .from('admissions')
-      .select('*, patients(*), coverage_master(*), payer_master(*), case_tracking!inner(*)')
+      .select('*, patients:patients_v(*), coverage_master(*), payer_master(*), case_tracking!inner(encounter_id, document_received_date, audit_date, submission_date, claim_no, admission_id, updated_at, updated_by)')
       .not('case_tracking.submission_date', 'is', null)
       .order('admission_id', { ascending: false })
       .range(from, from + FETCH_CHUNK - 1)

@@ -43,7 +43,7 @@ export default function PatientSearchInput({ field, value, onText, onPick, disab
     const t = setTimeout(async () => {
       const col = field === 'hn' ? 'hn' : 'full_name'
       const { data } = await supabase
-        .from('patients')
+        .from('patients_v')
         .select('hn, full_name, birthdate')
         .ilike(col, `%${escapeLike(q)}%`)
         .order(col)

@@ -27,7 +27,7 @@ async function fetchMyAdmissions(codes: string[]): Promise<Admission[]> {
   for (let from = 0; ; from += FETCH_CHUNK) {
     const { data, error } = await supabase
       .from('admissions')
-      .select('*, patients(*), coverage_master(*), payer_master(*), case_tracking(*)')
+      .select('*, patients:patients_v(*), coverage_master(*), payer_master(*), case_tracking(encounter_id, document_received_date, audit_date, submission_date, claim_no, admission_id, updated_at, updated_by)')
       .in('coverage_code', codes)
       .not('discharge_date', 'is', null)
       .order('discharge_date', { ascending: false })
