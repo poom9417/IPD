@@ -33,6 +33,8 @@ export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) 
   const [showUsers, setShowUsers] = useState(false)
   // My job: เฉพาะ admin และ user
   const canJob = role === 'admin' || role === 'user'
+  // Dashboard (สรุปยอดเงินค้างส่งเบิก): audit ไม่เห็นข้อมูลการเงิน → ไม่มีโหมดนี้
+  const canDashboard = role !== 'audit'
   // อนุมัติผู้ใช้ / จัดการสิทธิ์: เฉพาะ Audit และ Developer (admin ทำไม่ได้ — ฐานข้อมูลบังคับซ้ำ)
   const canApprove = realRole === 'audit' || (isDeveloper && (viewAs === null || viewAs === 'audit'))
 
@@ -44,7 +46,7 @@ export default function Navbar({ page, onNavigate, mode, onModeChange }: Props) 
             <BrandLogo className="h-10 w-10" />
             <p className="hidden text-base font-semibold leading-none text-white md:block">IPD AR Discharge</p>
           </div>
-          <NavMenu page={page} canJob={canJob} canAssign={canAssign} onNavigate={onNavigate} mode={mode} onModeChange={onModeChange} />
+          <NavMenu page={page} canJob={canJob} canAssign={canAssign} onNavigate={onNavigate} mode={mode} onModeChange={onModeChange} canDashboard={canDashboard} />
         </div>
 
         <div className="flex items-center gap-3">

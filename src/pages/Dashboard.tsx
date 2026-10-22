@@ -432,6 +432,7 @@ export default function Dashboard() {
           onEditReceive={(a) => setEditingReceive(a)}
           canAudit={canMarkAudit}
           onAuditToday={auditToday}
+          showMoney={!isAudit}
         />
         </div>
 
@@ -489,6 +490,7 @@ export default function Dashboard() {
       {viewing && (
         <CaseDetailModal
           admission={viewing}
+          showMoney={!isAudit}
           onClose={() => setViewing(null)}
           onEdit={
             isAdmin

@@ -49,8 +49,10 @@ function ClaimStatus({
   canAudit,
   onAuditToday,
   onEditReceive,
+  showMoney = true,
 }: {
   admission: Admission
+  showMoney?: boolean
   canReceive: boolean
   onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
   onEditReceive?: (a: Admission) => void
@@ -138,7 +140,7 @@ function ClaimStatus({
       done: !!ct?.document_received_date,
       title: ct?.document_received_date
         ? `รับเอกสาร ${fmtDate(ct.document_received_date)}${
-            ct.document_received_amount != null ? ` · ${ct.document_received_amount.toLocaleString()} บาท` : ''
+            showMoney && ct.document_received_amount != null ? ` · ${ct.document_received_amount.toLocaleString()} บาท` : ''
           }`
         : 'รับเอกสาร',
     },
@@ -226,6 +228,8 @@ interface Props {
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
   canAudit?: boolean
   onAuditToday?: (a: Admission) => Promise<void>
+  /** false = ซ่อนยอดเงินทุกจุด (role audit) */
+  showMoney?: boolean
 }
 
 // ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
@@ -244,6 +248,7 @@ export default function AdmissionsTable({
   onEditReceive,
   canAudit = false,
   onAuditToday = async () => {},
+  showMoney = true,
 }: Props) {
   if (loading) {
     return <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
@@ -258,7 +263,8 @@ export default function AdmissionsTable({
   }
 
   const today = todayDayNumber()
-  const widths = isAdmin ? [...COL_WIDTHS, EDIT_COL_WIDTH] : COL_WIDTHS
+  const baseWidths = showMoney ? COL_WIDTHS : COL_WIDTHS.filter((_, i) => i !== 8)
+  const widths = isAdmin ? [...baseWidths, EDIT_COL_WIDTH] : baseWidths
   const minWidth = widths.reduce((sum, w) => sum + w, 0)
 
   return (
@@ -284,7 +290,7 @@ export default function AdmissionsTable({
               ค้างเบิก (วัน)
             </th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สิทธิการรักษา</th>
-            <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอด claim จาก HIS</th>
+            {showMoney && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอด claim จาก HIS</th>}
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สถานะเคลม</th>
             {isAdmin && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">แก้ไข</th>}
           </tr>
@@ -338,11 +344,13 @@ export default function AdmissionsTable({
                 <span className="mr-1.5 font-mono text-[13px] font-semibold text-ink">{a.coverage_code}</span>
                 {a.coverage_master?.coverage_name ?? ''}
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-ink">
+              {showMoney && (
+                <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums text-ink">
                 {fmtMoney(a.case_tracking?.document_received_amount)}
               </td>
+              )}
               <td className="px-3 py-2.5" data-tour={rowIdx === 0 ? 'claim-status' : undefined} onClick={(e) => e.stopPropagation()}>
-                <ClaimStatus admission={a} canReceive={canReceive} onReceiveDoc={onReceiveDoc} onEditReceive={onEditReceive} canAudit={canAudit} onAuditToday={onAuditToday} />
+                <ClaimStatus admission={a} showMoney={showMoney} canReceive={canReceive} onReceiveDoc={onReceiveDoc} onEditReceive={onEditReceive} canAudit={canAudit} onAuditToday={onAuditToday} />
               </td>
               {isAdmin && (
                 <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>

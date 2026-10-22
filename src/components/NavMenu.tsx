@@ -81,11 +81,13 @@ interface Props {
   canAssign?: boolean
   onNavigate: (p: PageKey) => void
   /** โหมดของหน้าหลัก (Main / Dashboard) — แสดงเป็นปุ่มสลับต่อจากปุ่ม Menu เมื่ออยู่หน้าหลัก */
+  /** role audit ไม่มีโหมด Dashboard (สรุปการเงิน) → ซ่อนปุ่มสลับโหมด */
+  canDashboard?: boolean
   mode: MineMode
   onModeChange: (m: MineMode) => void
 }
 
-export default function NavMenu({ page, canJob, canAssign = false, onNavigate, mode, onModeChange }: Props) {
+export default function NavMenu({ page, canJob, canAssign = false, onNavigate, mode, onModeChange, canDashboard = true }: Props) {
   const [open, setOpen] = useState(false)
   // เปิด/ปิดแบบ Dropdown Origin Reveal: mounted = ยังวาดแผงอยู่ (รวมช่วงปิด), shown = อยู่ในท่าเปิด
   const [mounted, setMounted] = useState(false)
@@ -293,7 +295,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
         )}
       </div>
 
-      {page === 'mine' ? (
+      {page === 'mine' && canDashboard ? (
         <div className="flex items-center border-l border-white/25 pl-3">
           <ModeTabs mode={mode} onChange={onModeChange} />
         </div>

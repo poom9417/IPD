@@ -28,10 +28,12 @@ interface Props {
   onEdit?: (a: Admission) => void
   /** ส่งมาเฉพาะ role ที่แก้วันที่/ยอดรับเอกสารได้ (admin + user) */
   onEditReceive?: (a: Admission) => void
+  /** false = ซ่อนยอดเงิน (role audit) */
+  showMoney?: boolean
 }
 
 /** หน้าต่างดูรายละเอียดเคส — หน้าตาเหมือนฟอร์มแก้ไข แต่แก้ไขไม่ได้ (read-only) */
-export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditReceive }: Props) {
+export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditReceive, showMoney = true }: Props) {
   const ct = a.case_tracking
   const stage = getClaimStage(a)
 
@@ -110,7 +112,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="วันที่รับเอกสาร">{fmtDate(ct?.document_received_date)}</Field>
-              <Field label="ยอด claim จาก HIS">{fmtMoney(ct?.document_received_amount)}</Field>
+              {showMoney && <Field label="ยอด claim จาก HIS">{fmtMoney(ct?.document_received_amount)}</Field>}
             </div>
 
             <div className="mt-3">
@@ -119,7 +121,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="วันที่ส่งเบิก">{fmtDate(ct?.submission_date)}</Field>
-              <Field label="ยอดส่งเบิก">{fmtMoney(ct?.submission_amount)}</Field>
+              {showMoney && <Field label="ยอดส่งเบิก">{fmtMoney(ct?.submission_amount)}</Field>}
             </div>
 
             <div className="mt-3">

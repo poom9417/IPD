@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Dashboard from './Dashboard'
 import ArSummaryDashboard from '../components/ArSummaryDashboard'
 import type { MineMode } from '../components/NavMenu'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Props {
   /** โหมดที่เลือก — ปุ่มสลับอยู่บน Navbar (ต่อจากปุ่ม Menu) */
@@ -14,18 +15,21 @@ interface Props {
  * และ Dashboard จะโหลดข้อมูลเมื่อเปิดครั้งแรกเท่านั้น
  */
 export default function MinePage({ mode }: Props) {
-  const [dashOpened, setDashOpened] = useState(mode === 'dashboard')
+  const { role } = useAuth()
+  // audit ไม่เห็นข้อมูลการเงิน → ไม่ render Dashboard เลย (ไม่โหลดข้อมูลด้วย)
+  const canDashboard = role !== 'audit'
+  const [dashOpened, setDashOpened] = useState(mode === 'dashboard' && canDashboard)
 
   useEffect(() => {
-    if (mode === 'dashboard') setDashOpened(true)
-  }, [mode])
+    if (mode === 'dashboard' && canDashboard) setDashOpened(true)
+  }, [mode, canDashboard])
 
   return (
     <div>
-      <div className={mode === 'main' ? '' : 'hidden'}>
+      <div className={mode === 'main' || !canDashboard ? '' : 'hidden'}>
         <Dashboard />
       </div>
-      {dashOpened && (
+      {dashOpened && canDashboard && (
         <div className={mode === 'dashboard' ? '' : 'hidden'}>
           <ArSummaryDashboard />
         </div>
