@@ -1,5 +1,7 @@
 import { useAuth } from '../contexts/AuthContext'
 import BrandLogo from './BrandLogo'
+import './NewUserPopup.css'
+import { btnGhost } from './NoticeCard'
 
 /** หน้าจอสำหรับผู้ใช้ที่ยังไม่ได้รับอนุมัติ (pending / rejected) — ทำอะไรไม่ได้นอกจากรอและออกจากระบบ */
 export default function PendingApprovalPage() {
@@ -9,10 +11,10 @@ export default function PendingApprovalPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md text-center">
-        <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-ink">
-          <BrandLogo className="h-14 w-14" />
+        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-ink">
+          <BrandLogo className="h-11 w-11" />
         </div>
-        <div className="rounded-2xl border-2 border-ink bg-surface p-6 shadow-[6px_6px_0_0_var(--color-brand)]">
+        <div className="np-card rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
           <h1 className="text-xl font-bold text-ink">
             {rejected ? 'บัญชีนี้ไม่ได้รับอนุมัติ' : 'รอ admin อนุมัติ'}
           </h1>
@@ -41,7 +43,7 @@ export default function PendingApprovalPage() {
           )}
           <button
             onClick={signOut}
-            className="mt-5 w-full rounded-xl border border-ink px-4 py-2.5 text-base font-semibold text-ink hover:bg-brand transition-colors"
+            className={btnGhost + " mt-5 w-full"}
           >
             ออกจากระบบ
           </button>

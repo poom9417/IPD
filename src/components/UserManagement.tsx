@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
+import { btnGhost, btnPrimary } from './NoticeCard'
 
 interface Props {
   onClose: () => void
@@ -54,10 +55,10 @@ export default function UserManagement({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-      <div className="w-full max-w-3xl rounded-2xl border-t-8 border-brand bg-surface p-6 shadow-xl">
+      <div className="np-card w-full max-w-3xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">จัดการสิทธิ์ผู้ใช้</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <button onClick={onClose} aria-label="ปิด" className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
             ✕
           </button>
         </div>
@@ -132,7 +133,7 @@ export default function UserManagement({ onClose }: Props) {
                             if (window.confirm(`เปลี่ยน ${u.email} กลับเป็น "รออนุมัติ" ? (จะเข้าใช้งานไม่ได้จนกว่าจะอนุมัติใหม่)`))
                               setApproval(u, 'pending')
                           }}
-                          className="rounded-lg border border-ink/40 px-2.5 py-1 text-sm font-medium hover:bg-rose-soft disabled:opacity-50"
+                          className={btnGhost + " !min-h-9 !px-2.5"}
                         >
                           ✓ อนุมัติแล้ว · ยกเลิก
                         </button>
@@ -144,7 +145,7 @@ export default function UserManagement({ onClose }: Props) {
                           <button
                             disabled={savingId === u.id}
                             onClick={() => setApproval(u, 'approved')}
-                            className="rounded-lg border border-ink bg-brand px-2.5 py-1 text-sm font-semibold hover:bg-brand-dark disabled:opacity-50"
+                            className={btnPrimary + " !min-h-9 !px-2.5"}
                           >
                             อนุมัติ
                           </button>
@@ -159,7 +160,7 @@ export default function UserManagement({ onClose }: Props) {
         )}
 
         <div className="mt-4 flex justify-end">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <button onClick={onClose} className={btnGhost}>
             ปิด
           </button>
         </div>
