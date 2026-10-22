@@ -1,7 +1,7 @@
 import type { AdmissionStats } from '../lib/searchAdmissions'
 
 // ตัวเลขสรุปคิดที่ DB จากทุกแถวที่ตรงตัวกรอง (ไม่ใช่แค่หน้าที่แสดง)
-// 1 เคส = 1 encounter_id + 1 payer (encounter เดียวกันแต่มี 2 payer นับเป็น 2 เคส)
+// 1 เคส = 1 แถว admissions (encounter × สิทธิ × ผู้จ่าย) — ตัวเลขเท่ากับ "แสดง X จาก Y" และโหมด Dashboard
 export default function StatCards({ stats }: { stats: AdmissionStats | null }) {
   const dash = '–'
   const list: { label: string; value: string; note?: string }[] = [

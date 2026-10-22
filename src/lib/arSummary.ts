@@ -134,49 +134,21 @@ export interface SummaryRow {
   amount: number | null
 }
 
-const CHUNK = 1000
-
 // ดึงทีเดียวแล้วคำนวณในเครื่อง → เปลี่ยนวันที่ "ณ" ได้ทันทีโดยไม่ต้องโหลดใหม่
+// ใช้ฟังก์ชัน ar_summary_rows() ที่ DB คำสั่งเดียว (เดิมยิงหลาย request ขนาน + offset ลึก → เกิน statement_timeout)
+// แต่ละแถว = [coverage_code, payer_id, discharge_date, submission_date, document_received_amount]
+type RawRow = [string, string, string | null, string | null, number | string | null]
+
 export async function fetchSummaryRows(): Promise<SummaryRow[]> {
-  const head = await supabase.from('admissions').select('admission_id', { count: 'exact', head: true })
-  if (head.error) throw head.error
-  const total = head.count ?? 0
-  const offsets: number[] = []
-  for (let o = 0; o < total; o += CHUNK) offsets.push(o)
-
-  type Raw = {
-    coverage_code: string
-    payer_id: string
-    discharge_date: string | null
-    case_tracking:
-      | { submission_date: string | null; document_received_amount: number | string | null }
-      | { submission_date: string | null; document_received_amount: number | string | null }[]
-      | null
-  }
-
-  const parts = await Promise.all(
-    offsets.map(async (o) => {
-      const { data, error } = await supabase
-        .from('admissions')
-        .select('coverage_code, payer_id, discharge_date, case_tracking:case_tracking_v(submission_date, document_received_amount)')
-        .order('admission_id')
-        .range(o, o + CHUNK - 1)
-      if (error) throw error
-      return (data ?? []) as unknown as Raw[]
-    }),
-  )
-
-  return parts.flat().map((r) => {
-    const ct = Array.isArray(r.case_tracking) ? (r.case_tracking[0] ?? null) : r.case_tracking
-    const amt = ct?.document_received_amount
-    return {
-      coverage_code: r.coverage_code,
-      payer_id: r.payer_id,
-      discharge_date: r.discharge_date,
-      submission_date: ct?.submission_date ?? null,
-      amount: amt === null || amt === undefined ? null : Number(amt),
-    }
-  })
+  const { data, error } = await supabase.rpc('ar_summary_rows')
+  if (error) throw error
+  return ((data ?? []) as unknown as RawRow[]).map(([coverage_code, payer_id, discharge_date, submission_date, amt]) => ({
+    coverage_code,
+    payer_id,
+    discharge_date,
+    submission_date,
+    amount: amt === null || amt === undefined ? null : Number(amt),
+  }))
 }
 
 // ---------- คำนวณ ----------
