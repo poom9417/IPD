@@ -16,6 +16,7 @@ import SheetSyncButtons from '../components/SheetSyncButtons'
 import { useSheetPush } from '../lib/sheetSync'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
 import { exportAdmissionsToExcel } from '../lib/exportExcel'
+import WaveExportButton from '../components/WaveExportButton'
 import type { ClaimStage } from '../lib/claimStatus'
 import {
   searchAdmissions,
@@ -51,7 +52,6 @@ export default function Dashboard() {
   const [divisions, setDivisions] = useState<string[]>([])
   const [fetching, setFetching] = useState(false)
   const [reloadTick, setReloadTick] = useState(0)
-  const [exporting, setExporting] = useState(false)
   const [bulkLookup, setBulkLookup] = useState<Admission[]>([])
   const [bulkPreparing, setBulkPreparing] = useState(false)
   const reqId = useRef(0)
@@ -187,15 +187,9 @@ export default function Dashboard() {
   // Export ตามตัวกรองบนหน้าจอ (ไม่ได้กรองอะไร = ทั้งหมด) — ดึงทุกแถวที่ตรงตัวกรองจาก DB ตอนกดปุ่ม ไม่แบ่งหน้า ไม่ตัด
   async function handleExport() {
     if (!canExport) return
-    setExporting(true)
-    try {
-      const rows = await fetchAllMatching({ ...filters, search: search.trim() })
-      await exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit, role })
-    } catch (err) {
-      alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
-    } finally {
-      setExporting(false)
-    }
+    // ถ้าล้มเหลวให้ throw — WaveExportButton จะแสดงสถานะ "ไม่สำเร็จ" + แจ้งข้อความเอง
+    const rows = await fetchAllMatching({ ...filters, search: search.trim() })
+    await exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit, role })
   }
 
   // เปิดหน้าอัพโหลดสถานะเคลม: โหลดรายการเบาๆ (เลขเคส + ผู้จ่าย) ไว้จับคู่กับไฟล์ก่อน
@@ -361,19 +355,17 @@ export default function Dashboard() {
               </button>
             )}
             {canExport && (
-              <button
-                data-tour="export"
-                onClick={handleExport}
-                disabled={loading || exporting || total === 0}
+              <WaveExportButton
+                dataTour="export"
+                onExport={handleExport}
+                disabled={loading || total === 0}
                 title={
                   hasActiveFilter
                     ? 'ส่งออกเฉพาะรายการที่ตรงกับตัวกรองบนหน้าจอ (ทุกหน้า)'
                     : 'ส่งออกทุกรายการ (ยังไม่ได้ตั้งตัวกรอง)'
                 }
-                className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
-              >
-                {exporting ? 'กำลังส่งออก…' : `⬇ Export Excel (${hasActiveFilter ? 'ตามตัวกรอง' : 'ทั้งหมด'} ${total.toLocaleString()})`}
-              </button>
+                label={`Export Excel (${hasActiveFilter ? 'ตามตัวกรอง' : 'ทั้งหมด'} ${total.toLocaleString()})`}
+              />
             )}
             {isAdmin && (
               <button
