@@ -70,7 +70,7 @@ export const SUMMARY_GROUPS: GroupDef[] = [
   },
   {
     // ไม่มีรหัสสิทธิ/ผู้จ่ายที่ชื่อ PRI ในข้อมูล — ตกลงให้รวมทุกสิทธิที่ไม่เข้ากลุ่มอื่นไว้ที่นี่
-    // (ปัจจุบันคือ AR003 / AR003_Ya, AR006, DIS_*, EMU4 ฯลฯ และรหัสใหม่ที่ยังไม่ได้จัดกลุ่มในอนาคต)
+    // (ปัจจุบันคือ AR003 / AR003_Ya, AR006, EMU4 ฯลฯ และรหัสใหม่ที่ยังไม่ได้จัดกลุ่มในอนาคต — DIS_* ไม่นับ ดู isDiscountCoverage)
     key: 'pri',
     label: 'ต้นสังกัด PRI',
     match: () => false,
@@ -106,6 +106,9 @@ export const SUMMARY_GROUPS: GroupDef[] = [
 
 /** รหัสสิทธิที่ไม่นับเป็นลูกหนี้เลย: UNK = เงินสด/ไม่ทราบสิทธิ (ไม่เบิก) */
 const EXCLUDED_COVERAGES = new Set(['UNK'])
+
+/** สิทธิส่วนลด/ส่วนเกิน (DIS_...) ไม่ใช่ลูกหนี้ที่ต้องส่งเบิก → ไม่นำมาคำนวณ (สอดคล้องกับ push-to-sheet ที่ไม่ส่ง DIS% ให้ Audit) */
+const isDiscountCoverage = (cov: string) => cov.startsWith('DIS_')
 
 // ---------- ช่วงอายุเกินกำหนด ----------
 export interface BucketDef {
@@ -174,6 +177,8 @@ export interface SummaryResult {
   noAmountCount: number
   /** เคสค้างของสิทธิ UNK ที่ไม่นับ */
   excludedCount: number
+  /** เคสค้างของสิทธิส่วนลด DIS_* ที่ไม่นับ */
+  excludedDisCount: number
   /** เคสค้างที่ไม่อยู่ในกลุ่มใดเลย (ไม่รวมในผลรวม) — ปกติว่าง เพราะ PRI รับส่วนที่เหลือทั้งหมด */
   ungrouped: { coverage_code: string; n: number; amt: number }[]
   /** ใช้ตรวจ: จำนวนเคสที่จำหน่ายแล้ว ณ วันนั้นทั้งหมด (รวมที่ส่งเบิกแล้ว) */
@@ -203,6 +208,32 @@ function finalize(g: GroupSummary) {
   g.pctAmt = g.pending.amt > 0 ? g.overdue.amt / g.pending.amt : null
 }
 
+// ผลการจัดแถวเดียว ณ วันที่เลือก — ใช้ร่วมกันระหว่างตารางสรุป (buildSummary) กับไฟล์ Export รายการค้าง
+// เพื่อให้ "รายการที่ถูกนับ" ตรงกับตัวเลขในตารางทุกแถว
+export type RowClass =
+  | { kind: 'future' } // ยังไม่จำหน่าย ณ วันนั้น
+  | { kind: 'submitted' } // ส่งเบิกแล้ว ณ วันนั้น
+  | { kind: 'unk' } // สิทธิ UNK ไม่นับ
+  | { kind: 'dis' } // สิทธิส่วนลด DIS_* ไม่นับ
+  | { kind: 'ungrouped'; amt: number }
+  | { kind: 'counted'; def: GroupDef; age: number; amt: number; noAmount: boolean }
+
+export function classifyRow(r: SummaryRow, asOfDay: number): RowClass {
+  const dc = dayNum(r.discharge_date)
+  if (dc === null || dc > asOfDay) return { kind: 'future' }
+  const sub = dayNum(r.submission_date)
+  if (sub !== null && sub <= asOfDay) return { kind: 'submitted' }
+  // ----- เคสนี้ค้างส่งเบิก ณ asOf -----
+  if (EXCLUDED_COVERAGES.has(r.coverage_code)) return { kind: 'unk' }
+  if (isDiscountCoverage(r.coverage_code)) return { kind: 'dis' }
+  const amt = r.amount ?? 0
+  const def =
+    SUMMARY_GROUPS.find((x) => !x.fallback && x.match(r.coverage_code, r.payer_id)) ??
+    SUMMARY_GROUPS.find((x) => x.fallback)
+  if (!def) return { kind: 'ungrouped', amt }
+  return { kind: 'counted', def, age: asOfDay - dc, amt, noAmount: r.amount === null }
+}
+
 export function buildSummary(rows: SummaryRow[], asOf: string): SummaryResult {
   const asOfDay = dayNum(asOf)
   const groups = SUMMARY_GROUPS.map(emptyGroup)
@@ -210,44 +241,41 @@ export function buildSummary(rows: SummaryRow[], asOf: string): SummaryResult {
   const ungroupedMap = new Map<string, { n: number; amt: number }>()
   let noAmountCount = 0
   let excludedCount = 0
+  let excludedDisCount = 0
   let dischargedCount = 0
 
-  if (asOfDay === null) return { groups, total, noAmountCount, excludedCount, ungrouped: [], dischargedCount }
+  if (asOfDay === null) return { groups, total, noAmountCount, excludedCount, excludedDisCount, ungrouped: [], dischargedCount }
 
   for (const r of rows) {
-    const dc = dayNum(r.discharge_date)
-    if (dc === null || dc > asOfDay) continue // ยังไม่จำหน่าย ณ วันนั้น
-    dischargedCount++
-
-    const sub = dayNum(r.submission_date)
-    if (sub !== null && sub <= asOfDay) continue // ส่งเบิกแล้ว ณ วันนั้น
-
-    // ----- เคสนี้ค้างส่งเบิก ณ asOf -----
-    if (EXCLUDED_COVERAGES.has(r.coverage_code)) {
+    const c = classifyRow(r, asOfDay)
+    if (c.kind === 'future') continue
+    dischargedCount++ // จำหน่ายแล้ว ณ วันนั้น (รวมที่ส่งเบิกแล้ว)
+    if (c.kind === 'submitted') continue
+    if (c.kind === 'unk') {
       excludedCount++
       continue
     }
-    const age = asOfDay - dc
-    const amt = r.amount ?? 0
-    const g =
-      groups.find((x) => !x.def.fallback && x.def.match(r.coverage_code, r.payer_id)) ??
-      groups.find((x) => x.def.fallback)
-    if (!g) {
+    if (c.kind === 'dis') {
+      excludedDisCount++
+      continue
+    }
+    if (c.kind === 'ungrouped') {
       const u = ungroupedMap.get(r.coverage_code) ?? { n: 0, amt: 0 }
       u.n++
-      u.amt += amt
+      u.amt += c.amt
       ungroupedMap.set(r.coverage_code, u)
       continue
     }
-    if (r.amount === null) noAmountCount++
+    if (c.noAmount) noAmountCount++
 
-    const bi = BUCKETS.findIndex((b) => age >= b.min && age <= b.max)
+    const g = groups.find((x) => x.def.key === c.def.key)!
+    const bi = BUCKETS.findIndex((b) => c.age >= b.min && c.age <= b.max)
     for (const target of [g, total]) {
       target.pending.n++
-      target.pending.amt += amt
+      target.pending.amt += c.amt
       if (bi >= 0) {
         target.buckets[bi].n++
-        target.buckets[bi].amt += amt
+        target.buckets[bi].amt += c.amt
       }
     }
   }
@@ -260,6 +288,7 @@ export function buildSummary(rows: SummaryRow[], asOf: string): SummaryResult {
     total,
     noAmountCount,
     excludedCount,
+    excludedDisCount,
     ungrouped: [...ungroupedMap.entries()]
       .map(([coverage_code, v]) => ({ coverage_code, ...v }))
       .sort((a, b) => b.n - a.n),

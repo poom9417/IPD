@@ -7,6 +7,8 @@ import {
   type GroupSummary,
   type SummaryRow,
 } from '../lib/arSummary'
+import { exportArSummaryToExcel } from '../lib/exportArSummary'
+import { useAuth } from '../contexts/AuthContext'
 
 const money = (n: number) => n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const count = (n: number) => n.toLocaleString('th-TH')
@@ -64,6 +66,10 @@ function GroupRow({ g, bold }: { g: GroupSummary; bold?: boolean }) {
 }
 
 export default function ArSummaryDashboard() {
+  const { role } = useAuth()
+  // viewer: ดูได้แต่ Export ไม่ได้ (นโยบายความปลอดภัยข้อมูล เหมือนหน้าหลัก)
+  const canExport = role !== 'viewer'
+  const [exporting, setExporting] = useState(false)
   const [rows, setRows] = useState<SummaryRow[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -91,6 +97,18 @@ export default function ArSummaryDashboard() {
 
   // เปลี่ยนวันที่ "ณ" แล้วคำนวณใหม่ในเครื่องทันที (ไม่ยิง DB ซ้ำ)
   const summary = useMemo(() => (rows && asOf ? buildSummary(rows, asOf) : null), [rows, asOf])
+
+  async function handleExport() {
+    if (!canExport || !asOf) return
+    setExporting(true)
+    try {
+      await exportArSummaryToExcel(asOf, { role })
+    } catch (err) {
+      alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const asOfThai = asOf
     ? new Date(asOf + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -125,6 +143,17 @@ export default function ArSummaryDashboard() {
           >
             {loading ? 'กำลังโหลด…' : 'โหลดข้อมูลใหม่'}
           </button>
+          {canExport && (
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={loading || exporting || !summary || !asOf}
+              title="ส่งออก 2 ชีต: ตารางรวม + รายการที่ค้างซึ่งนำมาคำนวณ ณ วันที่เลือก"
+              className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
+            >
+              {exporting ? 'กำลังส่งออก…' : '⬇ Export Excel'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -202,6 +231,9 @@ export default function ArSummaryDashboard() {
             </li>
             <li>
               • ไม่นับสิทธิ UNK (เงินสด / ไม่เบิก) ที่ค้างอยู่ {count(summary.excludedCount)} ราย
+            </li>
+            <li>
+              • ไม่นับสิทธิส่วนลด DIS_* ที่ค้างอยู่ {count(summary.excludedDisCount)} ราย
             </li>
             {summary.ungrouped.length > 0 && (
               <li>

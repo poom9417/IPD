@@ -13,21 +13,52 @@ const v = (x: CellValue) => (x === null || x === undefined || x === '' ? null : 
 // ตัวระบุ (encounter_id / AN) ส่งออกเป็นข้อความ เพื่อใช้ lookup กับไฟล์อื่นที่เก็บเป็นข้อความได้ทันที
 const asText = (x: CellValue) => (x === null || x === undefined || x === '' ? null : String(x))
 
-const HEADERS = [
+export const HEADERS = [
   'HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'วันเกิด', 'วันที่แอดมิท', 'เวลาแอดมิท', 'วันที่จำหน่าย', 'เวลาจำหน่าย',
   'หอผู้ป่วย', 'LOS', 'สิทธิการรักษา', 'ผู้จ่าย', 'วันที่รับเอกสาร', 'ยอดรับเอกสาร', 'วันที่Audit', 'วันที่ส่งเบิก',
   'ยอดส่งเบิก', 'claim_no', 'admission_id', 'coverage_code', 'payer_id', 'hospital_status_code', 'สถานะเคลม',
 ]
 
 // role audit: ส่งออกเฉพาะ 7 คอลัมน์นี้ (เรียงตามนี้)
-const AUDIT_HEADERS = ['HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'coverage_code', 'payer_id', 'วันที่จำหน่าย']
+export const AUDIT_HEADERS = ['HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'coverage_code', 'payer_id', 'วันที่จำหน่าย']
 
 type ExportOpts = { auditOnly?: boolean; role?: string | null }
-type ExcelNs = typeof import('exceljs')
+export type ExcelNs = typeof import('exceljs')
 
-async function loadExcelJS(): Promise<ExcelNs> {
+export async function loadExcelJS(): Promise<ExcelNs> {
   const mod = (await import('exceljs')) as ExcelNs & { default?: ExcelNs }
   return mod.Workbook ? mod : (mod.default as ExcelNs)
+}
+
+// แถวหนึ่งของ Export (ใช้ร่วมกับ Export ของโหมด Dashboard)
+export function admissionRecord(a: Admission): Record<string, string | number | null> {
+  const ct = a.case_tracking
+  return {
+    HN: asText(a.hn),
+    AN: asText(a.an),
+    encounter_id: asText(a.encounter_id),
+    ชื่อผู้ป่วย: v(a.patients?.full_name),
+    วันเกิด: v(a.patients?.birthdate),
+    วันที่แอดมิท: v(a.admit_date),
+    เวลาแอดมิท: v(a.admit_time),
+    วันที่จำหน่าย: v(a.discharge_date),
+    เวลาจำหน่าย: v(a.discharge_time),
+    หอผู้ป่วย: v(a.division_code),
+    LOS: v(a.los),
+    สิทธิการรักษา: v(a.coverage_master?.coverage_name),
+    ผู้จ่าย: v(a.payer_master?.payer_name),
+    วันที่รับเอกสาร: v(ct?.document_received_date),
+    ยอดรับเอกสาร: v(ct?.document_received_amount),
+    วันที่Audit: v(ct?.audit_date),
+    วันที่ส่งเบิก: v(ct?.submission_date),
+    ยอดส่งเบิก: v(ct?.submission_amount),
+    claim_no: v(ct?.claim_no),
+    admission_id: a.admission_id,
+    coverage_code: a.coverage_code,
+    payer_id: a.payer_id,
+    hospital_status_code: v(a.hospital_status_code),
+    สถานะเคลม: CLAIM_STAGE_LABELS[getClaimStage(a)],
+  }
 }
 
 // สร้าง workbook (แยกจากการดาวน์โหลด เพื่อให้ทดสอบได้)
@@ -37,35 +68,7 @@ export async function buildAdmissionsWorkbook(admissions: Admission[], opts: Exp
   const { Workbook } = await loadExcelJS()
   const headers = opts.auditOnly ? AUDIT_HEADERS : HEADERS
 
-  const rows: Record<string, string | number | null>[] = admissions.map((a) => {
-    const ct = a.case_tracking
-    return {
-      HN: asText(a.hn),
-      AN: asText(a.an),
-      encounter_id: asText(a.encounter_id),
-      ชื่อผู้ป่วย: v(a.patients?.full_name),
-      วันเกิด: v(a.patients?.birthdate),
-      วันที่แอดมิท: v(a.admit_date),
-      เวลาแอดมิท: v(a.admit_time),
-      วันที่จำหน่าย: v(a.discharge_date),
-      เวลาจำหน่าย: v(a.discharge_time),
-      หอผู้ป่วย: v(a.division_code),
-      LOS: v(a.los),
-      สิทธิการรักษา: v(a.coverage_master?.coverage_name),
-      ผู้จ่าย: v(a.payer_master?.payer_name),
-      วันที่รับเอกสาร: v(ct?.document_received_date),
-      ยอดรับเอกสาร: v(ct?.document_received_amount),
-      วันที่Audit: v(ct?.audit_date),
-      วันที่ส่งเบิก: v(ct?.submission_date),
-      ยอดส่งเบิก: v(ct?.submission_amount),
-      claim_no: v(ct?.claim_no),
-      admission_id: a.admission_id,
-      coverage_code: a.coverage_code,
-      payer_id: a.payer_id,
-      hospital_status_code: v(a.hospital_status_code),
-      สถานะเคลม: CLAIM_STAGE_LABELS[getClaimStage(a)],
-    }
-  })
+  const rows = admissions.map(admissionRecord)
 
   const wb = new Workbook()
   const ws = wb.addWorksheet('IPD AR Discharge')
