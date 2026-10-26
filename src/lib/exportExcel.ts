@@ -5,7 +5,10 @@ import type { Admission } from './types'
 type Row = Record<string, unknown>
 type Cell = string | number | null | undefined
 
-const v = (x: Cell) => x ?? '' // ค่าว่างเป็นช่องว่าง ส่วนเลข 0 ยังคงเป็น 0
+// ค่าว่าง/null/'' → undefined เพื่อให้ไม่เขียนเซลล์นั้นลงไฟล์ (เป็นช่องว่างจริง)
+// ห้ามคืน '' เพราะจะเขียนเป็นสตริงความยาว 0 ซึ่งทำให้ Excel บางฟังก์ชัน (เช่น Text to Columns) เด้งออก
+// เลข 0 ยังคงเป็น 0
+const v = (x: Cell) => (x === null || x === undefined || x === '' ? undefined : x)
 
 const HEADERS = [
   'HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'วันเกิด', 'วันที่แอดมิท', 'เวลาแอดมิท', 'วันที่จำหน่าย', 'เวลาจำหน่าย',
@@ -69,6 +72,7 @@ export function exportAdmissionsToExcel(
   XLSX.utils.book_append_sheet(wb, ws, 'IPD AR Discharge')
 
   const stamp = new Date().toISOString().slice(0, 10)
-  XLSX.writeFile(wb, `${fileName}-${stamp}.xlsx`)
+  // bookSST: เก็บข้อความแบบ shared strings เหมือนไฟล์ที่ Excel สร้างเอง (ค่าเริ่มต้นของ SheetJS เขียนเป็น t="str" ซึ่งไม่ใช่รูปแบบปกติ)
+  XLSX.writeFile(wb, `${fileName}-${stamp}.xlsx`, { bookSST: true })
   return { admissions: rows.length }
 }
