@@ -162,6 +162,11 @@ export function LineChart({
   const xAt = (i: number) => padL + (data.length === 1 ? innerW / 2 : (innerW * i) / (data.length - 1))
   const yAt = (v: number) => padT + innerH * (1 - v / max)
 
+  // ลดขนาดตัวหนังสือแกน X ตามระยะห่างระหว่างจุด (ป้ายเดือน/ปีจะได้ไม่ซ้อนกัน) — ปรับเฉพาะตัวหนังสือ
+  const slotW = data.length > 1 ? innerW / (data.length - 1) : innerW
+  const maxChars = Math.max(1, ...data.map((d) => d.label.length))
+  const xLabelSize = Math.max(6, Math.min(11, (slotW * 0.92) / (maxChars * 0.62)))
+
   const segs: string[] = []
   let cur = ''
   data.forEach((d, i) => {
@@ -209,7 +214,7 @@ export function LineChart({
               </text>
             </>
           )}
-          <text x={xAt(i)} y={height - 10} textAnchor="middle" fontSize="11" fill="#444">
+          <text x={xAt(i)} y={height - 10} textAnchor="middle" fontSize={xLabelSize} fill="#444">
             {d.label}
           </text>
         </g>

@@ -18,6 +18,7 @@ import {
   type TimingBasis,
 } from '../lib/claimTiming'
 
+const EMPTY_ADMISSIONS: Admission[] = []
 const FETCH_CHUNK = 1000
 const PAGE_SIZE = 50
 
@@ -27,7 +28,7 @@ async function fetchMyAdmissions(codes: string[]): Promise<Admission[]> {
   for (let from = 0; ; from += FETCH_CHUNK) {
     const { data, error } = await supabase
       .from('admissions')
-      .select('*, patients:patients_v(*), coverage_master(*), payer_master(*), case_tracking(encounter_id, document_received_date, audit_date, submission_date, claim_no, admission_id, updated_at, updated_by)')
+      .select(FULL_SELECT)
       .in('coverage_code', codes)
       .not('discharge_date', 'is', null)
       .order('discharge_date', { ascending: false })
@@ -39,6 +40,39 @@ async function fetchMyAdmissions(codes: string[]): Promise<Admission[]> {
     if (chunk.length < FETCH_CHUNK) break
   }
   return all
+}
+
+const FULL_SELECT =
+  '*, patients:patients_v(*), coverage_master(*), payer_master(*), case_tracking(encounter_id, document_received_date, audit_date, submission_date, claim_no, admission_id, updated_at, updated_by)'
+
+// ทั้งระบบ (admin/developer): เรียกฟังก์ชัน DB คำสั่งเดียว คืนข้อมูลแบบกะทัดรัด — ไม่ join/แบ่งหน้าฝั่งเว็บจึงไม่ time out
+// แต่ละแถว = [admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, document_received_date, audit_date, submission_date]
+type SysRow = [number, number, number, string, string | null, string, string, string | null, string | null, string | null, string | null]
+
+async function fetchSystemAdmissions(): Promise<Admission[]> {
+  const { data, error } = await supabase.rpc('myjob_system_rows')
+  if (error) throw error
+  return ((data ?? []) as unknown as SysRow[]).map(
+    ([admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, doc, audit, sub]) =>
+      ({
+        admission_id,
+        encounter_id,
+        an,
+        hn,
+        coverage_code,
+        payer_id,
+        discharge_date,
+        patients: { hn, full_name: full_name ?? '', birthdate: null },
+        case_tracking: { admission_id, encounter_id, document_received_date: doc, audit_date: audit, submission_date: sub },
+      }) as unknown as Admission,
+  )
+}
+
+// โหมดทั้งระบบ: ข้อมูลในตารางเป็นแบบย่อ — ตอนกดดูรายละเอียดค่อยดึงเคสเต็มทีละเคส
+async function fetchFullAdmission(admissionId: number): Promise<Admission | null> {
+  const { data, error } = await supabase.from('admissions').select(FULL_SELECT).eq('admission_id', admissionId).maybeSingle()
+  if (error) throw error
+  return (data as unknown as Admission) ?? null
 }
 
 function ymd(d: Date) {
@@ -64,7 +98,9 @@ type StatusFilter = '' | 'submitted' | 'pending'
 type SortKey = 'days' | 'discharge'
 
 export default function MyJobDashboardPage() {
-  const { session } = useAuth()
+  const { session, role } = useAuth()
+  // admin / developer เท่านั้นที่ดูทั้งระบบได้ (ตอน developer จำลอง role อื่นจะไม่เห็นปุ่ม)
+  const canSystem = role === 'admin'
   const myId = session?.user.id ?? ''
 
   const [admissions, setAdmissions] = useState<Admission[]>([])
@@ -73,6 +109,14 @@ export default function MyJobDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<Admission | null>(null)
+
+  // โหมดดูทั้งระบบ (admin/developer)
+  const [scope, setScope] = useState<'mine' | 'system'>('mine')
+  const [sysAdmissions, setSysAdmissions] = useState<Admission[] | null>(null)
+  const [allCoverages, setAllCoverages] = useState<CoverageMaster[]>([])
+  const [sysLoading, setSysLoading] = useState(false)
+  const [sysError, setSysError] = useState<string | null>(null)
+  const [opening, setOpening] = useState(false)
 
   // filters
   const [basis, setBasis] = useState<TimingBasis>('discharge')
@@ -121,13 +165,64 @@ export default function MyJobDashboardPage() {
   }, [myId])
 
   // รีเซ็ตหน้าตารางเมื่อ filter เปลี่ยน
-  useEffect(() => setPage(1), [basis, from, to, coverages, payer, status, search, sortKey])
+  useEffect(() => setPage(1), [basis, from, to, coverages, payer, status, search, sortKey, scope])
+
+  // ไม่ใช่ admin แล้ว (เช่น developer สลับไปจำลอง role อื่น) → กลับโหมดของฉัน
+  useEffect(() => {
+    if (!canSystem && scope === 'system') setScope('mine')
+  }, [canSystem, scope])
+
+  async function openSystem() {
+    setScope('system')
+    setCoverages([])
+    setPayer('')
+    if (sysAdmissions) return // เคยโหลดแล้ว ใช้ซ้ำ
+    setSysLoading(true)
+    setSysError(null)
+    try {
+      const [rows, cov] = await Promise.all([
+        fetchSystemAdmissions(),
+        supabase.from('coverage_master').select('*').order('coverage_code'),
+      ])
+      if (cov.error) throw cov.error
+      setAllCoverages((cov.data as CoverageMaster[]) ?? [])
+      setSysAdmissions(rows)
+    } catch (e) {
+      setSysError((e as { message?: string })?.message ?? 'โหลดข้อมูลทั้งระบบไม่สำเร็จ')
+    } finally {
+      setSysLoading(false)
+    }
+  }
+
+  function backToMine() {
+    setScope('mine')
+    setCoverages([])
+    setPayer('')
+  }
+
+  async function openCase(a: Admission) {
+    if (scope !== 'system') return setViewing(a)
+    setOpening(true)
+    try {
+      setViewing((await fetchFullAdmission(a.admission_id)) ?? a)
+    } catch {
+      setViewing(a)
+    } finally {
+      setOpening(false)
+    }
+  }
+
+  const isSystem = scope === 'system'
+  const activeAdmissions = isSystem ? (sysAdmissions ?? EMPTY_ADMISSIONS) : admissions
+  const coverageOptions = isSystem ? allCoverages : myCoverages
+  const busy = isSystem ? sysLoading : loading
+  const shownError = isSystem ? sysError : error
 
   const today = useMemo(() => todayDayNumber(), [])
 
   // เคสหลังกรอง (ยังไม่แยกตามสถานะ เพื่อให้ KPI/กราฟเห็นภาพรวมครบ — ตารางจึงค่อยกรองสถานะทีหลัง)
   const filtered = useMemo(() => {
-    return admissions.filter((a) => {
+    return activeAdmissions.filter((a) => {
       if (coverages.length > 0 && !coverages.includes(a.coverage_code)) return false
       if (payer && a.payer_id !== payer) return false
       const d = a.discharge_date?.slice(0, 10) ?? ''
@@ -135,7 +230,7 @@ export default function MyJobDashboardPage() {
       if (to && d > to) return false
       return true
     })
-  }, [admissions, coverages, payer, from, to])
+  }, [activeAdmissions, coverages, payer, from, to])
 
   const timings = useMemo(() => filtered.map((a) => computeTiming(a, basis, today)), [filtered, basis, today])
 
@@ -173,22 +268,34 @@ export default function MyJobDashboardPage() {
       .map(([k, v]) => ({ label: monthLabel(k), value: mean(v), count: v.length }))
   }, [timings])
 
+  // เฉลี่ยรายสิทธิ — ทุกสิทธิที่มีเคส (หรือที่ฉันดูแล) เรียงค่าเฉลี่ยมาก → น้อย แล้วแบ่งซ้าย/ขวา (ขวาได้มากกว่าถ้าเป็นเลขคี่)
   const byCoverage = useMemo(() => {
     const m = new Map<string, number[]>()
+    const codes = new Set<string>(coverages.length ? coverages : isSystem ? [] : myCoverages.map((c) => c.coverage_code))
     for (const t of timings) {
+      const code = t.admission.coverage_code
+      if (!coverages.length || coverages.includes(code)) codes.add(code)
       if (!t.submitted || t.days === null) continue
-      m.set(t.admission.coverage_code, [...(m.get(t.admission.coverage_code) ?? []), t.days])
+      m.set(code, [...(m.get(code) ?? []), t.days])
     }
-    return [...m.entries()]
-      .sort(([, a], [, b]) => b.length - a.length)
-      .slice(0, 10)
-      .map(([code, v]) => ({
-        label: code,
-        value: mean(v) ?? 0,
-        hint: `${code} ${myCoverages.find((c) => c.coverage_code === code)?.coverage_name ?? ''} — เฉลี่ย ${fmt1(mean(v))} วัน (${v.length} เคส)`,
-      }))
-      .sort((a, b) => b.value - a.value)
-  }, [timings, myCoverages])
+    return [...codes]
+      .map((code) => {
+        const v = m.get(code) ?? []
+        const name = coverageOptions.find((c) => c.coverage_code === code)?.coverage_name ?? ''
+        return {
+          label: code,
+          value: mean(v) ?? 0,
+          hint: v.length
+            ? `${code} ${name} — เฉลี่ย ${fmt1(mean(v))} วัน (${v.length} เคส)`
+            : `${code} ${name} — ยังไม่มีเคสส่งเบิก`,
+        }
+      })
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label))
+  }, [timings, coverages, coverageOptions, myCoverages, isSystem])
+
+  const covSplit = Math.floor(byCoverage.length / 2)
+  const covLeft = byCoverage.slice(0, covSplit)
+  const covRight = byCoverage.slice(covSplit)
 
   const stages = useMemo(() => {
     const pick = (f: (t: CaseTiming) => number | null) => mean(timings.map(f).filter((x): x is number => x !== null))
@@ -264,9 +371,25 @@ export default function MyJobDashboardPage() {
       <div>
         <h1 className="text-xl font-bold text-ink">My job — Dashboard ระยะเวลาส่งเบิก</h1>
         <p className="mt-1 text-sm text-ink/70">
-          คำนวณจากเคสของสิทธิที่คุณดูแล (เลือกสิทธิที่หน้า My claim) เฉพาะเคสที่จำหน่ายแล้ว ·
+          {isSystem ? 'คำนวณจากเคสของทุกสิทธิทั้งระบบ' : 'คำนวณจากเคสของสิทธิที่คุณดูแล (เลือกสิทธิที่หน้า My claim)'} เฉพาะเคสที่จำหน่ายแล้ว ·
           เคสที่ยังไม่ส่งเบิกจะนับอายุถึงวันนี้
         </p>
+        {canSystem && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {isSystem ? (
+              <>
+                <span className="rounded-full bg-brand px-3 py-1 text-sm font-semibold text-ink">กำลังดูข้อมูลทั้งระบบ</span>
+                <button type="button" onClick={backToMine} className={chipCls}>
+                  กลับไปดูเฉพาะสิทธิของฉัน
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={openSystem} className={chipCls + ' font-semibold'}>
+                ดูรายละเอียดทั้งระบบ
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ---------- Filters ---------- */}
@@ -295,8 +418,8 @@ export default function MyJobDashboardPage() {
           </label>
 
           <div className="text-sm text-ink/70">
-            <div className="mb-1">สิทธิ (เฉพาะที่ฉันดูแล)</div>
-            <CoverageMultiSelect options={myCoverages} value={coverages} onChange={setCoverages} />
+            <div className="mb-1">{isSystem ? 'สิทธิ (ทั้งระบบ)' : 'สิทธิ (เฉพาะที่ฉันดูแล)'}</div>
+            <CoverageMultiSelect options={coverageOptions} value={coverages} onChange={setCoverages} />
           </div>
 
           <label className="text-sm text-ink/70">
@@ -344,11 +467,13 @@ export default function MyJobDashboardPage() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-rose">{error}</p>}
+      {shownError && <p className="text-sm text-rose">{shownError}</p>}
 
-      {loading ? (
-        <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
-      ) : myCoverages.length === 0 ? (
+      {busy ? (
+        <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">
+          {isSystem ? 'กำลังโหลดข้อมูลทั้งระบบ…' : 'กำลังโหลดข้อมูล…'}
+        </div>
+      ) : !isSystem && myCoverages.length === 0 ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/70">
           คุณยังไม่ได้เลือกสิทธิที่ดูแล — ไปที่ <span className="font-semibold">Menu → My job → My claim</span> เพื่อเลือกสิทธิก่อน
         </div>
@@ -403,8 +528,20 @@ export default function MyJobDashboardPage() {
             </ChartCard>
 
             <div className="lg:col-span-2">
-              <ChartCard title="เฉลี่ยรายสิทธิ" note="10 สิทธิที่มีเคสส่งเบิกมากที่สุด (วางเมาส์เพื่อดูชื่อสิทธิและจำนวนเคส)">
-                {byCoverage.length ? <HBarChart data={byCoverage} /> : <EmptyChart />}
+              <ChartCard
+                title="เฉลี่ยรายสิทธิ"
+                note={`ทุกสิทธิ ${byCoverage.length.toLocaleString()} สิทธิ เรียงจากเฉลี่ยมาก → น้อย (วางเมาส์เพื่อดูชื่อสิทธิและจำนวนเคส · เลื่อนลงเพื่อดูที่เหลือ)`}
+              >
+                {byCoverage.length ? (
+                  <div className="overflow-y-auto" style={{ aspectRatio: '480 / 304' }}>
+                    <div className="grid grid-cols-1 items-start gap-x-6 sm:grid-cols-2">
+                      <HBarChart data={covLeft} />
+                      <HBarChart data={covRight} />
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyChart />
+                )}
               </ChartCard>
             </div>
           </div>
@@ -454,7 +591,7 @@ export default function MyJobDashboardPage() {
                     return (
                       <tr
                         key={a.admission_id}
-                        onClick={() => setViewing(a)}
+                        onClick={() => void openCase(a)}
                         className="cursor-pointer border-b border-line last:border-0 hover:bg-paper"
                       >
                         <td className="px-3 py-2.5">
@@ -520,6 +657,7 @@ export default function MyJobDashboardPage() {
         </>
       )}
 
+      {opening && <div className="fixed bottom-4 right-4 rounded-lg bg-ink px-3 py-2 text-sm text-white">กำลังเปิดเคส…</div>}
       {viewing && <CaseDetailModal admission={viewing} onClose={() => setViewing(null)} />}
     </main>
   )
