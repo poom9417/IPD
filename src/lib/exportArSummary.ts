@@ -1,12 +1,13 @@
-import { BUCKETS, SUMMARY_GROUPS, buildSummary, classifyRow, type GroupSummary, type SummaryRow } from './arSummary'
+import { BUCKETS, SUMMARY_GROUPS, buildSummary, classifyRow, fetchSummaryRows, type GroupSummary, type SummaryRow } from './arSummary'
 import { admissionRecord, HEADERS, loadExcelJS } from './exportExcel'
-import { fetchAllMatching } from './searchAdmissions'
+import { supabase } from './supabaseClient'
 import type { Admission } from './types'
 
 // Export ของโหมด Dashboard (สรุปค้างส่งเบิกรวมทุกสิทธิ) → ไฟล์ .xlsx 2 ชีต
 //   1) "ตารางรวม"        = ตารางเดียวกับที่เห็นบนเว็บ ณ วันที่เลือก
 //   2) "รายการที่ค้าง"   = เคสที่ถูกนำมานับในตารางนั้น (หัวคอลัมน์เหมือน Export หน้าหลัก + "กลุ่มสิทธิ" เป็นคอลัมน์แรก)
-// ดึงข้อมูลสดครั้งเดียวแล้วสร้างทั้งสองชีตจากชุดเดียวกัน → ตัวเลขในชีต 1 รวมจากแถวในชีต 2 ตรงกันเสมอ
+// ชีต 1 ใช้ ar_summary_rows (ชุดเดียวกับตารางบนเว็บ) ส่วนชีต 2 ใช้ ar_pending_admissions ที่ดึงเฉพาะเคสที่อาจค้าง ณ วันนั้น
+// (ไม่ดึงทั้งตาราง → เร็วและไม่ชนเวลา query ของฐานข้อมูล) และจัดกลุ่มด้วย classifyRow ตัวเดียวกับตาราง
 
 const GROUP_HEADER = 'กลุ่มสิทธิ'
 const NUM_FMT_N = '#,##0;-#,##0;"–"'
@@ -32,12 +33,14 @@ export async function exportArSummaryToExcel(asOf: string, opts: { role?: string
   if (opts.role === 'viewer') throw new Error('role ผู้ดูข้อมูล (viewer) ไม่มีสิทธิ์ Export')
   if (!asOf) throw new Error('เลือกวันที่ก่อน')
 
-  // เคสที่จำหน่ายถึงวันที่เลือกเท่านั้นที่อาจค้าง ณ วันนั้น
-  const admissions = await fetchAllMatching({
-    search: '', division: '', from: '', to: asOf, coverages: [], payer: '', stage: '', pairs: null,
-  })
+  const [summaryRows, pendingRes] = await Promise.all([
+    fetchSummaryRows(),
+    supabase.rpc('ar_pending_admissions', { p_asof: asOf }),
+  ])
+  if (pendingRes.error) throw pendingRes.error
+  const admissions = (pendingRes.data ?? []) as unknown as Admission[]
   const rows = admissions.map(asSummaryRow)
-  const summary = buildSummary(rows, asOf)
+  const summary = buildSummary(summaryRows, asOf)
 
   // รายการที่ถูกนับในตาราง (ใช้ classifyRow ตัวเดียวกับ buildSummary)
   const asOfDay = Date.UTC(+asOf.slice(0, 4), +asOf.slice(5, 7) - 1, +asOf.slice(8, 10)) / 86_400_000

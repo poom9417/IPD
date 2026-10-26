@@ -58,15 +58,40 @@ export async function searchAdmissions(
 
 const EXPORT_CHUNK = 1000
 
-// ดึงทุกแถวที่ตรงตัวกรอง (ใช้ตอน Export) — ก้อนแรกบอกจำนวนรวม ที่เหลือดึงขนานกัน
+// ดึงทุกแถวที่ตรงตัวกรอง (ใช้ตอน Export)
+// เดิมยิงหลายก้อนขนานด้วย offset ผ่าน search_admissions (ทุกก้อนต้องกรอง/นับทั้งตารางซ้ำ) → บางครั้งเกินเวลา query ของฐานข้อมูล
+// ตอนนี้ใช้ export_admissions ดึงทีละก้อนตามลำดับ admission_id (keyset: ก้อนถัดไปเริ่มหลัง id สุดท้าย) ทีละคำสั่ง
+// แล้วเรียงกลับเป็นลำดับเดียวกับหน้าจอ (วันจำหน่ายใหม่ → เก่า)
 export async function fetchAllMatching(f: AdmissionFilters): Promise<Admission[]> {
-  const first = await searchAdmissions(f, EXPORT_CHUNK, 0, false)
-  const rows = [...first.rows]
-  const offsets: number[] = []
-  for (let o = EXPORT_CHUNK; o < first.total; o += EXPORT_CHUNK) offsets.push(o)
-  const rest = await Promise.all(offsets.map((o) => searchAdmissions(f, EXPORT_CHUNK, o, false)))
-  for (const r of rest) rows.push(...r.rows)
-  return rows
+  const rows: Admission[] = []
+  let after = 0
+  for (;;) {
+    const { data, error } = await supabase.rpc('export_admissions', {
+      p_search: f.search || null,
+      p_division: f.division || null,
+      p_from: f.from || null,
+      p_to: f.to || null,
+      p_coverages: f.coverages.length ? f.coverages : null,
+      p_payer: f.payer || null,
+      p_stage: f.stage || null,
+      p_pairs: f.pairs,
+      p_after: after,
+      p_limit: EXPORT_CHUNK,
+    })
+    if (error) throw error
+    const part = (data ?? []) as unknown as Admission[]
+    rows.push(...part)
+    if (part.length < EXPORT_CHUNK) break
+    after = part[part.length - 1].admission_id
+  }
+  // ลำดับเดียวกับ search_admissions: วันจำหน่าย ↓ → เวลาจำหน่าย ↓ → admission_id ↓ (ค่าว่างไว้ท้าย)
+  const cmpDesc = (x: string | null, y: string | null) => (x === y ? 0 : x === null ? 1 : y === null ? -1 : x < y ? 1 : -1)
+  return rows.sort(
+    (x, y) =>
+      cmpDesc(x.discharge_date, y.discharge_date) ||
+      cmpDesc(x.discharge_time, y.discharge_time) ||
+      y.admission_id - x.admission_id,
+  )
 }
 
 // รายการแบบเบา (admission_id, encounter_id, payer_id) ไว้จับคู่ไฟล์อัพโหลดสถานะเคลม — ดึงตอนเปิดหน้าอัพโหลดเท่านั้น
