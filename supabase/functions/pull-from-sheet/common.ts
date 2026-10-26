@@ -25,7 +25,8 @@ export function json(body: unknown, status = 200): Response {
 export function errorResponse(e: unknown): Response {
   if (e instanceof HttpError) return json({ ok: false, error: e.message }, e.status)
   console.error(e)
-  return json({ ok: false, error: `เกิดข้อผิดพลาดภายใน: ${e instanceof Error ? e.message : String(e)}` }, 500)
+  // ไม่ส่งรายละเอียดข้อผิดพลาดภายในกลับไปที่เบราว์เซอร์ (รายละเอียดอยู่ใน log ของ Edge Function)
+  return json({ ok: false, error: 'เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่ หรือแจ้งผู้ดูแล' }, 500)
 }
 
 export interface Caller {
@@ -43,9 +44,16 @@ export async function requireAdmin(req: Request): Promise<Caller> {
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   const { data: u, error } = await admin.auth.getUser(token)
   if (error || !u?.user) throw new HttpError(401, 'เข้าสู่ระบบหมดอายุ — รีเฟรชหน้าแล้วลองใหม่')
-  const { data: row, error: rErr } = await admin.from('app_users').select('role,email').eq('id', u.user.id).maybeSingle()
-  if (rErr) throw new HttpError(500, `ตรวจสิทธิ์ผู้ใช้ไม่สำเร็จ: ${rErr.message}`)
-  if (!row || !['admin', 'developer'].includes(row.role)) throw new HttpError(403, 'ทำได้เฉพาะ admin / developer')
+  const { data: row, error: rErr } = await admin
+    .from('app_users')
+    .select('role,email,approval_status')
+    .eq('id', u.user.id)
+    .maybeSingle()
+  if (rErr) throw new HttpError(500, 'ตรวจสิทธิ์ผู้ใช้ไม่สำเร็จ')
+  // ต้องเป็น admin / developer และได้รับอนุมัติแล้วเท่านั้น (บัญชีที่ถูกปฏิเสธ/รออนุมัติเรียกไม่ได้)
+  if (!row || row.approval_status !== 'approved' || !['admin', 'developer'].includes(row.role)) {
+    throw new HttpError(403, 'ทำได้เฉพาะ admin / developer')
+  }
   return { admin, email: (row.email as string | null) ?? u.user.email ?? '' }
 }
 
