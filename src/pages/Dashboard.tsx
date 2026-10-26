@@ -190,7 +190,7 @@ export default function Dashboard() {
     setExporting(true)
     try {
       const rows = await fetchAllMatching({ ...filters, search: search.trim() })
-      exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit, role })
+      await exportAdmissionsToExcel(rows, 'ipd-ar-discharge', { auditOnly: isAudit, role })
     } catch (err) {
       alert(`Export ไม่สำเร็จ: ${(err as { message?: string })?.message ?? err}`)
     } finally {

@@ -1,14 +1,17 @@
-import * as XLSX from 'xlsx'
 import { getClaimStage, CLAIM_STAGE_LABELS } from './claimStatus'
 import type { Admission } from './types'
 
-type Row = Record<string, unknown>
-type Cell = string | number | null | undefined
+// สร้างไฟล์ด้วย ExcelJS (ไม่ใช่ SheetJS): SheetJS เขียน styles.xml/metadata.xml แบบที่ทำให้ Excel บางเครื่อง
+// เด้งออกตอนใช้ Data > Text to Columns ทั้งคอลัมน์ — ExcelJS เขียนโครงสร้างเหมือนที่ Excel สร้างเอง จึงใช้ได้ปกติ
+// (โหลดแบบ dynamic import เพราะไลบรารีค่อนข้างใหญ่ ใช้เฉพาะตอนกดปุ่ม Export)
 
-// ค่าว่าง/null/'' → undefined เพื่อให้ไม่เขียนเซลล์นั้นลงไฟล์ (เป็นช่องว่างจริง)
-// ห้ามคืน '' เพราะจะเขียนเป็นสตริงความยาว 0 ซึ่งทำให้ Excel บางฟังก์ชัน (เช่น Text to Columns) เด้งออก
-// เลข 0 ยังคงเป็น 0
-const v = (x: Cell) => (x === null || x === undefined || x === '' ? undefined : x)
+type CellValue = string | number | null | undefined
+
+// ค่าว่าง/null/'' → null เพื่อให้เซลล์นั้นว่างจริง (ไม่ใช่สตริงความยาว 0) ส่วนเลข 0 ยังคงเป็น 0
+const v = (x: CellValue) => (x === null || x === undefined || x === '' ? null : x)
+
+// ตัวระบุ (encounter_id / AN) ส่งออกเป็นข้อความ เพื่อใช้ lookup กับไฟล์อื่นที่เก็บเป็นข้อความได้ทันที
+const asText = (x: CellValue) => (x === null || x === undefined || x === '' ? null : String(x))
 
 const HEADERS = [
   'HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'วันเกิด', 'วันที่แอดมิท', 'เวลาแอดมิท', 'วันที่จำหน่าย', 'เวลาจำหน่าย',
@@ -19,22 +22,27 @@ const HEADERS = [
 // role audit: ส่งออกเฉพาะ 7 คอลัมน์นี้ (เรียงตามนี้)
 const AUDIT_HEADERS = ['HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'coverage_code', 'payer_id', 'วันที่จำหน่าย']
 
-// ส่งออกเฉพาะรายการที่ส่งเข้ามา (Dashboard ส่ง `filtered` = ตามตัวกรองบนหน้าจอ; ถ้าไม่ได้กรองอะไรก็คือทั้งหมด)
-// เรียงตามลำดับเดียวกับที่เห็นบนหน้าจอ
-export function exportAdmissionsToExcel(
-  admissions: Admission[],
-  fileName = 'ipd-ar-discharge',
-  opts: { auditOnly?: boolean; role?: string | null } = {},
-): { admissions: number } {
+type ExportOpts = { auditOnly?: boolean; role?: string | null }
+type ExcelNs = typeof import('exceljs')
+
+async function loadExcelJS(): Promise<ExcelNs> {
+  const mod = (await import('exceljs')) as ExcelNs & { default?: ExcelNs }
+  return mod.Workbook ? mod : (mod.default as ExcelNs)
+}
+
+// สร้าง workbook (แยกจากการดาวน์โหลด เพื่อให้ทดสอบได้)
+export async function buildAdmissionsWorkbook(admissions: Admission[], opts: ExportOpts = {}) {
   // viewer ห้ามส่งออกข้อมูล (กันไว้อีกชั้นนอกเหนือจากการซ่อนปุ่มที่หน้าจอ)
   if (opts.role === 'viewer') throw new Error('role ผู้ดูข้อมูล (viewer) ไม่มีสิทธิ์ Export')
+  const { Workbook } = await loadExcelJS()
   const headers = opts.auditOnly ? AUDIT_HEADERS : HEADERS
-  const rows: Row[] = admissions.map((a) => {
+
+  const rows: Record<string, string | number | null>[] = admissions.map((a) => {
     const ct = a.case_tracking
     return {
-      HN: a.hn,
-      AN: a.an,
-      encounter_id: a.encounter_id,
+      HN: asText(a.hn),
+      AN: asText(a.an),
+      encounter_id: asText(a.encounter_id),
       ชื่อผู้ป่วย: v(a.patients?.full_name),
       วันเกิด: v(a.patients?.birthdate),
       วันที่แอดมิท: v(a.admit_date),
@@ -59,20 +67,41 @@ export function exportAdmissionsToExcel(
     }
   })
 
-  // json_to_sheet จะต่อคีย์ที่ไม่อยู่ใน header ท้ายตารางเอง → ตัดให้เหลือเฉพาะคอลัมน์ที่ต้องการก่อน
-  const outRows = rows.map((r) => Object.fromEntries(headers.map((h) => [h, r[h]])))
-  const ws = XLSX.utils.json_to_sheet(outRows, { header: headers })
-  ws['!cols'] = headers.map((h) => {
+  const wb = new Workbook()
+  const ws = wb.addWorksheet('IPD AR Discharge')
+  ws.addRow(headers)
+  for (const r of rows) ws.addRow(headers.map((h) => r[h] ?? null))
+
+  headers.forEach((h, i) => {
     const longest = rows.reduce((m, r) => Math.max(m, String(r[h] ?? '').length), h.length)
-    return { wch: Math.min(Math.max(longest + 2, 10), 60) }
+    ws.getColumn(i + 1).width = Math.min(Math.max(longest + 2, 10), 60)
   })
-  if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] }
+  if (rows.length > 0) {
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: rows.length + 1, column: headers.length } }
+  }
+  return { wb, count: rows.length }
+}
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'IPD AR Discharge')
-
+// ส่งออกเฉพาะรายการที่ส่งเข้ามา (Dashboard ส่ง `filtered` = ตามตัวกรองบนหน้าจอ; ถ้าไม่ได้กรองอะไรก็คือทั้งหมด)
+// เรียงตามลำดับเดียวกับที่เห็นบนหน้าจอ
+export async function exportAdmissionsToExcel(
+  admissions: Admission[],
+  fileName = 'ipd-ar-discharge',
+  opts: ExportOpts = {},
+): Promise<{ admissions: number }> {
+  const { wb, count } = await buildAdmissionsWorkbook(admissions, opts)
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
   const stamp = new Date().toISOString().slice(0, 10)
-  // bookSST: เก็บข้อความแบบ shared strings เหมือนไฟล์ที่ Excel สร้างเอง (ค่าเริ่มต้นของ SheetJS เขียนเป็น t="str" ซึ่งไม่ใช่รูปแบบปกติ)
-  XLSX.writeFile(wb, `${fileName}-${stamp}.xlsx`, { bookSST: true })
-  return { admissions: rows.length }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${fileName}-${stamp}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return { admissions: count }
 }
