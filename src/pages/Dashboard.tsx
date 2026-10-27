@@ -112,16 +112,17 @@ export default function Dashboard() {
   }, [search])
 
   // สิทธิที่ฉันดูแล (จากหน้า My job) ใช้กับปุ่มกรอง "เฉพาะสิทธิของฉัน"
+  const sessionUid = session?.user.id ?? null
   useEffect(() => {
-    if (!session) return
+    if (!sessionUid) return
     supabase
       .from('coverage_assignments')
       .select('coverage_code, payer_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', sessionUid)
       .then(({ data }) =>
         setMyPairs(new Set((data ?? []).map((r) => pairKey(r.coverage_code as string, r.payer_id as string)))),
       )
-  }, [session, pairsTick])
+  }, [sessionUid, pairsTick])
 
 
   // กดปุ่ม "รับเอกสาร" + กรอกยอด → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) และยอดรับเอกสารลง case_tracking

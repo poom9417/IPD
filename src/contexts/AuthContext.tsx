@@ -56,25 +56,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s)
+      // Supabase ยิง event (SIGNED_IN / TOKEN_REFRESHED) ทุกครั้งที่กลับมาที่แท็บ พร้อม session ก้อนใหม่
+      // ถ้าเป็นผู้ใช้คนเดิม ให้ใช้ค่าเดิมต่อ (อัปเดตเฉพาะตอน token เปลี่ยน) จะได้ไม่ทำให้ทั้งแอปโหลดใหม่
+      setSession((prev) => {
+        if (prev && s && prev.user.id === s.user.id) {
+          return prev.access_token === s.access_token ? prev : s
+        }
+        return s
+      })
     })
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  // ใช้ id ผู้ใช้เป็นตัวกระตุ้นแทนก้อน session ทั้งก้อน — การต่ออายุ token ไม่ทำให้โหลดสิทธิ์ซ้ำ/จอโหลดกะพริบ
+  // (ถ้าสลับบัญชีหรือออกจากระบบ uid เปลี่ยน → ตรวจสิทธิ์ใหม่ทุกครั้งตามเดิม)
+  const uid = session?.user.id ?? null
+
   useEffect(() => {
-    if (!session) {
+    if (!uid) {
       setRealRole(null)
       setViewAsState(null)
       setOnboarding('unknown')
       setApproval(null)
       return
     }
-    const uid = session.user.id
+    let cancelled = false
     setRoleLoading(true)
     type Row = { role: string; onboarded_at?: string | null; tour_version?: number | null }
     ;(async () => {
       // ตรวจสถานะอนุมัติก่อน — ถ้ายังไม่อนุมัติ ไม่ต้องโหลดอย่างอื่น
       const ap = await supabase.from('app_users').select('approval_status').eq('id', uid).maybeSingle()
+      if (cancelled) return
       // อ่านสถานะไม่ได้ (error) → ถือว่ายังไม่อนุมัติ (fail-closed) เพื่อความปลอดภัยของข้อมูลผู้ป่วย
       const status: ApprovalStatus = ap.error
         ? 'pending'
@@ -96,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         row = (basic.data as Row | null) ?? null
         legacy = true
       }
+      if (cancelled) return
       setRealRole((row?.role as AppRole) ?? null)
       // คืนโหมดจำลองที่ค้างไว้ในแท็บนี้ (ใช้ได้เฉพาะ developer — ตรวจซ้ำตอนคำนวณ role ด้านล่าง)
       try {
@@ -119,12 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setRoleLoading(false)
     })()
-  }, [session])
+    return () => {
+      cancelled = true
+    }
+  }, [uid])
 
   // ระหว่างรออนุมัติ: เช็กสถานะซ้ำทุก 15 วินาที พออนุมัติแล้วเข้าได้เองโดยไม่ต้องล็อกอินใหม่
   useEffect(() => {
-    if (!session || approval === null || approval === 'approved') return
-    const uid = session.user.id
+    if (!uid || approval === null || approval === 'approved') return
     const t = setInterval(async () => {
       const { data } = await supabase.from('app_users').select('approval_status').eq('id', uid).maybeSingle()
       const next = (data as { approval_status?: ApprovalStatus } | null)?.approval_status
@@ -136,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 15000)
     return () => clearInterval(t)
-  }, [session, approval])
+  }, [uid, approval])
 
   // จำลอง role ได้เฉพาะ developer เท่านั้น (เป็นการจำลองฝั่งหน้าจอ — ไม่แตะ role จริงใน DB)
   const isDeveloper = realRole === 'developer'
