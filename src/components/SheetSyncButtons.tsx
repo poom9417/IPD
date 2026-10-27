@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { fetchSyncState, fmtDateTime, type PushStatus, type SyncState } from '../lib/sheetSync'
+import { fetchSyncState, fmtDateTime, type PushMode, type PushStatus, type SyncState } from '../lib/sheetSync'
 import SheetAuditPull from './SheetAuditPull'
 
 interface Props {
   status: PushStatus
-  onPush: () => void
+  /** mode = 'rebuild' → ล้างแล้วเขียนชีตใหม่ทั้งหมด (ใช้ซ่อม) */
+  onPush: (mode?: PushMode) => void
   /** เรียกหลังดึงวัน Audit เข้าระบบสำเร็จ (ให้หน้าหลักโหลดข้อมูลใหม่) */
   onPulled: () => void
 }
@@ -43,9 +44,9 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
         <div className="flex gap-2">
           <button
             data-tour="sheet-push"
-            onClick={onPush}
+            onClick={() => onPush()}
             disabled={running}
-            title="ส่งเคสทั้งหมดในระบบไปวางทับที่แท็บ ทะเบียนคุมเอกสารสิทธิ 70 (ระบบเป็นต้นฉบับ)"
+            title="ส่งเคสใหม่ไปวางต่อท้าย และแก้แถวเดิมที่ข้อมูลเปลี่ยน ในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 (ไม่เรียง/ไม่ย้ายแถวเดิม)"
             className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-brand-soft disabled:opacity-40"
           >
             {running ? 'กำลังส่ง…' : '⬆ ส่งไป Google Sheet'}
@@ -59,6 +60,15 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
             ⬇ ดึง Audit จาก Sheet
           </button>
         </div>
+        <button
+          onClick={() => {
+            if (window.confirm('สร้างชีตใหม่ทั้งหมด?\n\nระบบจะล้างข้อมูลในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 แล้วเขียนใหม่ทั้งหมดจากระบบ (สีแดงที่ทำไว้จะหาย) ใช้เมื่อชีตผิดเพี้ยนเท่านั้น')) onPush('rebuild')
+          }}
+          disabled={running}
+          className="text-xs text-ink/40 underline hover:text-ink disabled:opacity-40"
+        >
+          ซ่อม: สร้างชีตใหม่ทั้งหมด
+        </button>
         {(pushLine || pullLine) && (
           <span className={`text-xs ${status.phase === 'error' ? 'text-rose' : 'text-ink/50'}`}>
             {[pushLine, status.phase === 'error' ? '' : pullLine].filter(Boolean).join(' · ')}

@@ -1,10 +1,13 @@
 // ส่งข้อมูลเคส (จำหน่ายตั้งแต่ 1 ต.ค. 2026 ไม่ใช่สิทธิ UNK และไม่ใช่สิทธิ DIS...) จากระบบ → แท็บ "ทะเบียนคุมเอกสารสิทธิ 70" ใน Google Sheet
-// วิธีทำงาน: วางทับทั้งหมด (แถวหัวคงเดิม) เรียงวันจำหน่ายใหม่สุดอยู่บน — ระบบเป็นต้นฉบับ ชีตเป็นสำเนา
-// เรียกซ้ำกี่ครั้งผลก็เหมือนเดิม (idempotent)
+// วิธีทำงาน: เทียบด้วยรหัสแถว (admission_id ในคอลัมน์ H ที่ซ่อนไว้) — เคสใหม่วางต่อท้าย, เคสเดิมที่ข้อมูลเปลี่ยนแก้แถวเดิม,
+// เคสที่ไม่เข้าเงื่อนไขแล้วทำสีแดง (ไม่ลบ/ไม่ขยับแถว) — ไม่เรียงลำดับ ระบบเป็นต้นฉบับ ชีตเป็นสำเนา
+// เรียกซ้ำกี่ครั้งผลก็เหมือนเดิม (idempotent) | mode 'rebuild' = ล้างแล้วเขียนใหม่ทั้งหมด (ใช้ซ่อม/ครั้งแรก)
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders, errorResponse, HttpError, json, requireAdmin, saveState } from './common.ts'
+import { buildPlan, parseSheetRows, type Elig } from './plan.ts'
 import {
   batchUpdate,
+  batchUpdateValues,
   clearValues,
   findTab,
   getAccessToken,
@@ -18,6 +21,8 @@ import {
 
 const DATA_TAB = 'ทะเบียนคุมเอกสารสิทธิ 70'
 const HEADERS = ['HN', 'AN', 'encounter_id', 'name', 'สิทธิ', 'payer', 'discharge_date']
+const HELPER_HEADERS = ['admission_id', 'status'] // คอลัมน์ H, I (ซ่อน)
+const RED = { red: 0.96, green: 0.8, blue: 0.8 }
 const PAGE = 1000
 // ระบบนี้ใกล้เลิกใช้: ส่งเฉพาะเคสที่จำหน่ายตั้งแต่วันนี้เป็นต้นไป (ปรับวันได้ที่นี่) ไม่ส่งเคสสิทธิ UNK และสิทธิที่ขึ้นต้นด้วย DIS
 const MIN_DISCHARGE_DATE = '2026-10-01'
@@ -51,8 +56,10 @@ Deno.serve(async (req) => {
   try {
     caller = await requireAdmin(req)
     const { admin, email } = caller
+    const reqBody = (await req.json().catch(() => ({}))) as { mode?: string }
+    const forceRebuild = reqBody?.mode === 'rebuild'
 
-    // 1) ดึงทุกเคสจาก DB (แบ่งหน้าละ 1000) เรียงวันจำหน่ายใหม่สุดก่อน ที่ยังไม่มีวันจำหน่ายไว้ท้าย
+    // 1) ดึงเคสที่เข้าเงื่อนไขจาก DB (แบ่งหน้าละ 1000) เรียงตามรหัสแถว
     const byId = new Map<number, Row>()
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await admin
@@ -61,26 +68,26 @@ Deno.serve(async (req) => {
         .gte('discharge_date', MIN_DISCHARGE_DATE) // ตัดเคสที่ยังไม่จำหน่าย (วันที่ว่าง) และเคสก่อนวันที่กำหนด
         .neq('coverage_code', 'UNK')
         .not('coverage_code', 'ilike', 'DIS%') // สิทธิส่วนลด/ส่วนเกิน (DIS_...) ไม่ต้องส่งให้ Audit
-        .order('discharge_date', { ascending: false, nullsFirst: false })
-        .order('admission_id', { ascending: false })
+        .order('admission_id', { ascending: true })
         .range(from, from + PAGE - 1)
       if (error) throw new HttpError(500, `อ่านข้อมูลเคสไม่สำเร็จ: ${error.message}`)
       const rows = (data ?? []) as unknown as Row[]
       for (const r of rows) byId.set(r.admission_id, r)
       if (rows.length < PAGE) break
     }
-    const rows = [...byId.values()]
-    const n = rows.length
-
-    const values: unknown[][] = rows.map((r) => [
-      r.hn,
-      r.an,
-      r.encounter_id,
-      patientName(r.patients),
-      sheetCoverage(r.coverage_code),
-      /^\d+$/.test(r.payer_id) ? Number(r.payer_id) : r.payer_id, // payer เป็นเลข (เช่น 50257) ส่วน UNK เป็นข้อความ
-      r.discharge_date ? isoToSerial(r.discharge_date) : '',
-    ])
+    const elig: Elig[] = [...byId.values()].map((r) => ({
+      key: r.admission_id,
+      values: [
+        r.hn,
+        r.an,
+        r.encounter_id,
+        patientName(r.patients),
+        sheetCoverage(r.coverage_code),
+        /^\d+$/.test(r.payer_id) ? Number(r.payer_id) : r.payer_id, // payer เป็นเลข (เช่น 50257) ส่วน UNK เป็นข้อความ
+        r.discharge_date ? isoToSerial(r.discharge_date) : '',
+      ],
+    }))
+    const n = elig.length
 
     // 2) เตรียมชีต: หาแท็บ + ตรวจหัวคอลัมน์ก่อนแตะข้อมูล
     const sa = loadServiceAccount()
@@ -88,7 +95,8 @@ Deno.serve(async (req) => {
     const token = await getAccessToken(sa)
     const tab = findTab(await listTabs(token, sid), DATA_TAB)
 
-    const head = (await getValues(token, sid, DATA_TAB, 'A1:G1'))[0] ?? []
+    const all = await getValues(token, sid, DATA_TAB, 'A1:I')
+    const head = all[0] ?? []
     const headEmpty = head.every((c) => String(c ?? '').trim() === '')
     if (!headEmpty) {
       const got = HEADERS.map((_, i) => String(head[i] ?? '').trim())
@@ -100,33 +108,91 @@ Deno.serve(async (req) => {
         )
       }
     }
+    const helperMissing = headEmpty || String(head[7] ?? '').trim() === ''
 
-    // 3) ขยายจำนวนแถวของแท็บให้พอ + ตั้งรูปแบบวันที่ dd/mm/yyyy ที่คอลัมน์ G
-    const grid = Math.max(tab.rowCount, n + 1)
+    // 3) วางแผน (เทียบรหัสแถว)
+    const plan = buildPlan(elig, parseSheetRows(all.slice(1)), forceRebuild)
+    const lastNeeded = plan.rebuild ? n + 1 : plan.appendStart - 1 + plan.appends.length
+    const grid = Math.max(tab.rowCount, lastNeeded, 2)
+
+    // 4) จัดรูปแบบ: ขยายแถว/คอลัมน์ให้พอ, วันที่ dd/mm/yyyy ที่คอลัมน์ G, ซ่อน H–I, สีแดงสำหรับเคส void
+    const sheetId = tab.sheetId
     const reqs: unknown[] = []
     if (grid > tab.rowCount) {
-      reqs.push({
-        updateSheetProperties: {
-          properties: { sheetId: tab.sheetId, gridProperties: { rowCount: grid } },
-          fields: 'gridProperties.rowCount',
-        },
-      })
+      reqs.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { rowCount: grid } }, fields: 'gridProperties.rowCount' } })
+    }
+    if (tab.columnCount < 9) {
+      reqs.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { columnCount: 9 } }, fields: 'gridProperties.columnCount' } })
     }
     reqs.push({
       repeatCell: {
-        range: { sheetId: tab.sheetId, startRowIndex: 1, endRowIndex: grid, startColumnIndex: 6, endColumnIndex: 7 },
+        range: { sheetId, startRowIndex: 1, endRowIndex: grid, startColumnIndex: 6, endColumnIndex: 7 },
         cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd/mm/yyyy' } } },
         fields: 'userEnteredFormat.numberFormat',
       },
     })
+    if (helperMissing) {
+      reqs.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: 7, endIndex: 9 },
+          properties: { hiddenByUser: true },
+          fields: 'hiddenByUser',
+        },
+      })
+    }
+    const rowRange = (row: number) => ({ sheetId, startRowIndex: row - 1, endRowIndex: row, startColumnIndex: 0, endColumnIndex: 7 })
+    if (plan.rebuild) {
+      reqs.push({
+        repeatCell: {
+          range: { sheetId, startRowIndex: 1, endRowIndex: grid, startColumnIndex: 0, endColumnIndex: 7 },
+          cell: { userEnteredFormat: {} },
+          fields: 'userEnteredFormat.backgroundColor',
+        },
+      })
+    }
+    for (const r of plan.voids) {
+      reqs.push({ repeatCell: { range: rowRange(r), cell: { userEnteredFormat: { backgroundColor: RED } }, fields: 'userEnteredFormat.backgroundColor' } })
+    }
+    for (const r of plan.restores) {
+      reqs.push({ repeatCell: { range: rowRange(r), cell: { userEnteredFormat: {} }, fields: 'userEnteredFormat.backgroundColor' } })
+    }
     await batchUpdate(token, sid, reqs)
 
-    // 4) เขียนข้อมูลใหม่ทับก่อน แล้วค่อยล้างแถวที่เหลือด้านล่าง (ถ้าเขียนล้มเหลวกลางทาง ข้อมูลเดิมยังอยู่)
-    if (head.length === 0 || headEmpty) await updateValues(token, sid, DATA_TAB, 'A1:G1', [HEADERS])
-    if (n > 0) await updateValues(token, sid, DATA_TAB, `A2:G${n + 1}`, values)
-    if (n + 2 <= grid) await clearValues(token, sid, DATA_TAB, `A${n + 2}:G${grid}`)
+    // 5) เขียนค่า — เขียนข้อมูลใหม่ก่อน ค่อยล้างส่วนที่เหลือ (ถ้าล้มเหลวกลางทาง ข้อมูลเดิมยังอยู่)
+    const withHelper = (e: Elig) => [...e.values, e.key, 'active']
+    if (plan.rebuild) {
+      await updateValues(token, sid, DATA_TAB, 'A1:I1', [[...HEADERS, ...HELPER_HEADERS]])
+      if (n > 0) await updateValues(token, sid, DATA_TAB, `A2:I${n + 1}`, plan.appends.map(withHelper))
+      if (n + 2 <= grid) await clearValues(token, sid, DATA_TAB, `A${n + 2}:I${grid}`)
+    } else {
+      const data: { range: string; values: unknown[][] }[] = []
+      if (helperMissing) data.push({ range: 'A1:I1', values: [[...HEADERS, ...HELPER_HEADERS]] })
+      for (const u of plan.updates) data.push({ range: `A${u.row}:G${u.row}`, values: [u.values] })
+      for (const r of plan.restores) data.push({ range: `I${r}`, values: [['active']] })
+      for (const r of plan.voids) data.push({ range: `I${r}`, values: [['void']] })
+      if (plan.appends.length > 0) {
+        const end = plan.appendStart + plan.appends.length - 1
+        data.push({ range: `A${plan.appendStart}:I${end}`, values: plan.appends.map(withHelper) })
+      }
+      await batchUpdateValues(token, sid, DATA_TAB, data)
+    }
 
     const at = new Date().toISOString()
+    const warnings: string[] = []
+    if (plan.duplicateKeys.length > 0) {
+      warnings.push(`พบรหัสแถวซ้ำในชีต ${plan.duplicateKeys.length} รหัส (อาจเกิดจากส่งพร้อมกัน) — ระบบไม่ลบให้ ตรวจในชีตหรือกด "สร้างชีตใหม่ทั้งหมด"`)
+    }
+    const result = {
+      ok: true as const,
+      rows: n,
+      at,
+      mode: plan.rebuild ? 'rebuild' : 'incremental',
+      appended: plan.rebuild ? n : plan.appends.length,
+      updated: plan.updates.length,
+      voided: plan.voids.length,
+      restored: plan.restores.length,
+      warnings,
+    }
     await saveState(admin, {
       last_push_at: at,
       last_push_by: email,
@@ -134,7 +200,7 @@ Deno.serve(async (req) => {
       last_push_ok: true,
       last_push_error: null,
     })
-    return json({ ok: true, rows: n, at })
+    return json(result)
   } catch (e) {
     if (caller) {
       await saveState(caller.admin, {

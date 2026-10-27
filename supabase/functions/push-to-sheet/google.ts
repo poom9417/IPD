@@ -161,6 +161,23 @@ export async function updateValues(token: string, sid: string, tab: string, rang
   })
 }
 
+/** เขียนหลายช่วงในคำขอเดียว (values.batchUpdate, RAW) */
+export async function batchUpdateValues(
+  token: string,
+  sid: string,
+  tab: string,
+  data: { range: string; values: unknown[][] }[],
+): Promise<void> {
+  if (data.length === 0) return
+  await sheetsFetch(token, `${sid}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: 'RAW',
+      data: data.map((d) => ({ range: `'${tab.replace(/'/g, "''")}'!${d.range}`, majorDimension: 'ROWS', values: d.values })),
+    }),
+  })
+}
+
 export async function clearValues(token: string, sid: string, tab: string, range: string): Promise<void> {
   await sheetsFetch(token, `${sid}/values/${q(tab, range)}:clear`, { method: 'POST', body: '{}' })
 }
