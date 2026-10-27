@@ -200,7 +200,7 @@ export default function ArSummaryDashboard() {
             <table ref={tableRef} className="w-full min-w-[1240px] border-collapse text-left text-[13px]">
               <thead>
                 <tr className="bg-brand text-[13px] text-ink">
-                  <th rowSpan={3} className="sticky left-0 z-10 min-w-[200px] bg-brand px-2 py-2 align-bottom font-semibold">
+                  <th rowSpan={3} className="sticky left-0 z-10 min-w-[200px] bg-brand px-2 py-2 text-center align-middle text-xl font-bold">
                     สิทธิ
                   </th>
                   <th rowSpan={2} colSpan={2} className="border-l border-ink/15 px-2 py-2 text-center font-semibold">
