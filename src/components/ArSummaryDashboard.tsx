@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BUCKETS,
   buildSummary,
@@ -8,6 +8,7 @@ import {
   type SummaryRow,
 } from '../lib/arSummary'
 import { exportArSummaryToExcel } from '../lib/exportArSummary'
+import { copyElementAsImage } from '../lib/copyTableImage'
 import { useAuth } from '../contexts/AuthContext'
 import WaveExportButton from './WaveExportButton'
 
@@ -75,6 +76,8 @@ export default function ArSummaryDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [asOf, setAsOf] = useState(todayYmd)
   const [tick, setTick] = useState(0)
+  const tableRef = useRef<HTMLTableElement>(null)
+  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'downloaded' | 'error'>('idle')
 
   useEffect(() => {
     let cancelled = false
@@ -101,6 +104,18 @@ export default function ArSummaryDashboard() {
   async function handleExport() {
     if (!canExport || !asOf) return
     await exportArSummaryToExcel(asOf, { role })
+  }
+
+  // คัดลอกเฉพาะตารางเป็นภาพ → วางใน PowerPoint / Canva
+  async function handleCopyImage() {
+    if (!canExport || !tableRef.current) return
+    setCopyState('busy')
+    try {
+      setCopyState(await copyElementAsImage(tableRef.current))
+    } catch {
+      setCopyState('error')
+    }
+    setTimeout(() => setCopyState('idle'), 2500)
   }
 
   const asOfThai = asOf
@@ -137,6 +152,25 @@ export default function ArSummaryDashboard() {
             {loading ? 'กำลังโหลด…' : 'โหลดข้อมูลใหม่'}
           </button>
           {canExport && (
+            <button
+              type="button"
+              onClick={handleCopyImage}
+              disabled={loading || !summary || copyState === 'busy'}
+              title="คัดลอกเฉพาะตารางเป็นภาพ แล้ววางใน PowerPoint / Canva"
+              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
+            >
+              {copyState === 'busy'
+                ? 'กำลังสร้างภาพ…'
+                : copyState === 'copied'
+                  ? '✓ คัดลอกแล้ว'
+                  : copyState === 'downloaded'
+                    ? '✓ ดาวน์โหลดภาพแล้ว'
+                    : copyState === 'error'
+                      ? 'คัดลอกไม่สำเร็จ'
+                      : 'คัดลอกตาราง (ภาพ)'}
+            </button>
+          )}
+          {canExport && (
             <WaveExportButton
               onExport={handleExport}
               disabled={loading || !summary || !asOf}
@@ -163,7 +197,7 @@ export default function ArSummaryDashboard() {
       ) : (
         <>
           <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-            <table className="w-full min-w-[1240px] border-collapse text-left text-[13px]">
+            <table ref={tableRef} className="w-full min-w-[1240px] border-collapse text-left text-[13px]">
               <thead>
                 <tr className="bg-brand text-[13px] text-ink">
                   <th rowSpan={3} className="sticky left-0 z-10 min-w-[200px] bg-brand px-2 py-2 align-bottom font-semibold">
