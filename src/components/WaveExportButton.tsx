@@ -233,7 +233,6 @@ export default function WaveExportButton({ onExport, label, disabled, title, dat
   }
 
   const busy = status === 'morphing' || status === 'loading'
-  const text = status === 'idle' ? label : STATUS_TEXT[status]
 
   return (
     <span className="wd-wrap" data-tour={dataTour} title={title}>
@@ -295,9 +294,12 @@ export default function WaveExportButton({ onExport, label, disabled, title, dat
         )}
       </button>
 
-      <span key={status} className={`wd-text wd-text-${status}`} role="status" aria-live="polite">
-        {text}
-      </span>
+      {/* ตอนว่างไม่แสดงข้อความ (label ใช้เป็น aria-label) — แสดงเฉพาะสถานะระหว่าง/หลังส่งออก */}
+      {status !== 'idle' && (
+        <span key={status} className={`wd-text wd-text-${status}`} role="status" aria-live="polite">
+          {STATUS_TEXT[status]}
+        </span>
+      )}
     </span>
   )
 }
