@@ -7,6 +7,7 @@ import MyJobPage from '../pages/MyJobPage'
 import MyJobDashboardPage from '../pages/MyJobDashboardPage'
 import OnboardingTour from './OnboardingTour'
 import CodeCNotifier from './CodeCNotifier'
+import UnassignedPairsNotifier from './UnassignedPairsNotifier'
 import { useAuth } from '../contexts/AuthContext'
 
 const VALID: PageKey[] = ['mine', 'codec', 'myjob-dashboard', 'myjob-claim']
@@ -54,6 +55,7 @@ export default function AppLayout() {
       <Navbar page={page} onNavigate={go} mode={mineMode} onModeChange={setMineMode} />
       <OnboardingTour page={page} onNavigate={go} />
       <CodeCNotifier onNavigate={go} />
+      <UnassignedPairsNotifier page={page} onNavigate={go} />
       <div className="min-w-0">
         {page === 'mine' && <MinePage mode={mineMode} />}
         {page === 'codec' && <CodeCPage />}
