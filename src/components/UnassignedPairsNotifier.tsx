@@ -25,29 +25,35 @@ function ListPlusIcon() {
 /**
  * แจ้งเตือนมุมขวาบนทุกครั้งที่เข้าระบบใหม่ (admin / user): ยังมีสิทธิ (สิทธิ+ผู้จ่าย) ที่ว่างและไม่มีผู้รับผิดชอบ
  * "ว่าง" = นิยามเดียวกับหน้า My claim → ไม่มีผู้ดูแล และไม่มีคำขอรอยืนยัน
- * แสดงทุกครั้งที่โหลดหน้าเว็บ (login / เปิดเว็บใหม่ / refresh) — ระหว่างสลับหน้าในเว็บไม่เด้งซ้ำ
- * จำแค่ในหน่วยความจำของหน้านี้ (ไม่ใช้ storage) จึงรีเซ็ตเองทุกครั้งที่โหลดหน้าใหม่
+ * แสดงครั้งเดียวต่อการเปิดเว็บ 1 รอบ (sessionStorage) — refresh หน้าแล้วไม่เด้งซ้ำ ปิดแท็บ/เปิดใหม่แล้วเตือนอีก
  */
-let seenThisLoad = false
-
 export default function UnassignedPairsNotifier({ page, onNavigate }: Props) {
   const { role, roleLoading, session } = useAuth()
   const myId = session?.user.id ?? ''
   const active = (role === 'admin' || role === 'user') && !!myId && !roleLoading
+  const storageKey = `ipd.unassignedNotice.seen:${myId}`
 
   const [free, setFree] = useState<CoveragePayerPair[]>([])
   const [dismissed, setDismissed] = useState(false)
 
   function markSeen() {
     setDismissed(true)
-    seenThisLoad = true
+    try {
+      sessionStorage.setItem(storageKey, '1')
+    } catch {
+      /* storage ใช้ไม่ได้ — ข้าม */
+    }
   }
 
   useEffect(() => {
     if (!active) return
-    if (seenThisLoad) {
-      setDismissed(true)
-      return
+    try {
+      if (sessionStorage.getItem(storageKey)) {
+        setDismissed(true)
+        return
+      }
+    } catch {
+      /* ข้าม */
     }
     let cancelled = false
     ;(async () => {
