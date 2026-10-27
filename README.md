@@ -1,143 +1,188 @@
 # IPD AR Discharge
 
-ระบบติดตามเคสผู้ป่วยใน (IPD) — React + Vite + TypeScript + Tailwind v4, ต่อกับ Supabase โดยตรง (ไม่มี backend แยก), login ด้วย Google จำกัดเฉพาะ @mahidol.ac.th
+ระบบเก็บข้อมูลผู้ป่วยใน (IPD) และติดตามสถานะเคลม ตั้งแต่รับเอกสาร → Audit → ส่งเบิก รวมถึงเคสที่ติด Code C หลังส่งเบิก
+
+- เว็บ: https://ipd-pi-woad.vercel.app
+- Login ด้วย Google เท่านั้น จำกัดโดเมน `@mahidol.ac.th` และต้องได้รับอนุมัติจาก developer ก่อนจึงใช้งานได้
+- นำเข้าข้อมูลเคสโดย admin อัพโหลดไฟล์ (ยังไม่มีการเชื่อม HIS API) — โปรเจกต์ทดลอง รูปแบบไฟล์คงที่
 
 ## Stack
 
-- Frontend: React 18 + Vite + TypeScript + Tailwind CSS v4
-- Backend: Supabase (Postgres + Auth) — project "IPD AR discharge" (`qwivyyvhezqbhlukcsmt`)
-- Auth: Google OAuth ผ่าน Supabase Auth, จำกัดโดเมนด้วย Postgres trigger (`handle_new_user`) + RLS
-- Deploy: Vercel (project `ipd`, repo `poom9417/IPD`, branch `main` → production อัตโนมัติ)
+| ส่วน | เทคโนโลยี |
+|---|---|
+| Frontend | React 18 + Vite 5 + TypeScript + Tailwind CSS v4 |
+| Backend / DB | Supabase (Postgres + Auth + RLS + Edge Functions) — ไม่มี backend แยก |
+| Auth | Google OAuth ผ่าน Supabase Auth, ตรวจโดเมนที่ฝั่ง DB ด้วย trigger `handle_new_user` |
+| Hosting | Vercel (project `ipd`) — push เข้า `main` แล้ว build/deploy อัตโนมัติ |
+| ไลบรารีหลัก | `exceljs` (Export Excel) · `xlsx` (อ่านไฟล์ `.xls` ของระบบเบิก GGO) · `papaparse` (CSV) |
+| ธีม | เหลือง / ขาว / ดำ — กำหนดเป็น CSS variable ใน `src/index.css` (โลโก้ CNMI แสดงสีทองด้วย CSS mask ใน `BrandLogo.tsx`) |
 
-## รันในเครื่อง (local dev)
+## รันในเครื่อง
+
+ต้องใช้ Node.js 18 ขึ้นไป
 
 ```bash
 npm install
+cp .env.example .env     # ค่า VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY
 npm run dev
+npm run build            # tsc + vite build (ต้องผ่านก่อน push ทุกครั้ง)
 ```
 
-ถ้าโคลนเครื่องใหม่ให้ copy `.env.example` เป็น `.env` (ค่า `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`) — anon key เป็น public key ตามการออกแบบของ Supabase ความปลอดภัยจริงอยู่ที่ RLS ฝั่งฐานข้อมูล แต่ `.env` ก็ถูกกันไว้ใน `.gitignore` อยู่แล้ว
+anon key เป็น public key ตามการออกแบบของ Supabase ความปลอดภัยจริงอยู่ที่ RLS และฟังก์ชันฝั่งฐานข้อมูล
 
-## Push ขึ้น GitHub ผ่าน GitHub Desktop
+## Deploy
 
-1. เปิด GitHub Desktop → File → Add Local Repository → เลือกโฟลเดอร์นี้
-2. Commit ทุกไฟล์ (ยกเว้น `node_modules`, `dist`, `.env` ที่ถูก ignore ไว้แล้ว) แล้ว Push ไปที่ `main`
-3. Vercel จะ build และ deploy ให้อัตโนมัติ (ดูสถานะที่ Vercel → project `ipd` → Deployments)
+Push ขึ้น `main` ที่ GitHub แล้ว Vercel จะ build ให้เอง (framework: Vite, build ด้วย `npm run build`, serve จาก `dist/`)
 
-## Deploy บน Vercel (ตั้งค่าครั้งแรก)
+ตั้งค่าครั้งแรก:
 
-1. Import repo นี้เป็น Vercel project ใหม่ (framework preset: Vite)
-2. ตั้งค่า Environment Variables ใน Vercel project settings:
-   - `VITE_SUPABASE_URL` = `https://qwivyyvhezqbhlukcsmt.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY` = (ค่าเดียวกับใน `.env`)
-3. Deploy — Vercel จะ build ด้วย `npm run build` และ serve จาก `dist/` อัตโนมัติ
-4. กลับไปที่ Supabase Dashboard → Authentication → URL Configuration → ตั้ง Site URL เป็นโดเมน Vercel (และเพิ่มใน Redirect URLs ถ้าจำเป็น)
+1. Vercel → Settings → Environment Variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+   - **วางเป็นข้อความธรรมดาเท่านั้น** ห้ามมีเครื่องหมายคำพูด เว้นวรรค หรือวงเล็บ markdown แบบ `[url](url)` (เคยทำให้หน้าจอขาว)
+   - ตั้งค่าแล้วต้อง **Redeploy** ใหม่ ค่าจึงมีผล
+2. Supabase → Authentication → URL Configuration: ตั้ง Site URL และ Redirect URLs เป็นโดเมนของ Vercel
+3. Supabase → Authentication → Providers: เปิดเฉพาะ Google (ปิด Email provider)
 
-## สิทธิ์การใช้งาน (4 role)
+`vercel.json` ตั้ง security headers ไว้ (CSP, HSTS, X-Frame-Options ฯลฯ) — ถ้าเปลี่ยนโดเมน Supabase ต้องแก้ `connect-src` ใน CSP ด้วย
 
-ทุกคนที่ login ด้วย @mahidol.ac.th จะถูกสร้างเป็น `viewer` สถานะ "รออนุมัติ" ใช้งานไม่ได้จนกว่า **audit หรือ developer** จะอนุมัติ ส่วนการกำหนด/เปลี่ยน role ทำได้เฉพาะ **developer** (admin อนุมัติผู้ใช้หรือแก้ role ไม่ได้)
+## Role และสิทธิ์การใช้งาน
 
-| ความสามารถ | admin | user | audit | viewer |
-|---|:-:|:-:|:-:|:-:|
-| ดูข้อมูล / Export Excel | ✅ | ✅ | ✅ | ✅ |
-| + เพิ่มเคส | ✅ | ✅ | – | – |
-| แก้ไขเคสเดิม / นำเข้าเคส (CSV) / ปุ่ม "รับเอกสาร" | ✅ | – | – | – |
-| อัพโหลดสถานะเคลม (CSV) | ทุกขั้นตอน | ทุกขั้นตอน | **เฉพาะขั้น Audit** | – |
-| กดปุ่ม "Audit" (บันทึกวัน Audit = วันนี้) | ✅ | – | ✅ | – |
-| Code C: แจ้งเคสติด C / แก้สาเหตุ | ✅ | ✅ (เฉพาะรายการของตัวเอง ก่อน audit ตอบ) | – | – |
-| Code C: ตอบ "แก้ไขอย่างไร" | ✅ | – | ✅ | – |
-| Code C: ลบรายการ | ✅ | – | – | – |
-| หน้า My job (เลือกสิทธิที่ดูแล) | ✅ | ✅ | **ไม่มีหน้านี้** | – |
-| อนุมัติผู้ใช้ / แก้หน่วยงาน | – (เฉพาะ audit/developer) | – | – | – |
-| กำหนด role | – (เฉพาะ developer) | – | – | – |
+ผู้ที่ login ครั้งแรกจะเป็น `viewer` สถานะ **รออนุมัติ** เห็นแค่หน้ารอ จน **developer** อนุมัติและกำหนด role ให้ (ผู้ใช้เดิมก่อนมีระบบนี้ถือว่าอนุมัติแล้ว) สถานะอนุมัติอ่านไม่ได้เมื่อไรระบบถือว่า "ยังไม่อนุมัติ" (fail-closed)
 
-- **audit** มีหน้าที่แค่ลงวัน Audit และตอบ Code C — ฐานข้อมูลบังคับซ้ำอีกชั้น (trigger `guard_case_tracking_audit`) ว่า audit แก้ได้เฉพาะ `audit_date`
-- `nattapoom.chu@mahidol.ac.th` ถูกตั้งเป็น admin อัตโนมัติตั้งแต่ login ครั้งแรก (bootstrap admin ผ่าน Postgres trigger)
-- อนุมัติ/แก้หน่วยงานได้ที่ปุ่ม "จัดการผู้ใช้" (เฉพาะ audit/developer; กำหนด role เฉพาะ developer) — ผู้ใช้ต้อง login อย่างน้อย 1 ครั้งก่อนถึงจะมีชื่อในรายการ
+| ความสามารถ | developer | admin | user | audit | viewer |
+|---|:-:|:-:|:-:|:-:|:-:|
+| ดูรายการเคส | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Export Excel | ✅ | ✅ | ✅ | ✅ (7 คอลัมน์) | – |
+| + เพิ่มเคส | ✅ | ✅ | ✅ | – | – |
+| แก้ไข / ลบเคส | ✅ | ✅ | – | – | – |
+| ปุ่ม "รับเอกสาร" แก้ยอด/วันที่รับเอกสาร | ✅ | ✅ | ✅ | – | – |
+| อัพโหลดสถานะเคลม (bulk) | ทุกขั้น | ทุกขั้น | รับเอกสาร / ส่งเบิก | – | – |
+| บันทึกวัน Audit (ปุ่ม / bulk / ดึงจาก Sheet) | ✅ | ✅ | – | – | – |
+| นำเข้าเคสใหม่ (CSV) | ✅ | ✅ | – | – | – |
+| ส่ง/ดึงข้อมูล Google Sheet | ✅ | ✅ | – | – | – |
+| หน้า Dashboard สรุปลูกหนี้ | ✅ | ✅ | ✅ | – | ✅ |
+| Code C: แจ้งรหัสที่ติด C | ✅ | ✅ | ✅ | – | – |
+| Code C: ตอบวิธีแก้ | ✅ | ✅ | – | ✅ | – |
+| Code C: กด "ผ่าน / ไม่ผ่านการแก้ C" | จำลองเป็น user | – | ✅ | – | – |
+| Code C: แก้ / ลบแถวรหัส | ✅ | ✅ | – | – | – |
+| My job (Dashboard + My claim) | เฉพาะ My claim | ✅ | ✅ | – | – |
+| เลือกสิทธิให้ผู้อื่น | ✅ | – | – | – | – |
+| อนุมัติผู้ใช้ / กำหนด role / จัดการหน่วยงาน | ✅ | – | – | – | – |
+| จำลองมุมมอง role อื่น | ✅ | – | – | – | – |
+
+หมายเหตุ
+
+- **developer** = สิทธิ์ admin + จำลองมุมมองแต่ละ role ได้จากเมนู "จำลองเป็น" (จำลองฝั่งหน้าจอเท่านั้น ไม่เปลี่ยน role จริง) admin เห็นบัญชี developer ในรายชื่อแต่แก้ไม่ได้
+- **audit** บันทึกวัน Audit ผ่านหน้าเว็บไม่ได้ วัน Audit เข้าระบบทางเดียวคือ admin / developer กด "ดึง Audit จาก Sheet" (ดูหัวข้อ Google Sheet)
+- ข้อมูลที่เห็นขึ้นกับ role และบังคับที่ฐานข้อมูล ไม่ใช่แค่ซ่อนที่หน้าจอ: audit ไม่เห็นยอดเงิน · viewer เห็นยอดแต่ไม่เห็นชื่อผู้ป่วยและวันเกิด · วันเกิดเห็นเฉพาะ developer / admin (อ่านผ่าน view `patients_v` / `case_tracking_v` และเขียนผ่าน RPC `save_patient` / `upsert_case_tracking`)
+- ผู้ใช้ใหม่เห็นทัวร์แนะนำการใช้งานตาม role ครั้งแรกที่เข้า และเปิดดูซ้ำได้ที่ปุ่ม "คู่มือใช้งาน" บน navbar
 
 ## หน้าในระบบ
 
-- **Mine** — รายการเคสทั้งหมด กรองตามหอผู้ป่วย / สถานะเคลม / ผู้จ่าย / สิทธิ (เลือกได้หลายอัน) / ช่วงวันจำหน่าย, Export Excel, อัพโหลด CSV, ปุ่ม "เฉพาะสิทธิของฉัน"
-- **Code C** — เคสที่ส่งเบิกแล้วแต่ติด C: user แจ้งสาเหตุ + dateline → audit ตอบว่าแก้ไขอย่างไร ระบบประทับชื่อ/เวลาของทั้งสองฝั่งให้ (client แก้เวลาเองไม่ได้) เลือกแจ้งได้เฉพาะเคสที่มี `submission_date` แล้ว
-- **My job** — เลือกสิทธิการรักษาที่ตัวเองรับผิดชอบ (admin / user เท่านั้น)
+เมนู (ปุ่ม Menu บน navbar) มี 3 กลุ่ม
 
-### My job: 1 สิทธิ = 1 ผู้ดูแล
+### หน้าหลัก (Main / Dashboard)
 
-- 1 คนดูแลได้หลายสิทธิ แต่ **1 สิทธิมีผู้ดูแลได้คนเดียว** (`coverage_assignments` มี primary key = `coverage_code`)
-- สิทธิที่มีคนดูแลแล้วจะเลือกไม่ได้ (แสดงอีเมลเจ้าของ) ถ้ากดบันทึกตัดหน้ากัน ฐานข้อมูลจะไม่บันทึกสิทธิที่ซ้ำและหน้าเว็บแจ้งรายการนั้นให้ทราบ
-- ถ้าผู้ดูแลลาออก/ย้ายงาน ให้ admin ลบแถวใน `coverage_assignments` ของสิทธินั้นก่อน คนใหม่จึงจะเลือกได้
-- บันทึกแล้วหน้า Mine และ Code C จะมีปุ่ม "เฉพาะสิทธิของฉัน" ให้กรองเคส
+สลับโหมดได้ที่ปุ่ม Main / Dashboard
 
-## สถานะเคลม (case_tracking)
+- **Main** — รายการเคสแบบแบ่งหน้า เรียงวันจำหน่ายใหม่สุดก่อน (ค้นหา/กรอง/นับสรุปทำที่ฐานข้อมูลผ่าน `search_admissions`) กรองตามคำค้น (HN / ชื่อ / encounter_id / AN) หอผู้ป่วย ผู้จ่าย สิทธิ (เลือกได้หลายอัน) ช่วงวันจำหน่าย (เลือกวันเดียวได้) ขั้นตอนเคลม และ "เฉพาะสิทธิของฉัน" คลิกเคสเพื่อดูรายละเอียด (read-only สำหรับ role ที่แก้ไม่ได้)
+- **Dashboard** — สรุปลูกหนี้ IPD ค้างส่งเบิกรวมทุกสิทธิ ณ วันที่เลือก แบ่งตามกลุ่มสิทธิ แสดงจำนวนราย/เงิน ตามช่วงอายุ (ภายใน 20 / 21–30 / 31–90 / เกิน 90 วัน) รวมเกินกำหนด และ % คงค้าง การจัดกลุ่มสิทธิแก้ที่ `src/lib/arSummary.ts` (กลุ่ม PRI คือกลุ่มรับส่วนที่เหลือ ไม่รวมสิทธิ `UNK`) ซ่อนจาก role audit
 
-**1 แถวต่อ 1 แถวสิทธิ/ผู้จ่าย** (คีย์คือ `admission_id`) — encounter ที่แยกหลายสิทธิจึงมีสถานะเคลมแยกกัน ส่งเบิกได้ครั้งเดียวต่อแถว (ไม่มีประวัติหลายครั้ง)
+### Code C
 
-- `document_received_date`, `document_received_amount` — วันที่รับเอกสาร + ยอดรับเอกสาร (ลงโดย admin / user)
-- `audit_date` — วันที่ audit (ไม่มียอดเงิน; ลงโดย admin / audit)
-- `submission_date`, `submission_amount`, `claim_no` — วันที่ส่งเบิก + ยอดเงิน + เลขที่ใบส่งเบิก
+เคสที่ส่งเบิกแล้วแต่ติด C — 1 เคสมีได้หลายรหัส จัดการทีละแถวรหัส
 
-ขั้นตอนเคลม (ใช้กรองในหน้า Mine): รอรับเอกสาร → รอ Audit → รอส่งเบิก → ส่งเบิกแล้ว
+1. user / admin แจ้งแถวรหัส: ชนิด (โรค / อุปกรณ์) · รหัส · สาเหตุที่ติด C แล้วกดยืนยันครั้งเดียว
+2. audit ตอบวิธีแก้ทีละรหัส — เมื่อตอบแล้วถือว่า "ผ่านโดยปริยาย" และ user ที่แจ้งจะได้รับ popup แจ้งเตือนมุมขวาบน
+3. user กด "ผ่านการแก้ C" เพื่อปิดแถว หรือ "ไม่ผ่านการแก้ C" (มี dialog ยืนยัน) เพื่อส่งกลับให้ audit แก้รอบใหม่ โดยแสดงคำตอบรอบก่อนให้เห็น
+4. Dateline = วันที่ส่งเบิก + 7 วัน คำนวณสดทุกครั้ง หยุดนับเมื่อ audit ตอบ และนับต่อ (ไม่รีเซ็ต) เมื่อถูกกด "ไม่ผ่านการแก้ C"
 
-แก้ไขได้ 3 ทาง:
-- **ปุ่มลัดในตาราง** — "รับเอกสาร" (admin, user) กดแล้วกรอกยอดรับเอกสาร ยืนยันด้วย ✓ / Enter แล้วบันทึกวันนี้พร้อมยอด · "Audit" (admin, audit) กดแล้วบันทึกวันนี้ทันที
-- **รายตัว** — admin กดปุ่ม "แก้ไข" ที่แถวเคส มีส่วน "สถานะเคลม" ในฟอร์ม
-- **Bulk (CSV)** — ปุ่ม "อัพโหลดสถานะเคลม (CSV)" เลือกขั้นตอน แล้วอัพโหลดไฟล์รูปแบบ:
-  ```
-  # รับเอกสาร — ต้องมียอดรับเอกสารทุกแถว
-  encounter_id,document_received_date,document_received_amount
-  3043836,2026-09-24,12500.50
+ระบบเก็บประวัติรายรอบพร้อมผู้ทำและเวลา (ประทับเวลาที่ฝั่ง DB)
 
-  # audit — export จาก Google Sheet ของทีม audit เป็น CSV แล้วเหลือคอลัมน์เหล่านี้
-  encounter_id,audit_date
-  3043836,2026-09-25
+### My job
 
-  # ส่งเบิก — ต้องมี payer_id ระบบจะเช็คกับ payer ของ encounter นั้น ถ้าไม่ตรงจะไม่บันทึกแถวนั้น (กันแมพผิดเคส)
-  encounter_id,payer_id,claim_no,submission_date,submission_amount
-  3043836,50257,CLM-2026-0912,2026-09-26,12500.50
-  ```
-  - ขั้นรับเอกสาร/Audit: ถ้า encounter แยกหลายสิทธิ และไม่ใส่ `payer_id` จะลงทุกสิทธิของ encounter นั้น (ใส่ `payer_id` เพื่อระบุแถวเดียวได้)
-  - ขั้นส่งเบิก: ถ้า encounter แยกหลายสิทธิ **ต้องระบุ** `payer_id`
-  - ระบบ upsert ทับค่าเดิมด้วย `admission_id`
-  - role audit เลือกได้เฉพาะขั้น Audit
+- **My claim** — เลือก "สิทธิ + ผู้จ่าย" (`coverage_code + payer_id`) ที่ตัวเองรับผิดชอบ ข้อกำหนด: 1 หน่วยมีผู้ดูแลได้คนเดียว (exclusive) · เลือกแล้ว **เอาออกเองไม่ได้** · developer เลือกสิทธิให้ผู้อื่นได้ ผู้รับต้องกดยืนยันที่แบนเนอร์ในหน้าหลัก (ตาราง `assignment_requests`: รอ → ยอมรับ / ปฏิเสธ / ยกเลิก)
+- **Dashboard** — ระยะเวลาส่งเบิกของเคสที่ฉันดูแล เป็นกราฟและรายเคส เลือกจุดเริ่มนับได้ (จำหน่าย / รับเอกสาร / Audit → ส่งเบิก)
 
-**เรื่อง audit จาก Google Sheet:** ยังไม่ได้เชื่อมอัตโนมัติ (ชีตไม่ได้เปิดสาธารณะ) — ให้ export เป็น CSV แล้วอัพผ่านฟีเจอร์ข้างบน ถ้าต้องการอัตโนมัติ แนวทางคือทำ Supabase Edge Function ที่ใช้ Google Service Account (แชร์สิทธิ์ viewer บนชีต) อ่านผ่าน Sheets API v4 แล้ว upsert เข้า `case_tracking`
+## ข้อมูลและสถานะเคลม
 
-## นำเข้าเคสใหม่จาก HIS (CSV)
+ตารางหลัก: `patients`, `admissions`, `coverage_master`, `payer_master`, `division_master`, `case_tracking`, `app_users`, `coverage_assignments`, `assignment_requests`, `code_c_cases`, `code_c_items`, `code_c_history`, `sheet_sync_state`
 
-ปุ่ม "นำเข้าเคสใหม่ (CSV)" (เฉพาะ admin) — อัพโหลดไฟล์รูปแบบเดียวกับไฟล์ตั้งต้น (คอลัมน์: HN, AN, encounter_id, name, admit_date, admited_time, discharge_date, discharge_time, division_code, status, Los, birthdate, coverage_code, coverage_name, payer_id, payer_name)
+- **`admissions`**: คีย์คือ `admission_id` (1 แถว = encounter × coverage × payer) เพราะ encounter เดียวแยกได้หลายสิทธิ — `encounter_id` จึงไม่ใช่ PK เดี่ยว และ `AN` ไม่ unique
+- สิทธิ/ผู้จ่ายที่ว่างหรือ `NULL` เก็บเป็น `UNK` (ไม่เบิก เก็บไว้อ้างอิง ผู้ใช้ปรับสิทธิทีหลัง) — แถว `UNK` เดิมจะถูกแทนด้วยสิทธิจริงเมื่อไฟล์ใหม่มีข้อมูล โดยสถานะเคลมไม่หาย
+- **`case_tracking`**: 1 แถวต่อ `admission_id`, 1 เคส = ส่งเบิกครั้งเดียว (ไม่เก็บประวัติส่งซ้ำ) เก็บผู้แก้ไขล่าสุดเท่านั้น (ไม่มี audit log หลายแถว)
+  `document_received_date/amount` · `audit_date` · `submission_date/amount` · `claim_no`
 
-ทำงานในฟังก์ชันฐานข้อมูล `import_admissions` รอบเดียว (transaction เดียว):
-- 1 แถว = 1 encounter ต่อ 1 สิทธิ/ผู้จ่าย — แถวที่ encounter + สิทธิ + ผู้จ่ายตรงกับที่มีอยู่จะถูกอัพเดตทับ ไม่สร้างซ้ำ
-- เพิ่ม HN / สิทธิ / ผู้จ่ายใหม่ให้อัตโนมัติ, ค่า NULL ของสิทธิ/ผู้จ่ายบันทึกเป็น `UNK`
-- แถว `UNK` จะถูกข้ามถ้า encounter นั้นมีสิทธิจริงอยู่แล้ว และแถว `UNK` เดิมจะถูกเปลี่ยนเป็นสิทธิจริงเมื่อไฟล์ใหม่มีข้อมูล (สถานะเคลมเดิมไม่หาย)
-- ยังไม่มีการเชื่อม API กับ HIS โดยตรง (โปรเจกต์ทดลอง ใช้ไฟล์อัพโหลดจาก admin ไปก่อน)
+ขั้นตอนเคลม (ใช้กรอง): **รอรับเอกสาร → รอ Audit → รอส่งเบิก → ส่งเบิกแล้ว**
+"ค้างเบิก (วัน)" = วันที่จำหน่าย → วันที่ส่งเบิก
 
-## Export Excel
+### นำเข้าเคสใหม่ (admin)
 
-ปุ่ม "Export Excel" บน Mine (ทุก role) ส่งออกเฉพาะรายการที่กรอง/ค้นหาอยู่ ณ ขณะนั้นเป็นไฟล์ `.xlsx` (SheetJS ฝั่ง client) คอลัมน์รวมสถานะเคลมทั้งหมด: วัน/ยอดรับเอกสาร, วัน Audit, วัน/ยอดส่งเบิก และ `claim_no`
+ปุ่ม "นำเข้าเคสใหม่ (CSV)" ไฟล์รูปแบบเดียวกับไฟล์ HIS ตั้งต้น คอลัมน์: `HN, AN, encounter_id, name, admit_date, admited_time, discharge_date, discharge_time, division_code, status, Los, birthdate, coverage_code, coverage_name, payer_id, payer_name`
 
-## ธีมและโลโก้
+ทำงานผ่านฟังก์ชัน DB `import_admissions(rows jsonb)` ใน transaction เดียว: เพิ่ม HN / สิทธิ / ผู้จ่ายใหม่อัตโนมัติ, แถวที่ encounter + สิทธิ + ผู้จ่ายตรงกับที่มีอยู่จะอัพเดตทับ ไม่สร้างซ้ำ
 
-ธีมเหลือง / ขาว / ดำ กำหนดเป็น CSS variable ใน `src/index.css` (`--color-brand`, `--color-ink`, `--color-paper` ฯลฯ)
+### อัพโหลดสถานะเคลม (bulk)
 
-โลโก้สถาบันการแพทย์จักรีนฤบดินทร์ (CNMI) จาก Wikimedia Commons แสดงเป็นสีทอง/เหลือง (`--color-brand`) ด้วย CSS `mask-image` โดยไม่ต้องแก้ไฟล์ภาพ — ถ้าอยาก self-host ดูวิธีใน comment ของ `src/components/BrandLogo.tsx`
+เลือกขั้นตอนก่อนอัพโหลด
+
+| ขั้นตอน | ไฟล์ | หมายเหตุ |
+|---|---|---|
+| รับเอกสาร | CSV: `encounter_id, document_received_date, document_received_amount` | ต้องมียอดทุกแถว |
+| Audit | CSV: `encounter_id, audit_date` | ใช้แค่ `encounter_id` |
+| ส่งเบิก | ไฟล์ `.xls` ของระบบเบิก GGO ใช้ได้เลยไม่ต้องแก้ | แมพ `enc_id→encounter_id`, `payer→payer_id`, `claim_no`, `dateclaim→submission_date` (แปลง พ.ศ. → ค.ศ.), `claim_amount→submission_amount`; แถวที่ `claimcancel` มี "X" ไม่นับ |
+
+- ถ้า encounter แยกหลายสิทธิ ให้ใส่ `payer_id` เพื่อระบุแถว (ขั้นส่งเบิกจะเช็ค payer ให้ตรงเสมอ)
+- ถ้าเคสมีค่าอยู่แล้ว จะแสดงใน preview และให้เลือก **ข้าม / เขียนทับ**
+
+### Export Excel
+
+ส่งออกเฉพาะชีต `IPD AR Discharge` ตามตัวกรองบนหน้าจอ (ไม่กรอง = ทั้งหมด) สร้างด้วย ExcelJS role audit ได้ 7 คอลัมน์: HN, AN, encounter_id, ชื่อผู้ป่วย, coverage_code, payer_id, วันที่จำหน่าย
+
+## Google Sheet sync
+
+ซิงก์กับชีตทะเบียนคุมของทีม Audit ผ่าน Supabase Edge Functions (เฉพาะ admin / developer)
+
+- **`push-to-sheet`** — ส่งเคสไปวางทับทั้งแท็บ `ทะเบียนคุมเอกสารสิทธิ 70` (คงแถวหัว วางใหม่ทุกครั้ง ระบบเป็นต้นฉบับ ชีตเป็นสำเนา) กดปุ่ม "ส่งไป Google Sheet" เองได้ และระบบส่งให้อัตโนมัติหลัง admin นำเข้าเคสหรือบันทึกการแก้เคส (ถ้า Google ขัดข้อง การบันทึกในระบบยังสำเร็จตามปกติ) ส่งเฉพาะเคสที่จำหน่ายตั้งแต่ 2026-10-01 และไม่ส่งสิทธิ `UNK` / `DIS*` (ปรับเงื่อนไขที่ `MIN_DISCHARGE_DATE` ในฟังก์ชัน)
+- **`pull-from-sheet`** — อ่านวัน Audit จากแท็บ `AUDIT_VIEW` (IMPORTRANGE จากชีต Audit) ตรวจเทียบฐานข้อมูล แสดงเป็น preview ให้ยืนยันก่อนบันทึก ฟังก์ชันนี้ไม่เขียนฐานข้อมูลเอง
+
+ตั้งค่า: เปิด Google Sheets API ให้ Service Account, แชร์ชีตให้เป็น Editor, ตั้ง secret `GOOGLE_SA_JSON` และ `SHEET_ID` ใน Supabase (Edge Function secrets) — ห้ามนำ key เหล่านี้ใส่ใน repo
 
 ## ฐานข้อมูล (Supabase)
 
-ไฟล์ SQL ใน `supabase/` — เก็บไว้เป็นบันทึกและใช้ตั้ง environment ใหม่ (production รันครบแล้ว) รันตามลำดับ:
+โฟลเดอร์ `supabase/` เก็บ SQL และ Edge Functions ไว้เป็นบันทึก/ใช้ตั้ง environment ใหม่ สถานะจริงของ production อยู่ที่ Supabase (บาง migration รันที่ Supabase โดยตรง จึงไม่ได้มีครบทุกไฟล์ในนี้ — ดูรายการจริงที่ `list_migrations` / Dashboard)
 
-1. `add_user_role.sql` — role `user` + ฟังก์ชัน `is_editor()`
-2. `add_audit_codec_myjob.sql` — role `audit`, ตาราง Code C, ตาราง My job (1 สิทธิ = 1 ผู้ดูแล)
-3. `harden_function_privileges.sql` — ปิดสิทธิ์ `anon` ที่ไม่จำเป็นบนฟังก์ชัน SECURITY DEFINER (มี rollback อยู่ท้ายไฟล์)
+| ไฟล์ | เนื้อหา |
+|---|---|
+| `add_user_role.sql`, `add_audit_codec_myjob.sql`, `add_developer_role.sql` | role และฟังก์ชัน `is_admin()` / `is_editor()` / `is_developer()`, Code C, My job |
+| `restrict_audit_role.sql`, `restrict_user_audit_fields.sql` | จำกัดสิทธิ์ audit / user ที่ระดับ DB (trigger `guard_case_tracking_audit`) |
+| `add_search_admissions.sql` | `search_admissions` สำหรับแบ่งหน้า/ค้นหา/สรุปตัวเลข |
+| `add_master_growth.sql` | `division_master` และการเพิ่มสิทธิ/ผู้จ่าย/หอผู้ป่วยใหม่ |
+| `code_c_items_pass_status.sql` | Code C รายแถวรหัส + สถานะ "ผ่านแล้ว" |
+| `add_user_approval.sql`, `20261021_restrict_user_approval*.sql` | ระบบอนุมัติผู้ใช้ (มีไฟล์ TEST และ rollback) |
+| `add_sheet_sync.sql` | ตาราง `sheet_sync_state` |
+| `harden_function_privileges.sql` | ปิดสิทธิ์ `anon` บนฟังก์ชัน SECURITY DEFINER |
+| `functions/push-to-sheet`, `functions/pull-from-sheet` | Edge Functions (แต่ละตัวมี `common.ts` / `google.ts` ของตัวเอง — แก้แล้วต้องอัพเดตทั้งสองโฟลเดอร์ให้ตรงกัน) |
 
-หมายเหตุด้านความปลอดภัย: Security Advisor ของ Supabase ยังเตือน `import_admissions`, `is_admin`, `is_editor`, `my_role`, `my_email` ว่า "signed-in users เรียกได้" — **ตั้งใจเก็บไว้** เพราะ RLS policy เรียกใช้ฟังก์ชันเหล่านี้ในนามผู้ใช้ที่ login (ถ้าถอนสิทธิ์ policy ทั้งหมดจะพัง) และ `import_admissions` เช็ค `is_admin()` ภายในฟังก์ชันอยู่แล้ว ส่วนเตือน "Leaked Password Protection" ไม่เกี่ยวข้อง เพราะระบบใช้ Google OAuth อย่างเดียว ไม่มี password
+กติกาที่ต้องรักษา
 
-## แก้ปัญหา "deploy แล้วจอขาว"
+- policy ที่เช็ค role ให้เรียก `public.is_admin()` / `is_editor()` (SECURITY DEFINER) **ห้ามใช้ subquery ย้อนไป `app_users` ใน policy ของ `app_users` เอง** (เคยทำให้ infinite recursion → 500)
+- ก่อน UPDATE/DELETE ข้อมูลจำนวนมาก ให้สำรองเป็นตาราง `bak_*` ก่อนเสมอ (และเพิกถอนสิทธิ์ `authenticated` / `anon` บนตารางสำรอง)
+- ฟังก์ชันที่ policy เรียกใช้ต้องคงสิทธิ์ `authenticated` ไว้ (ถ้าถอน policy จะพังทั้งหมด) ส่วน Security Advisor ที่เตือนเรื่องนี้เป็นการตั้งใจ
 
-ถ้าเปิดเว็บแล้วจอขาวสนิท สาเหตุที่พบบ่อยที่สุดคือค่า `VITE_SUPABASE_URL` ที่วางใน Vercel มีอักขระเกิน (เว้นวรรค/เครื่องหมายคำพูดติดมาตอน copy-paste) โค้ดเวอร์ชันนี้ป้องกันไว้แล้ว (จะขึ้นข้อความ "ตั้งค่าระบบไม่ครบ" แทนจอขาว) แต่ env var ชนิด "sensitive" ใน Vercel **เปิดดูค่าเดิมซ้ำไม่ได้** ถ้าไม่แน่ใจว่าค่าถูกต้อง ให้ลบแล้ววางใหม่จาก `.env.example` ให้ตรงเป๊ะ (Settings > Environment Variables) แล้ว Redeploy
+## แก้ปัญหาที่เคยเจอ
+
+| อาการ | สาเหตุ | วิธีแก้ |
+|---|---|---|
+| หน้าเว็บขาวหลัง deploy | `VITE_SUPABASE_URL` มีอักขระเกิน (เช่นวงเล็บ markdown) | ใส่ค่าธรรมดาใน Vercel แล้ว Redeploy (โค้ดจะแสดงข้อความ "ตั้งค่าระบบไม่ครบ" แทนจอขาว) |
+| Login Google ไม่เข้า | Site URL / Redirect URLs ใน Supabase ไม่ตรงโดเมนจริง | ตั้งเป็นโดเมน Vercel |
+| `app_users` ตอบ 500 | RLS recursion | ใช้ `public.is_admin()` ใน policy |
+| นำเข้าไฟล์ไม่สำเร็จ | encounter เดียวหลายสิทธิชนกับ unique เดิม | ใช้ key encounter × coverage × payer (ผ่าน `import_admissions`) |
+| ล้างค่าวันที่ในฟอร์มแล้วไม่หาย | ส่ง `undefined` แทน `null` | ส่ง `null` เมื่อเคลียร์ค่า |
+| Dashboard โหลดช้า | ดึงข้อมูลทั้งหมดทีเดียว | แบ่งหน้า เรียงใหม่สุดก่อน (`search_admissions`) |
+| ผู้ใช้ใหม่เข้าใช้งานไม่ได้ | ยังไม่ได้รับอนุมัติ | developer อนุมัติที่ไอคอนแจ้งเตือน / "จัดการผู้ใช้" บน navbar |
 
 ## ยังไม่ได้ทำ
 
-- Storage bucket สำหรับแนบไฟล์เอกสาร/หลักฐาน (ตอนนี้เป็นแค่ CSV mapping ไม่มีการเก็บไฟล์ต้นฉบับ)
-- ดึงข้อมูล audit จาก Google Sheet อัตโนมัติ (ดูหัวข้อ "สถานะเคลม")
-- ปุ่มให้ admin ปลดผู้ดูแลสิทธิในหน้า My job (ตอนนี้ต้องลบแถวใน `coverage_assignments` เอง)
+- แนบไฟล์เอกสารประกอบเคส (Supabase Storage bucket)
+- ปุ่มให้ผู้ดูแลปลดผู้ดูแลสิทธิใน My claim (ตอนนี้ต้องลบแถวใน `coverage_assignments` เอง)
+- อัพเกรด `xlsx` (ยังเป็น `^0.18.5`) และตั้ง repo เป็น private
