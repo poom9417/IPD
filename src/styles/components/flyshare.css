@@ -1,0 +1,276 @@
+/* ปุ่ม flyshare (ส่งไป Google Sheet) — ใช้ใน FlyShareButton.tsx
+   สถานะควบคุมด้วย data-state บนปุ่ม: idle | sending | shared | error
+   อยากปรับสี/ขนาด แก้ตัวแปร --flyshare-* ด้านล่างที่เดียว */
+.flyshare-wrap {
+  --flyshare-bg: var(--color-ink);
+  --flyshare-fg: #ffffff;
+  --flyshare-accent: var(--color-brand);
+  --flyshare-fail: #ff6b5e;
+  --flyshare-height: 40px;
+  display: inline-flex;
+}
+
+/* ---------- ปุ่ม ---------- */
+.flyshare-btn {
+  position: relative;
+  height: var(--flyshare-height);
+  min-width: 190px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--flyshare-fg) 14%, transparent);
+  border-radius: 12px;
+  background: var(--flyshare-bg);
+  color: var(--flyshare-fg);
+  cursor: pointer;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--flyshare-bg) 28%, transparent);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.flyshare-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--flyshare-bg) 32%, transparent),
+    0 0 22px color-mix(in srgb, var(--flyshare-accent) 35%, transparent);
+}
+.flyshare-btn:active:not(:disabled) { transform: scale(0.95); }
+.flyshare-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--flyshare-accent) 60%, transparent);
+}
+.flyshare-btn:disabled { cursor: default; }
+
+/* ---------- แสงเรือง ---------- */
+.flyshare-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--flyshare-accent);
+  filter: blur(18px);
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.flyshare-btn[data-state='sending'] .flyshare-glow,
+.flyshare-btn[data-state='shared'] .flyshare-glow {
+  opacity: 0.45;
+  transform: scale(1.15);
+}
+.flyshare-btn[data-state='error'] .flyshare-glow {
+  background: var(--flyshare-fail);
+  opacity: 0.4;
+  transform: scale(1.1);
+}
+
+/* ---------- เนื้อหา ---------- */
+.flyshare-content {
+  position: relative;
+  z-index: 10;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.flyshare-icon-area {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- ไอคอนแชร์ (ปกติ) ---------- */
+.flyshare-share-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: opacity 0.2s ease, transform 0.25s ease, visibility 0s linear 0s;
+}
+.flyshare-share-icon svg { width: 22px; height: 22px; }
+.flyshare-btn:not([data-state='idle']) .flyshare-share-icon {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-8px) scale(0.35);
+  transition: opacity 0.15s ease, transform 0.2s ease, visibility 0s linear 0.2s;
+  pointer-events: none;
+}
+
+/* ---------- เครื่องบินกระดาษ ---------- */
+.flyshare-plane {
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  width: 30px;
+  height: 30px;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+.flyshare-plane svg { width: 100%; height: 100%; }
+.flyshare-btn[data-state='sending'] .flyshare-plane {
+  visibility: visible;
+  animation: flyshare-flight 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes flyshare-flight {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.65) rotate(-8deg); }
+  12%  { opacity: 1; transform: translate(3px, 4px) scale(0.85) rotate(-8deg); }
+  55%  { opacity: 1; transform: translate(72px, -22px) scale(1) rotate(-3deg); }
+  100% { opacity: 0; transform: translate(124px, -62px) scale(0.7) rotate(8deg); }
+}
+
+/* ---------- เส้นลมตามหลัง ---------- */
+.flyshare-trail {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  border-radius: 50px;
+  transform-origin: left center;
+  opacity: 0;
+  pointer-events: none;
+}
+.flyshare-trail-1 {
+  top: 11px;
+  width: 60px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--flyshare-accent) 85%, #fff), transparent);
+}
+.flyshare-trail-2 {
+  top: 18px;
+  width: 40px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--flyshare-fg) 55%, transparent), transparent);
+}
+.flyshare-btn[data-state='sending'] .flyshare-trail-1 { animation: flyshare-trail-1 0.8s ease-out 0.12s forwards; }
+.flyshare-btn[data-state='sending'] .flyshare-trail-2 { animation: flyshare-trail-2 0.7s ease-out 0.22s forwards; }
+@keyframes flyshare-trail-1 {
+  0%   { opacity: 0; transform: scaleX(0); }
+  35%  { opacity: 0.8; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+@keyframes flyshare-trail-2 {
+  0%   { opacity: 0; transform: scaleX(0); }
+  40%  { opacity: 0.6; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(0.5); }
+}
+
+/* ---------- ประกาย ---------- */
+.flyshare-particle {
+  position: absolute;
+  left: 4px;
+  top: 12px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--flyshare-accent);
+  opacity: 0;
+  pointer-events: none;
+}
+.flyshare-btn[data-state='sending'] .flyshare-particle { animation: flyshare-particle 0.65s ease-out forwards; }
+.flyshare-p1 { --flyshare-py: 12px;  animation-delay: 0.15s !important; }
+.flyshare-p2 { --flyshare-py: -8px;  animation-delay: 0.19s !important; }
+.flyshare-p3 { --flyshare-py: 18px;  animation-delay: 0.23s !important; }
+.flyshare-p4 { --flyshare-py: -15px; animation-delay: 0.27s !important; }
+.flyshare-p5 { --flyshare-py: 5px;   animation-delay: 0.31s !important; }
+.flyshare-p6 { --flyshare-py: -20px; animation-delay: 0.35s !important; }
+.flyshare-p7 { --flyshare-py: 25px;  animation-delay: 0.39s !important; }
+@keyframes flyshare-particle {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0); }
+  25%  { opacity: 1; transform: translate(-5px, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-25px, var(--flyshare-py)) scale(0); }
+}
+
+/* ---------- ไอคอนสำเร็จ / ล้มเหลว ---------- */
+.flyshare-result {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.25);
+  z-index: 30;
+  pointer-events: none;
+}
+.flyshare-result svg { width: 22px; height: 22px; }
+.flyshare-result-ok { color: var(--flyshare-accent); }
+.flyshare-result-fail { color: var(--flyshare-fail); }
+.flyshare-btn[data-state='shared'] .flyshare-result-ok,
+.flyshare-btn[data-state='error'] .flyshare-result-fail {
+  visibility: visible;
+  animation: flyshare-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.flyshare-btn[data-state='error'] { animation: flyshare-shake 0.45s ease; }
+@keyframes flyshare-pop {
+  0%   { opacity: 0; transform: scale(0.25); }
+  65%  { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes flyshare-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ---------- ข้อความ (ซ้อนกันในช่องเดียว ความกว้างตามข้อความที่ยาวสุด) ---------- */
+.flyshare-text {
+  display: grid;
+  height: 20px;
+  overflow: hidden;
+  text-align: left;
+}
+.flyshare-label {
+  grid-area: 1 / 1;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.flyshare-btn[data-state='idle'] .flyshare-label-idle,
+.flyshare-btn[data-state='sending'] .flyshare-label-sending,
+.flyshare-btn[data-state='shared'] .flyshare-label-shared,
+.flyshare-btn[data-state='error'] .flyshare-label-error {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* ข้อความที่ออกไปแล้วเลื่อนขึ้นบน */
+.flyshare-btn[data-state='sending'] .flyshare-label-idle,
+.flyshare-btn[data-state='shared'] .flyshare-label-idle,
+.flyshare-btn[data-state='shared'] .flyshare-label-sending,
+.flyshare-btn[data-state='error'] .flyshare-label-idle,
+.flyshare-btn[data-state='error'] .flyshare-label-sending {
+  transform: translateY(-8px);
+}
+
+/* ---------- ลูกศร ---------- */
+.flyshare-arrow {
+  color: color-mix(in srgb, var(--flyshare-fg) 50%, transparent);
+  font-size: 14px;
+  line-height: 1;
+  animation: flyshare-arrow 1.5s ease-in-out infinite;
+  transition: opacity 0.2s ease;
+}
+@keyframes flyshare-arrow {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(3px, -3px); }
+}
+.flyshare-btn:not([data-state='idle']) .flyshare-arrow { opacity: 0; }
+
+/* ---------- ผู้ใช้ตั้งค่าลดการเคลื่อนไหว ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .flyshare-plane, .flyshare-trail, .flyshare-particle { display: none; }
+  .flyshare-arrow, .flyshare-btn[data-state='error'] { animation: none; }
+}
+
+@media (max-width: 480px) {
+  .flyshare-btn { min-width: 170px; }
+}

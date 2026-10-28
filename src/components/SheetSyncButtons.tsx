@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchSyncState, fmtDateTime, type PushMode, type PushStatus, type SyncState } from '../lib/sheetSync'
 import SheetAuditPull from './SheetAuditPull'
+import FlyShareButton from './FlyShareButton'
 import Button from './ui/Button'
 
 interface Props {
@@ -43,16 +44,12 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
     <>
       <div className="flex flex-col items-start gap-0.5">
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            data-tour="sheet-push"
-            onClick={() => onPush()}
-            disabled={running}
+          <FlyShareButton
+            dataTour="sheet-push"
+            status={status}
+            onPush={() => onPush()}
             title="ส่งเคสใหม่ไปวางต่อท้าย และแก้แถวเดิมที่ข้อมูลเปลี่ยน ในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 (ไม่เรียง/ไม่ย้ายแถวเดิม)"
-            className="whitespace-nowrap"
-          >
-            {running ? 'กำลังส่ง…' : '⬆ ส่งไป Google Sheet'}
-          </Button>
+          />
           <Button
             variant="outline"
             data-tour="sheet-pull"
