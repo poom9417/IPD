@@ -7,6 +7,7 @@
   --flyshare-accent: var(--color-brand);
   --flyshare-fail: #ff6b5e;
   --flyshare-height: 40px;
+  position: relative;
   display: inline-flex;
 }
 
@@ -264,6 +265,36 @@
   50% { transform: translate(3px, -3px); }
 }
 .flyshare-btn:not([data-state='idle']) .flyshare-arrow { opacity: 0; }
+
+/* ---------- Popup เหนือปุ่ม (เช่น "ส่งล่าสุด 28/10/2026 08:54") โผล่ตอนชี้เมาส์ / โฟกัสปุ่ม ----------
+   กว้างเท่าปุ่ม และวางชิดเหนือปุ่ม จึงทับลิงก์ "ซ่อม" ที่อยู่เหนือปุ่มไว้ (ดู SheetSyncButtons.tsx) */
+.flyshare-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 2px);
+  transform: translateY(6px);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--flyshare-bg);
+  color: var(--flyshare-fg);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--flyshare-bg) 30%, transparent);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 60;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+}
+.flyshare-wrap:hover .flyshare-tip,
+.flyshare-wrap:focus-within .flyshare-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
 
 /* ---------- ผู้ใช้ตั้งค่าลดการเคลื่อนไหว ---------- */
 @media (prefers-reduced-motion: reduce) {

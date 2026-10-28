@@ -12,7 +12,8 @@ interface Props {
   onPush: () => void
   /** ข้อความตอนว่าง */
   label?: string
-  title?: string
+  /** ข้อความ popup เหนือปุ่มตอนชี้เมาส์ (เช่น "ส่งล่าสุด ...") */
+  tooltip?: string
   disabled?: boolean
   /** ใช้กับ OnboardingTour */
   dataTour?: string
@@ -30,7 +31,7 @@ const TEXT: Record<View, string> = {
 }
 
 /** ปุ่ม flyshare: ไอคอนแชร์ → เครื่องบินกระดาษบินออก → ติ๊กถูก (หรือกากบาทสั่นถ้าส่งไม่สำเร็จ) */
-export default function FlyShareButton({ status, onPush, label = TEXT.idle, title, disabled, dataTour }: Props) {
+export default function FlyShareButton({ status, onPush, label = TEXT.idle, tooltip, disabled, dataTour }: Props) {
   const [view, setView] = useState<View>('idle')
   const startedAt = useRef(0)
   const sawRunning = useRef(false)
@@ -81,7 +82,7 @@ export default function FlyShareButton({ status, onPush, label = TEXT.idle, titl
   }
 
   return (
-    <span className="flyshare-wrap" data-tour={dataTour} title={title}>
+    <span className="flyshare-wrap" data-tour={dataTour}>
       <button
         type="button"
         className="flyshare-btn"
@@ -154,6 +155,12 @@ export default function FlyShareButton({ status, onPush, label = TEXT.idle, titl
           </span>
         </span>
       </button>
+
+      {tooltip && (
+        <span className="flyshare-tip" role="tooltip">
+          {tooltip}
+        </span>
+      )}
     </span>
   )
 }
