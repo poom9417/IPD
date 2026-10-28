@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchSyncState, fmtDateTime, type PushMode, type PushStatus, type SyncState } from '../lib/sheetSync'
 import SheetAuditPull from './SheetAuditPull'
+import Button from './ui/Button'
 
 interface Props {
   status: PushStatus
@@ -42,23 +43,25 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
     <>
       <div className="flex flex-col items-start gap-0.5">
         <div className="flex gap-2">
-          <button
+          <Button
+            variant="outline"
             data-tour="sheet-push"
             onClick={() => onPush()}
             disabled={running}
             title="ส่งเคสใหม่ไปวางต่อท้าย และแก้แถวเดิมที่ข้อมูลเปลี่ยน ในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 (ไม่เรียง/ไม่ย้ายแถวเดิม)"
-            className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-brand-soft disabled:opacity-40"
+            className="whitespace-nowrap"
           >
             {running ? 'กำลังส่ง…' : '⬆ ส่งไป Google Sheet'}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             data-tour="sheet-pull"
             onClick={() => setShowPull(true)}
             title="อ่านวัน Audit จากชีตของทีม Audit แล้วตรวจก่อนบันทึก"
-            className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-brand-soft"
+            className="whitespace-nowrap"
           >
             ⬇ ดึง Audit จาก Sheet
-          </button>
+          </Button>
         </div>
         <button
           onClick={() => {

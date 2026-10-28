@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import type { AssignmentRequest, CoveragePayerPair } from '../lib/types'
 import NoticeCard, { btnDanger, btnGhost, btnPrimary } from './NoticeCard'
+import Button from './ui/Button'
 
 interface Props {
   /** เรียกหลังยืนยัน/ปฏิเสธสำเร็จ — ให้หน้าหลักโหลด "สิทธิของฉัน" ใหม่ */
@@ -144,16 +145,16 @@ export default function PendingAssignmentsBanner({ onChanged }: Props) {
       {open && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/40 px-4">
           {(
-            <div className="np-card flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
+            <div className="anim-pop-in flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-ink">สิทธิรอให้คุณยืนยัน {items.length.toLocaleString()} รายการ</h2>
-                <button
+                <Button
+                  variant="icon"
                   onClick={() => setOpen(false)}
                   aria-label="ปิด"
-                  className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand"
                 >
                   ✕
-                </button>
+                </Button>
               </div>
               <p className="mb-3 text-sm text-ink/70">
                 Audit / Developer เลือกสิทธิเหล่านี้ให้คุณดูแล — เมื่อยืนยันแล้วจะกลายเป็นงานของคุณและยกเลิกเองไม่ได้

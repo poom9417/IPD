@@ -101,7 +101,7 @@ export default function PatientSearchInput({ field, value, onText, onPick, disab
         onKeyDown={onKeyDown}
         placeholder={searchEnabled ? (field === 'hn' ? 'พิมพ์ HN เพื่อค้นหา…' : 'พิมพ์ชื่อเพื่อค้นหา…') : undefined}
         autoComplete="off"
-        className="input"
+        className="form-input"
       />
       {open && (
         <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-line bg-surface shadow-lg">

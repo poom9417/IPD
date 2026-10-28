@@ -1,6 +1,5 @@
 import { useAuth } from '../contexts/AuthContext'
 import BrandLogo from './BrandLogo'
-import './NewUserPopup.css'
 import { btnGhost } from './NoticeCard'
 
 /** หน้าจอสำหรับผู้ใช้ที่ยังไม่ได้รับอนุมัติ (pending / rejected) — ทำอะไรไม่ได้นอกจากรอและออกจากระบบ */
@@ -14,7 +13,7 @@ export default function PendingApprovalPage() {
         <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-ink">
           <BrandLogo className="h-11 w-11" />
         </div>
-        <div className="np-card rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
+        <div className="anim-pop-in rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
           <h1 className="text-xl font-bold text-ink">
             {rejected ? 'บัญชีนี้ไม่ได้รับอนุมัติ' : 'รอ admin อนุมัติ'}
           </h1>

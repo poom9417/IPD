@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabaseClient'
 import type { PushStatus } from '../lib/sheetSync'
+import Button from './ui/Button'
 
 interface Props {
   onClose: () => void
@@ -97,13 +98,13 @@ export default function ImportAdmissionsCsv({ onClose, onDone, sheetStatus }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">นำเข้าเคสใหม่จาก HIS (CSV)</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <p className="mb-2 text-sm text-ink/70">
@@ -116,7 +117,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone, sheetStatus }: Pr
           type="file"
           accept=".csv"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="input mb-3"
+          className="form-input mb-3"
         />
 
         {fileName && missingCols.length > 0 && (
@@ -167,16 +168,16 @@ export default function ImportAdmissionsCsv({ onClose, onDone, sheetStatus }: Pr
         )}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ปิด
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleConfirm}
             disabled={rows.length === 0 || missingCols.length > 0 || uploading || !!summary}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {uploading ? 'กำลังนำเข้า…' : `นำเข้า ${rows.length} แถว`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

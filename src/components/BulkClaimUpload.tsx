@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { saveCaseTracking, type CaseTrackingRow } from '../lib/caseTracking'
 import type { Admission, BulkStage } from '../lib/types'
 import { parseGgoClaimFile } from '../lib/ggoClaimFile'
+import Button from './ui/Button'
 
 interface Props {
   admissions: Admission[]
@@ -348,13 +349,13 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
   const errorCount = rows.filter((r) => r.error).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-y-auto rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">อัพโหลดสถานะเคลมแบบ Bulk</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <label className="mb-1 block text-sm font-medium text-ink/80">ขั้นตอนที่จะอัพเดต</label>
@@ -367,7 +368,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
             setResult(null)
             setDupMode('skip')
           }}
-          className="input mb-3"
+          className="form-input mb-3"
         >
           {stageList.map((s) => (
             <option key={s} value={s}>
@@ -387,7 +388,7 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
           type="file"
           accept={stage === 'submission' ? '.xls,.xlsx' : '.csv'}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="input mb-3"
+          className="form-input mb-3"
         />
 
         {fileName && rows.length > 0 && (
@@ -484,16 +485,16 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
         {result && <p className="mb-3 text-sm text-ink">{result}</p>}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ปิด
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleConfirm}
             disabled={writeCount === 0 || uploading || checking || !!checkError}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {uploading ? 'กำลังบันทึก…' : `บันทึก ${writeCount} เคส`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import { exportArSummaryToExcel } from '../lib/exportArSummary'
 import { copyElementAsImage } from '../lib/copyTableImage'
 import { useAuth } from '../contexts/AuthContext'
 import WaveExportButton from './WaveExportButton'
+import Button from './ui/Button'
 
 const money = (n: number) => n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const count = (n: number) => n.toLocaleString('th-TH')
@@ -136,28 +137,28 @@ export default function ArSummaryDashboard() {
             <div className="mb-1">ค้างส่งเบิก ณ วันที่</div>
             <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={inputCls} />
           </label>
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={() => setAsOf(todayYmd())}
-            className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink"
           >
             วันนี้
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             type="button"
             onClick={() => setTick((t) => t + 1)}
             disabled={loading}
-            className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
           >
             {loading ? 'กำลังโหลด…' : 'โหลดข้อมูลใหม่'}
-          </button>
+          </Button>
           {canExport && (
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={handleCopyImage}
               disabled={loading || !summary || copyState === 'busy'}
               title="คัดลอกเฉพาะตารางเป็นภาพ แล้ววางใน PowerPoint / Canva"
-              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
             >
               {copyState === 'busy'
                 ? 'กำลังสร้างภาพ…'
@@ -168,7 +169,7 @@ export default function ArSummaryDashboard() {
                     : copyState === 'error'
                       ? 'คัดลอกไม่สำเร็จ'
                       : 'คัดลอกตาราง (ภาพ)'}
-            </button>
+            </Button>
           )}
           {canExport && (
             <WaveExportButton

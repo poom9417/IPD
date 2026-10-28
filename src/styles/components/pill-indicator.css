@@ -1,0 +1,15 @@
+/* ปุ่มสลับโหมดแบบ Pill Indicator — สปริง stiffness 240 / damping 24 (overshoot ราว 2 เปอร์เซ็นต์, นิ่งใน ~0.5 วิ)
+   ใช้กับแถบ pill ที่เลื่อนตามแท็บ (PillTabs.tsx) */
+.pill-indicator {
+  transition-property: left, width;
+  transition-duration: 0.7s;
+  transition-timing-function: cubic-bezier(0.34, 1.25, 0.64, 1);
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  .pill-indicator {
+    transition-timing-function: linear(0, 0.061, 0.199, 0.364, 0.526, 0.667, 0.782, 0.869, 0.932, 0.973, 0.999, 1.014, 1.02, 1.021, 1.02, 1.016, 1.013, 1.01, 1.007, 1.004, 1.003, 1.001, 1, 1, 1, 1, 1, 1, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill-indicator { transition: none; }
+}

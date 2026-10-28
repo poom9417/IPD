@@ -75,7 +75,7 @@ export default function CoverageMultiSelect({ options, value, onChange }: Props)
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="ค้นหารหัสหรือชื่อสิทธิ…"
-            className="input mb-1.5 py-1.5 text-xs"
+            className="form-input mb-1.5 py-1.5 text-xs"
           />
           <div className="mb-1 flex justify-between px-2 text-xs">
             <button type="button" className="text-ink font-semibold hover:underline" onClick={selectVisible}>

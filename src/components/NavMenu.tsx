@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import ModeTabs, { type MineMode } from './ModeTabs'
+import PillTabs, { type MineMode } from './PillTabs'
 
 export type PageKey = 'mine' | 'codec' | 'myjob-dashboard' | 'myjob-claim'
 export type { MineMode }
@@ -188,7 +188,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
         >
           Menu
           <svg
-            className={'menu-chevron h-4 w-4 ' + (open ? 'is-open' : '')}
+            className={'dropdown-chevron h-4 w-4 ' + (open ? 'is-open' : '')}
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -202,17 +202,17 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
         </button>
 
         {mounted && (
-          <div role="menu" className={'absolute left-0 top-full z-50 pt-2 ' + (shown ? 'menu-shown' : 'pointer-events-none')}>
+          <div role="menu" className={'absolute left-0 top-full z-50 pt-2 ' + (shown ? 'dropdown-open' : 'pointer-events-none')}>
             <div data-tour="menu-list" className="relative w-72">
               {/* พื้นหลังแผง: ยืดลงจากขอบบน (transform-origin: top) — รายการข้างในไม่ถูกบีบ */}
-              <div aria-hidden className="menu-panel-bg absolute inset-0 rounded-xl border border-ink/10 bg-white shadow-xl" />
+              <div aria-hidden className="dropdown-panel absolute inset-0 rounded-xl border border-ink/10 bg-white shadow-xl" />
               <ul className="relative p-1.5 text-ink">
               {entries.map((e, idx) => {
                 if (e.children) {
                   const open = expanded === e.key
                   const groupCur = e.children.some((c) => c.page === page)
                   return (
-                    <li key={e.key} className="menu-item" style={{ '--i': idx } as CSSProperties}>
+                    <li key={e.key} className="dropdown-item" style={{ '--i': idx } as CSSProperties}>
                       <button
                         type="button"
                         role="menuitem"
@@ -269,7 +269,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
                 }
                 const cur = e.page === page
                 return (
-                  <li key={e.key} className="menu-item" style={{ '--i': idx } as CSSProperties}>
+                  <li key={e.key} className="dropdown-item" style={{ '--i': idx } as CSSProperties}>
                     <button
                       type="button"
                       role="menuitem"
@@ -297,7 +297,7 @@ export default function NavMenu({ page, canJob, canAssign = false, onNavigate, m
 
       {page === 'mine' && canDashboard ? (
         <div className="flex items-center border-l border-white/25 pl-3">
-          <ModeTabs mode={mode} onChange={onModeChange} />
+          <PillTabs mode={mode} onChange={onModeChange} />
         </div>
       ) : (
         currentEntry && (

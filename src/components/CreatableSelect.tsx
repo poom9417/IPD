@@ -83,7 +83,7 @@ export default function CreatableSelect({ value, options, onChange, onAddClick, 
       <button
         type="button"
         onClick={() => (open ? setOpen(false) : openList())}
-        className="input flex items-center justify-between text-left"
+        className="form-input flex items-center justify-between text-left"
       >
         <span className={`truncate ${current ? '' : 'text-ink/50'}`}>{current?.label ?? (value || 'เลือก…')}</span>
         <span className="ml-2 text-xs text-ink/50">▾</span>
@@ -102,7 +102,7 @@ export default function CreatableSelect({ value, options, onChange, onAddClick, 
               onKeyDown={onKeyDown}
               placeholder="พิมพ์เพื่อค้นหา…"
               autoComplete="off"
-              className="input"
+              className="form-input"
             />
           </div>
           <div className="max-h-48 overflow-y-auto">

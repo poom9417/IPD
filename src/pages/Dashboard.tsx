@@ -25,6 +25,7 @@ import {
   type AdmissionFilters,
   type AdmissionStats,
 } from '../lib/searchAdmissions'
+import Button from '../components/ui/Button'
 
 const PAGE_SIZE = 50
 export default function Dashboard() {
@@ -369,26 +370,28 @@ export default function Dashboard() {
               />
             )}
             {isAdmin && (
-              <button
+              <Button
+                variant="outline"
                 data-tour="import"
                 onClick={() => setShowImport(true)}
-                className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors"
+                className="whitespace-nowrap"
               >
                 นำเข้าเคสใหม่ (CSV)
-              </button>
+              </Button>
             )}
             {isAdmin && (
               <SheetSyncButtons status={sheetPush.status} onPush={(m) => void sheetPush.push(m)} onPulled={loadData} />
             )}
             {canBulk && (
-              <button
+              <Button
+                variant="outline"
                 data-tour="bulk"
                 onClick={openBulk}
                 disabled={bulkPreparing}
-                className="whitespace-nowrap rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink transition-colors disabled:opacity-40"
+                className="whitespace-nowrap"
               >
                 {bulkPreparing ? 'กำลังเตรียมข้อมูล…' : 'อัพโหลดสถานะเคลม (CSV)'}
-              </button>
+              </Button>
             )}
             {canEdit && (
               <>

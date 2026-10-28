@@ -1,0 +1,37 @@
+/* เมนู Dropdown Origin Reveal (อ้างอิง motion-reference "dropdown-origin") — ใช้ใน NavMenu
+   เปิด: พื้นแผงยืดจากขอบบน 0.48 วิ outCubic แล้วรายการไล่ขึ้นทีละ 24ms (เริ่มหลัง 0.22 วิ)
+   ปิด: หุบกลับ 0.26 วิ inCubic รายการหายใน 80ms */
+.dropdown-panel {
+  transform-origin: top;
+  transform: scaleY(0.08);
+  opacity: 0;
+  transition: transform 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+.dropdown-open .dropdown-panel {
+  transform: scaleY(1);
+  opacity: 1;
+  transition-duration: 0.48s;
+  transition-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.dropdown-item {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.08s linear, transform 0.08s linear;
+}
+.dropdown-open .dropdown-item {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.18s cubic-bezier(0.215, 0.61, 0.355, 1) calc(0.22s + var(--i, 0) * 24ms),
+    transform 0.18s cubic-bezier(0.215, 0.61, 0.355, 1) calc(0.22s + var(--i, 0) * 24ms);
+}
+.dropdown-chevron {
+  transition: transform 0.26s cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+.dropdown-chevron.is-open {
+  transform: rotate(180deg);
+  transition-duration: 0.48s;
+  transition-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-panel, .dropdown-item, .dropdown-chevron { transition: none !important; }
+}

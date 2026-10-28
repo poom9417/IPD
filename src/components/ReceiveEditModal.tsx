@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Admission } from '../lib/types'
+import Button from './ui/Button'
 
 interface Props {
   admission: Admission
@@ -50,7 +51,7 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+    <div className="modal-overlay p-4">
       <form
         onSubmit={handleSubmit}
         role="dialog"
@@ -64,14 +65,14 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
               <span className="font-mono">{a.encounter_id}</span> · {a.patients?.full_name ?? a.hn}
             </p>
           </div>
-          <button
+          <Button
+            variant="icon"
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 py-1">
@@ -82,7 +83,7 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="input"
+              className="form-input"
             />
           </label>
           <label className="block">
@@ -94,7 +95,7 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
               min="0"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="input"
+              className="form-input"
             />
           </label>
           <p className="pb-1 text-sm text-ink/60">
@@ -105,21 +106,21 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
         <div className="shrink-0 border-t border-line px-6 py-3">
           {error && <p className="mb-2 text-sm text-rose">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft disabled:opacity-40"
             >
               ยกเลิก
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               type="submit"
               disabled={saving || !changed}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
             >
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
-            </button>
+            </Button>
           </div>
         </div>
       </form>

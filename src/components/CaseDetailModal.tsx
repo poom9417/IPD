@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import type { Admission } from '../lib/types'
 import { CLAIM_STAGE_LABELS, getClaimStage } from '../lib/claimStatus'
+import Button from './ui/Button'
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -47,7 +48,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+      className="modal-overlay p-4"
       onClick={onClose}
     >
       <div
@@ -61,9 +62,9 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
             <h2 className="text-base font-semibold text-ink">รายละเอียดเคส</h2>
             <p className="mt-0.5 text-sm text-ink/60">{onEditReceive ? 'ดูข้อมูล — แก้ได้เฉพาะวันที่/ยอดรับเอกสาร' : 'ดูข้อมูลอย่างเดียว — แก้ไขไม่ได้'}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" type="button" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-6 py-1">

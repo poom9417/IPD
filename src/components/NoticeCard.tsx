@@ -1,5 +1,4 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
-import './NewUserPopup.css'
 
 interface Props {
   /** ป้ายสำหรับโปรแกรมอ่านหน้าจอ */
@@ -51,7 +50,7 @@ export default function NoticeCard({ label, icon, count, title, children, action
         if (closing && e.target === e.currentTarget) onClosed()
       }}
       className={
-        'np-card pointer-events-auto overflow-hidden rounded-2xl border border-line border-t-4 border-t-brand bg-surface shadow-xl ' +
+        'anim-pop-in pointer-events-auto overflow-hidden rounded-2xl border border-line border-t-4 border-t-brand bg-surface shadow-xl ' +
         className
       }
     >
@@ -62,7 +61,7 @@ export default function NoticeCard({ label, icon, count, title, children, action
             <span
               key={count}
               aria-hidden="true"
-              className="np-badge absolute -right-2 -top-2 flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-ink bg-brand px-1 font-mono text-xs font-bold text-ink ring-2 ring-surface"
+              className="badge-pop absolute -right-2 -top-2 flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-ink bg-brand px-1 font-mono text-xs font-bold text-ink ring-2 ring-surface"
             >
               {count}
             </span>
@@ -77,7 +76,7 @@ export default function NoticeCard({ label, icon, count, title, children, action
       {autoCloseMs ? (
         <div className="h-1 bg-brand-soft" aria-hidden="true">
           <div
-            className="np-bar h-full bg-brand-dark"
+            className="timer-bar h-full bg-brand-dark"
             style={{ animationDuration: `${autoCloseMs}ms` }}
             onAnimationEnd={close}
           />

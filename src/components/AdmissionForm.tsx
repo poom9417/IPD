@@ -14,6 +14,7 @@ import type {
 import PatientSearchInput from './PatientSearchInput'
 import CreatableSelect from './CreatableSelect'
 import AddMasterPanel from './AddMasterPanel'
+import Button from './ui/Button'
 
 type AddingKind = 'coverage' | 'payer' | 'division'
 
@@ -301,7 +302,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+    <div className="modal-overlay p-4">
       <form
         onSubmit={handleSubmit}
         className="flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col rounded-2xl bg-surface shadow-xl"
@@ -311,9 +312,9 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           <h2 className="text-base font-semibold text-ink">
             {isEdit ? 'แก้ไขเคส' : 'เพิ่มเคสใหม่'}
           </h2>
-          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" type="button" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         {/* ฟอร์ม — เลื่อนขึ้นลงได้ด้วยลูกกลิ้งเมาส์ */}
@@ -326,7 +327,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 disabled={isEdit}
                 value={draft.encounter_id}
                 onChange={(e) => set('encounter_id', e.target.value === '' ? '' : Number(e.target.value))}
-                className="input"
+                className="form-input"
               />
             </Field>
             <Field label="AN">
@@ -335,7 +336,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="number"
                 value={draft.an}
                 onChange={(e) => set('an', e.target.value === '' ? '' : Number(e.target.value))}
-                className="input"
+                className="form-input"
               />
             </Field>
           </div>
@@ -387,7 +388,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
               value={draft.birthdate}
               disabled={lockPatient}
               onChange={(e) => set('birthdate', e.target.value)}
-              className="input"
+              className="form-input"
             />
           </Field>
 
@@ -398,7 +399,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="date"
                 value={draft.admit_date}
                 onChange={(e) => set('admit_date', e.target.value)}
-                className="input"
+                className="form-input"
               />
             </Field>
             <Field label="เวลารับเข้า">
@@ -406,7 +407,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="time"
                 value={draft.admit_time}
                 onChange={(e) => set('admit_time', e.target.value)}
-                className="input"
+                className="form-input"
               />
             </Field>
           </div>
@@ -417,7 +418,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="date"
                 value={draft.discharge_date}
                 onChange={(e) => set('discharge_date', e.target.value)}
-                className="input"
+                className="form-input"
               />
             </Field>
             <Field label="เวลาจำหน่าย">
@@ -425,7 +426,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="time"
                 value={draft.discharge_time}
                 onChange={(e) => set('discharge_time', e.target.value)}
-                className="input"
+                className="form-input"
               />
             </Field>
           </div>
@@ -446,7 +447,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                 type="number"
                 value={draft.los}
                 onChange={(e) => set('los', e.target.value === '' ? '' : Number(e.target.value))}
-                className="input"
+                className="form-input"
               />
             </Field>
           </div>
@@ -518,7 +519,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   type="date"
                   value={caseDraft.document_received_date}
                   onChange={(e) => setCase('document_received_date', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
               <Field label="ยอด claim จาก HIS (บาท)">
@@ -527,7 +528,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   step="0.01"
                   value={caseDraft.document_received_amount}
                   onChange={(e) => setCase('document_received_amount', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
             </div>
@@ -539,7 +540,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   type="date"
                   value={caseDraft.audit_date}
                   onChange={(e) => setCase('audit_date', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
             </div>
@@ -551,7 +552,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   type="date"
                   value={caseDraft.submission_date}
                   onChange={(e) => setCase('submission_date', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
               <Field label="ยอดส่งเบิก (บาท)">
@@ -560,7 +561,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   step="0.01"
                   value={caseDraft.submission_amount}
                   onChange={(e) => setCase('submission_amount', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
             </div>
@@ -570,7 +571,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   type="text"
                   value={caseDraft.claim_no}
                   onChange={(e) => setCase('claim_no', e.target.value)}
-                  className="input"
+                  className="form-input"
                 />
               </Field>
             </div>
@@ -584,28 +585,28 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
           <div className="flex items-center justify-between gap-2">
             {/* ซ้าย: ลบเคส (admin เท่านั้น) — แยกจากปุ่มบันทึก/ยกเลิก */}
             {canDelete ? (
-              <button
+              <Button
+                variant="danger"
                 type="button"
                 onClick={() => setConfirmDelete(true)}
                 disabled={saving || deleting}
-                className="rounded-lg bg-alert px-4 py-2 text-sm font-semibold text-white hover:brightness-90 disabled:opacity-50"
               >
                 ลบเคส
-              </button>
+              </Button>
             ) : (
               <span />
             )}
             <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+              <Button variant="outline" type="button" onClick={onClose}>
                 ยกเลิก
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
               >
                 {saving ? 'กำลังบันทึก…' : 'บันทึก'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -671,15 +672,15 @@ function ConfirmDeleteDialog({
           >
             ยกเลิก
           </button>
-          <button
+          <Button
+            variant="danger"
             type="button"
             autoFocus
             onClick={onConfirm}
             disabled={deleting}
-            className="rounded-lg bg-alert px-4 py-2 text-sm font-semibold text-white hover:brightness-90 disabled:opacity-50"
           >
             {deleting ? 'กำลังลบ…' : 'ตกลง'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

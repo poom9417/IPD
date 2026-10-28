@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import type { AppUser } from '../lib/types'
 import { useAuth } from '../contexts/AuthContext'
 import { btnGhost, btnPrimary } from './NoticeCard'
+import Button from './ui/Button'
 
 interface Props {
   onClose: () => void
@@ -54,13 +55,13 @@ export default function UserManagement({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-      <div className="np-card w-full max-w-3xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
+    <div className="modal-overlay">
+      <div className="anim-pop-in w-full max-w-3xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">จัดการสิทธิ์ผู้ใช้</h2>
-          <button onClick={onClose} aria-label="ปิด" className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose} aria-label="ปิด">
             ✕
-          </button>
+          </Button>
         </div>
 
         <p className="mb-3 text-sm text-ink/70">
@@ -97,7 +98,7 @@ export default function UserManagement({ onClose }: Props) {
                           const v = e.target.value.trim() || null
                           if (v !== u.unit) updateUser(u.id, { unit: v })
                         }}
-                        className="input py-1.5 text-sm"
+                        className="form-input py-1.5 text-sm"
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -114,7 +115,7 @@ export default function UserManagement({ onClose }: Props) {
                         disabled={savingId === u.id || !isDeveloper || u.id === myId}
                         title={!isDeveloper ? 'เฉพาะ Developer กำหนด role ได้' : u.id === myId ? 'เปลี่ยน role ของตัวเองไม่ได้' : undefined}
                         onChange={(e) => updateUser(u.id, { role: e.target.value as AppUser['role'] })}
-                        className="input py-1.5 text-sm"
+                        className="form-input py-1.5 text-sm"
                       >
                         <option value="viewer">ดูอย่างเดียว</option>
                         <option value="user">ผู้ใช้ทั่วไป</option>

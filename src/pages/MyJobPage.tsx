@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 import { pairKey } from '../lib/pairKey'
 import type { AssignableUser, AssignmentRequest, CoverageAssignment, CoveragePayerPair } from '../lib/types'
+import Button from '../components/ui/Button'
 
 type Mode = 'claim' | 'assign'
 
@@ -49,13 +50,13 @@ function ConfirmDialog({
         <h2 className="text-base font-bold text-ink">{title}</h2>
         <div className="mt-2 space-y-1 text-sm text-ink/80">{children}</div>
         <div className="mt-5 flex justify-end gap-2">
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft"
           >
             ยกเลิก
-          </button>
+          </Button>
           <button
             type="button"
             disabled={busy}
@@ -371,7 +372,7 @@ export default function MyJobPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="ค้นหารหัส/ชื่อสิทธิ หรือรหัส/ชื่อผู้จ่าย…"
-          className="input lg:max-w-sm"
+          className="form-input lg:max-w-sm"
         />
         {(canClaim || canAssign) && (
           <div className="flex flex-wrap items-center gap-2">
@@ -391,20 +392,20 @@ export default function MyJobPage() {
                 ))}
               </select>
             )}
-            <button
+            <Button
+              variant="outline"
               onClick={selectVisible}
               disabled={selectableVisible.length === 0}
-              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
             >
               {query ? `เลือกที่ค้นเจอ (${selectableVisible.length})` : 'เลือกที่ว่างทั้งหมด'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setActiveSel(new Set())}
               disabled={activeSel.size === 0}
-              className="rounded-lg border border-ink/30 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft hover:border-ink disabled:opacity-40"
             >
               {activeMode === 'claim' ? 'ล้างที่เลือกใหม่' : 'ล้าง'}
-            </button>
+            </Button>
             <button
               onClick={() => setConfirm(activeMode)}
               disabled={actionDisabled}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { saveCaseTracking } from '../lib/caseTracking'
 import { fmtIsoDate, previewSheetAudit, type PullItem, type PullResult } from '../lib/sheetSync'
+import Button from './ui/Button'
 
 interface Props {
   onClose: () => void
@@ -211,7 +212,7 @@ function ErrorImportDialog({
                     setDate(e.target.value)
                     setConfirming(false)
                   }}
-                  className="input w-full"
+                  className="form-input w-full"
                 />
               </label>
               <label className="text-sm text-ink">
@@ -222,7 +223,7 @@ function ErrorImportDialog({
                     setCov(e.target.value)
                     setConfirming(false)
                   }}
-                  className="input w-full"
+                  className="form-input w-full"
                 >
                   <option value="all">ทุกสิทธิของเคสนี้ (ตามปกติ)</option>
                   {covCodes.map((c) => (
@@ -270,13 +271,13 @@ function ErrorImportDialog({
             <button onClick={onCancel} className="rounded-lg border border-ink/40 px-4 py-2 text-sm text-ink hover:bg-brand-soft">
               ยกเลิก
             </button>
-            <button
+            <Button
+              variant="primary"
               onClick={handleOk}
               disabled={!cands || cands.length === 0}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
             >
               ตกลง
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -414,13 +415,13 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
   const allTabOn = tabRows.length > 0 && tabRows.every((i) => included.has(i.row))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-y-auto rounded-2xl bg-surface p-6 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink">ดึงวัน Audit จาก Google Sheet</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         {loading && <p className="py-10 text-center text-sm text-ink/60">กำลังอ่านชีตและตรวจข้อมูล… (อาจใช้เวลาสักครู่)</p>}
@@ -655,16 +656,16 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
               อ่านชีตใหม่
             </button>
           )}
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ปิด
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleConfirm}
             disabled={writeCount === 0 || saving || loading || saved || !!error}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {saving ? 'กำลังบันทึก…' : saved ? 'บันทึกแล้ว' : `บันทึก ${writeCount.toLocaleString()} เคส`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

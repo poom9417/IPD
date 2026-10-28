@@ -63,7 +63,7 @@ export default function AddMasterPanel({ title, fields, initial, onSubmit, onCan
                   onCancel()
                 }
               }}
-              className={`input ${f.mono ? 'font-mono' : ''}`}
+              className={`form-input ${f.mono ? 'font-mono' : ''}`}
             />
           </div>
         ))}

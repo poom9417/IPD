@@ -1,0 +1,18 @@
+/* ช่องกรอกข้อมูลทั่วไป (input / select / textarea) — ใช้ class "form-input"
+   หมายเหตุ: คงไว้นอก @layer เหมือนเดิม จึงยังชนะ utility ของ Tailwind (เช่น w-auto) เหมือนก่อนย้าย */
+.form-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #c9c5b0;
+  background-color: var(--color-surface);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+.form-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 55%, transparent);
+}
+.form-input:disabled {
+  opacity: 0.6;
+}

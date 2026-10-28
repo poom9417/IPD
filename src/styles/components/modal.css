@@ -1,0 +1,6 @@
+/* พื้นหลังมืดของ modal/dialog ทุกหน้า (ครอบเต็มจอ จัดกลาง) — ถ้าต้องการระยะขอบแนวตั้งให้เติม p-4 เพิ่ม */
+@layer components {
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4;
+  }
+}

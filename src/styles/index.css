@@ -1,0 +1,13 @@
+/* จุดเดียวที่ main.tsx import — ลำดับ: tailwind → tokens → base → animation → คอมโพเนนต์ */
+@import "tailwindcss";
+@import "./theme.css";
+@import "./base.css";
+@import "./animations.css";
+
+@import "./components/form-input.css";
+@import "./components/brand-logo.css";
+@import "./components/button.css";
+@import "./components/modal.css";
+@import "./components/pill-indicator.css";
+@import "./components/dropdown-menu.css";
+@import "./components/wave-download.css";

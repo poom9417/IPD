@@ -1,0 +1,152 @@
+/* ปุ่ม Export แบบ WaveDownload — ใช้ใน WaveExportButton.tsx (ย้ายมาจาก <style> ที่ฝังในไฟล์ tsx) */
+.wave-dl-wrap {
+  --wave-dl-size: 44px;
+  --wave-dl-bg: var(--color-brand);
+  --wave-dl-fg: var(--color-ink);
+  --wave-dl-fail: #ef4444;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.wave-dl-btn {
+  position: relative;
+  flex: none;
+  width: var(--wave-dl-size);
+  height: var(--wave-dl-size);
+  padding: 0;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  overflow: hidden;
+  cursor: pointer;
+  background: transparent;
+  color: var(--wave-dl-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.wave-dl-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ink) 45%, transparent);
+}
+.wave-dl-btn:disabled { cursor: default; }
+.wave-dl-wrap:has(.wave-dl-btn:disabled:not([aria-busy='true'])) { opacity: 0.4; }
+
+.wave-dl-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--wave-dl-bg);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--wave-dl-bg) 45%, transparent);
+  transition: transform 0.2s ease;
+}
+.wave-dl-btn:not(:disabled):hover .wave-dl-bg { transform: scale(1.06); }
+.wave-dl-bg-fail { animation: waveDlFailBg 0.8s ease forwards; }
+.wave-dl-btn:has(.wave-dl-bg-fail) { color: #fff; }
+.wave-dl-ring {
+  position: absolute;
+  inset: 10%;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--wave-dl-fg) 22%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.wave-dl-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  height: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  pointer-events: none;
+}
+.wave-dl-download {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.5);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.wave-dl-download.is-active { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.wave-dl-download.is-leaving { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(90deg); }
+
+.wave-dl-line {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  animation: waveDlLine 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes waveDlLine {
+  from { width: 0; opacity: 0; }
+  to { width: 40%; opacity: 1; }
+}
+
+.wave-dl-wave {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  pointer-events: none;
+  animation: waveDlFade 0.25s ease forwards;
+}
+.wave-dl-wave svg { display: block; width: 100%; height: auto; overflow: visible; }
+@keyframes waveDlFade { from { opacity: 0; } to { opacity: 1; } }
+.wave-dl-wave-path { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.wave-dl-wave-glow { fill: none; stroke: currentColor; stroke-width: 7; stroke-linecap: round; opacity: 0.14; }
+.wave-dl-dots {
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  transform: translateX(-50%);
+  font-size: 7px;
+  line-height: 1;
+  opacity: 0.8;
+  animation: waveDlDots 1s ease-in-out infinite;
+}
+@keyframes waveDlDots { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+.wave-dl-success { animation: waveDlPop 0.35s ease-out forwards; }
+.wave-dl-success path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: waveDlDraw 0.55s ease-out forwards; }
+.wave-dl-failx { opacity: 0; animation: waveDlPop 0.35s ease-out 0.15s forwards; }
+.wave-dl-failx path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: waveDlDraw 0.25s ease-out forwards; }
+.wave-dl-failx path:last-child { animation-delay: 0.12s; }
+@keyframes waveDlPop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes waveDlDraw { to { stroke-dashoffset: 0; } }
+
+.wave-dl-fail-anim { animation: waveDlFailBtn 0.8s ease-in-out forwards; }
+@keyframes waveDlFailBtn {
+  0% { transform: scaleX(1); }
+  45% { transform: scaleX(0.12); }
+  70% { transform: scaleX(0.55); }
+  100% { transform: scaleX(1); }
+}
+@keyframes waveDlFailBg {
+  0% { background: var(--color-brand); }
+  45%, 100% { background: var(--wave-dl-fail); box-shadow: 0 0 18px rgba(239, 68, 68, 0.6); }
+}
+
+.wave-dl-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--color-ink);
+  animation: waveDlTextIn 0.3s ease both;
+}
+.wave-dl-text-loading, .wave-dl-text-morphing { color: color-mix(in srgb, var(--color-ink) 60%, transparent); }
+.wave-dl-text-fail { color: #dc2626; }
+@keyframes waveDlTextIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-dl-btn, .wave-dl-bg, .wave-dl-download, .wave-dl-line, .wave-dl-wave, .wave-dl-success, .wave-dl-failx, .wave-dl-text, .wave-dl-dots { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }
+}

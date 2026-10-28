@@ -73,8 +73,8 @@ export default function ApprovalBell() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
-          <div className="np-card w-full max-w-2xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 text-ink shadow-xl">
+        <div className="modal-overlay">
+          <div className="anim-pop-in w-full max-w-2xl rounded-2xl border border-line border-t-4 border-t-brand bg-surface p-6 text-ink shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold">อีเมลที่รออนุมัติ</h2>
               <button onClick={() => setOpen(false)} aria-label="ปิด" className="rounded-md px-2 py-1 text-lg leading-none hover:bg-brand">
@@ -109,7 +109,7 @@ export default function ApprovalBell() {
                           <select
                             value={picked[u.id] ?? 'viewer'}
                             onChange={(e) => setPicked((p) => ({ ...p, [u.id]: e.target.value as PickRole }))}
-                            className="input py-1.5 text-sm"
+                            className="form-input py-1.5 text-sm"
                           >
                             {roleOptions.map((o) => (
                               <option key={o.value} value={o.value}>

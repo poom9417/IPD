@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { pairKey } from '../lib/pairKey'
 import { useAuth } from '../contexts/AuthContext'
 import type { Admission, CodeCCase, CodeCHistory, CodeCItem, CodeType } from '../lib/types'
+import Button from '../components/ui/Button'
 
 const FETCH_CHUNK = 1000
 const DEADLINE_DAYS = 7
@@ -248,13 +249,13 @@ function CodeCForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border-t-8 border-brand bg-surface shadow-xl">
         <div className="flex items-center justify-between px-6 pt-5">
           <h2 className="text-base font-semibold text-ink">แจ้งเคสติด Code C</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-4 overflow-y-auto px-6 py-4">
@@ -282,7 +283,7 @@ function CodeCForm({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="เช่น 3043836 หรือ ชื่อผู้ป่วย"
-                className="input"
+                className="form-input"
               />
               {loadingList && <p className="mt-2 text-sm text-ink/60">กำลังโหลดรายการเคสที่ส่งเบิกแล้ว…</p>}
               {!loadingList && query.trim() && matches.length === 0 && (
@@ -358,7 +359,7 @@ function CodeCForm({
                         codeRef.current?.focus()
                       }
                     }}
-                    className="input"
+                    className="form-input"
                   >
                     <option value="">ชนิดรหัส</option>
                     <option value="disease">โรค</option>
@@ -375,7 +376,7 @@ function CodeCForm({
                       }
                     }}
                     placeholder="รหัส เช่น K35.8 / 4404"
-                    className="input font-mono"
+                    className="form-input font-mono"
                   />
                   <input
                     ref={reasonRef}
@@ -388,7 +389,7 @@ function CodeCForm({
                       }
                     }}
                     placeholder="สาเหตุที่ติด C (สั้นๆ)"
-                    className="input"
+                    className="form-input"
                   />
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
@@ -416,16 +417,16 @@ function CodeCForm({
             {toSave.length > 0 ? `จะบันทึก ${toSave.length} รหัส เมื่อกดยืนยัน Code C` : 'ยังไม่ได้บันทึกอะไรลงระบบ'}
           </p>
           <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+            <Button variant="outline" onClick={onClose}>
               ยกเลิก
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               onClick={save}
               disabled={!canSave}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
             >
               {saving ? 'กำลังบันทึก…' : 'ยืนยัน Code C'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -470,7 +471,7 @@ function ItemEditForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="w-full max-w-lg rounded-2xl border-t-8 border-brand bg-surface shadow-xl">
         <div className="space-y-3 px-6 py-5">
           <h2 className="text-base font-semibold text-ink">แก้ไขรหัสที่ติด C</h2>
@@ -484,7 +485,7 @@ function ItemEditForm({
               value={codeType}
               onChange={(e) => setCodeType(e.target.value as CodeType | '')}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), codeRef.current?.focus())}
-              className="input"
+              className="form-input"
             >
               <option value="">ไม่ระบุชนิด</option>
               <option value="disease">โรค</option>
@@ -496,7 +497,7 @@ function ItemEditForm({
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), reasonRef.current?.focus())}
               placeholder="รหัส"
-              className="input font-mono"
+              className="form-input font-mono"
             />
           </div>
           <input
@@ -505,22 +506,22 @@ function ItemEditForm({
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), save())}
             placeholder="สาเหตุที่ติด C"
-            className="input"
+            className="form-input"
           />
           <p className="text-xs text-ink/60">การแก้ไขจะถูกบันทึกลงประวัติของแถวนี้ (เก็บค่าเดิมไว้)</p>
           {error && <p className="text-sm text-rose">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 border-t border-line px-6 py-4">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ยกเลิก
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={save}
             disabled={saving || !reason.trim()}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {saving ? 'กำลังบันทึก…' : 'บันทึก'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -561,13 +562,13 @@ function ReplyForm({
   const hist = item.code_c_history ?? []
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className="flex max-h-[90vh] w-full max-w-xl flex-col rounded-2xl border-t-8 border-brand bg-surface shadow-xl">
         <div className="flex items-center justify-between px-6 pt-5">
           <h2 className="text-base font-semibold text-ink">Audit — บันทึกการแก้ไข Code C</h2>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand">
+          <Button variant="icon" onClick={onClose}>
             ✕
-          </button>
+          </Button>
         </div>
         <div className="space-y-4 overflow-y-auto px-6 py-4">
           <div className="rounded-lg bg-paper px-3 py-2 text-sm text-ink">
@@ -609,23 +610,23 @@ function ReplyForm({
               value={fix}
               onChange={(e) => setFix(e.target.value)}
               rows={5}
-              className="input resize-y"
+              className="form-input resize-y"
               placeholder="เช่น แก้รหัส ICD-9 เป็น … แนบเอกสาร … แล้ว ส่งเบิกซ้ำ"
             />
           </div>
           {error && <p className="text-sm text-rose">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 border-t border-line px-6 py-4">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ยกเลิก
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={save}
             disabled={!fix.trim() || saving}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50"
           >
             {saving ? 'กำลังบันทึก…' : 'บันทึก'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -667,7 +668,7 @@ function DecisionConfirm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+    <div className="modal-overlay">
       <div className={'w-full max-w-md rounded-2xl border-t-8 bg-surface shadow-xl ' + (isPass ? 'border-brand' : 'border-rose')}>
         <div className="space-y-3 px-6 py-5">
           <h2 className="text-base font-semibold text-ink">ยืนยัน "{isPass ? 'ผ่านการแก้ C' : 'ไม่ผ่านการแก้ C'}" ?</h2>
@@ -693,7 +694,7 @@ function DecisionConfirm({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={3}
-                  className="input resize-y"
+                  className="form-input resize-y"
                   placeholder="เช่น แก้แล้วยังติด C ด้วยเหตุผลเดิม"
                 />
               </div>
@@ -702,9 +703,9 @@ function DecisionConfirm({
           {error && <p className="text-sm text-rose">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 border-t border-line px-6 py-4">
-          <button onClick={onClose} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand-soft">
+          <Button variant="outline" onClick={onClose}>
             ยกเลิก
-          </button>
+          </Button>
           <button
             onClick={confirm}
             disabled={saving}
@@ -871,9 +872,9 @@ export default function CodeCPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาชื่อ / encounter_id / HN / รหัส"
-          className="input sm:max-w-xs"
+          className="form-input sm:max-w-xs"
         />
-        <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className="input w-auto">
+        <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className="form-input w-auto">
           <option value="">ทุกสถานะ</option>
           <option value="open">รอ Audit แก้ไข</option>
           <option value="done">Audit ตอบแล้ว (รอ user ยืนยัน)</option>

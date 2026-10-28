@@ -20,7 +20,7 @@ const itemCls = 'relative z-10 rounded-full px-3 py-1 text-sm font-semibold sm:p
  * - ตัวอักษรเปลี่ยนสีเฉพาะส่วนที่อยู่ในเม็ด: ซ้อนป้ายสีดำอีกชั้นไว้ในเม็ดที่ overflow:hidden
  *   (ชั้นในเลื่อนสวนทางกับเม็ดด้วย easing เดียวกัน ตัวอักษรจึงอยู่กับที่)
  */
-export default function ModeTabs({ mode, onChange }: Props) {
+export default function PillTabs({ mode, onChange }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
   const btnRefs = useRef<Partial<Record<MineMode, HTMLButtonElement | null>>>({})
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number; tw: number; th: number } | null>(null)
@@ -63,7 +63,7 @@ export default function ModeTabs({ mode, onChange }: Props) {
     btnRefs.current[next.key]?.focus()
   }
 
-  const anim = ready ? 'mode-pill' : ''
+  const anim = ready ? 'pill-indicator' : ''
 
   return (
     <div

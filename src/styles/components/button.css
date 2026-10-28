@@ -1,0 +1,24 @@
+/* สไตล์ปุ่มกลาง — ใช้ผ่าน <Button variant="..."> (components/ui/Button.tsx)
+   อยู่ใน @layer components เพื่อให้ utility ของ Tailwind (เช่น px-6, w-full) override ได้
+   อยากเพิ่มปุ่มแบบใหม่: เพิ่ม .btn-ชื่อ ที่นี่ + เพิ่มชื่อใน type Variant ของ Button.tsx */
+@layer components {
+  /* ปุ่มหลัก — เหลืองทึบ */
+  .btn-primary {
+    @apply rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-50;
+  }
+
+  /* ปุ่มรอง — กรอบดำบาง ๆ */
+  .btn-outline {
+    @apply rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-brand-soft disabled:opacity-40;
+  }
+
+  /* ปุ่มอันตราย (ลบ ฯลฯ) — แดง */
+  .btn-danger {
+    @apply rounded-lg bg-alert px-4 py-2 text-sm font-semibold text-white hover:brightness-90 disabled:opacity-50;
+  }
+
+  /* ปุ่มไอคอนเล็ก (เช่น ✕ ปิด) — ไม่มีกรอบ */
+  .btn-icon {
+    @apply rounded-md px-2 py-1 text-lg leading-none text-ink hover:bg-brand;
+  }
+}

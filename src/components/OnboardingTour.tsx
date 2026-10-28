@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAuth } from '../contexts/AuthContext'
 import { ROLE_INTRO, TOUR_LABEL, TOUR_STEPS } from '../lib/tourConfig'
 import type { PageKey } from './NavMenu'
+import Button from './ui/Button'
 
 type Phase = 'off' | 'welcome' | 'tour' | 'final'
 
@@ -220,9 +221,9 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
           </p>
           <div className="mt-5 flex justify-end gap-2">
             {replay && (
-              <button onClick={() => setPhase('off')} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium hover:bg-brand-soft">
+              <Button variant="outline" onClick={() => setPhase('off')}>
                 ปิด
-              </button>
+              </Button>
             )}
             <span className="mr-auto self-center text-xs text-ink/50">คู่มือ {TOUR_LABEL}</span>
             <button
@@ -256,19 +257,19 @@ export default function OnboardingTour({ page, onNavigate }: Props) {
             </label>
           )}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <button
+            <Button
+              variant="outline"
               onClick={() => {
                 dirRef.current = -1
                 setI(Math.max(0, steps.length - 1))
                 setPhase('tour')
               }}
-              className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium hover:bg-brand-soft"
             >
               ย้อนกลับ
-            </button>
-            <button onClick={stop} className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium hover:bg-brand-soft">
+            </Button>
+            <Button variant="outline" onClick={stop}>
               {replay ? 'ปิด' : 'ไว้ทีหลัง'}
-            </button>
+            </Button>
             {!replay && (
               <button
                 onClick={confirm}
