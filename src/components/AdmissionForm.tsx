@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { saveCaseTracking, savePatient } from '../lib/caseTracking'
+import { searchAdmissions } from '../lib/searchAdmissions'
 import { useAuth } from '../contexts/AuthContext'
 import type {
   Admission,
@@ -94,6 +95,76 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   const [pickedPatient, setPickedPatient] = useState<Patient | null>(null)
   const lockPatient = pickedPatient !== null && role !== 'admin'
 
+  // ---- คัดลอกเคสเดิมเพื่อสร้างสิทธิที่ 2 (เฉพาะโหมดเพิ่มเคส) ----
+  // dupMatches = เคสในระบบที่ encounter_id หรือ AN ตรงกับที่พิมพ์; source = เคสที่ผู้ใช้เลือกเป็นต้นแบบแล้ว
+  const [dupMatches, setDupMatches] = useState<Admission[]>([])
+  const [dupLoading, setDupLoading] = useState(false)
+  const [confirmCopy, setConfirmCopy] = useState<Admission | null>(null)
+  const [source, setSource] = useState<Admission | null>(null)
+  const dupReq = useRef(0)
+
+  useEffect(() => {
+    if (isEdit || source) return
+    const enc = draft.encounter_id === '' ? null : String(draft.encounter_id)
+    const an = draft.an === '' ? null : String(draft.an)
+    // เลขสั้นเกินไปจะค้นเจอเยอะเกินจริง — เริ่มค้นเมื่อพิมพ์ตั้งแต่ 5 หลัก
+    const terms = [enc, an].filter((t): t is string => !!t && t.length >= 5)
+    if (terms.length === 0) {
+      setDupMatches([])
+      return
+    }
+    const id = ++dupReq.current
+    setDupLoading(true)
+    const t = setTimeout(async () => {
+      try {
+        const found = await Promise.all(
+          terms.map((q) =>
+            searchAdmissions(
+              { search: q, division: '', from: '', to: '', coverages: [], payer: '', stage: '', pairs: null },
+              30,
+              0,
+              false,
+            ),
+          ),
+        )
+        if (id !== dupReq.current) return
+        const map = new Map<number, Admission>()
+        for (const r of found)
+          for (const a of r.rows) {
+            // search_admissions ค้นแบบ "มีคำนี้อยู่ในข้อความ" → คัดเฉพาะที่ตรงทั้งเลขเท่านั้น
+            if (String(a.encounter_id) === enc || String(a.an) === an) map.set(a.admission_id, a)
+          }
+        setDupMatches([...map.values()].sort((x, y) => x.admission_id - y.admission_id))
+      } catch {
+        if (id === dupReq.current) setDupMatches([])
+      } finally {
+        if (id === dupReq.current) setDupLoading(false)
+      }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [draft.encounter_id, draft.an, isEdit, source])
+
+  // ยืนยันใช้เคสเดิมเป็นต้นแบบ: คัดลอกข้อมูลผู้ป่วย/การนอน รพ. ทั้งหมด แต่ล้างสิทธิ + ผู้จ่าย และไม่คัดลอกสถานะเคลม
+  function applyCopy(a: Admission) {
+    const d = toDraft(a)
+    setDraft({ ...d, coverage_code: '', payer_id: '' })
+    setCaseDraft(toCaseDraft(null))
+    setPickedPatient(a.patients ? { ...a.patients, hn: a.hn } : null)
+    setSource(a)
+    setConfirmCopy(null)
+    setDupMatches([])
+    setError(null)
+  }
+
+  // ยกเลิกการคัดลอก → กลับเป็นฟอร์มเปล่า
+  function cancelCopy() {
+    setSource(null)
+    setDraft(toDraft(null))
+    setCaseDraft(toCaseDraft(null))
+    setPickedPatient(null)
+    setError(null)
+  }
+
   useEffect(() => {
     supabase
       .from('division_master')
@@ -106,11 +177,15 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (confirmDelete) return // dialog ยืนยันการลบจัดการ Esc/Enter เอง
+      if (confirmCopy) {
+        if (e.key === 'Escape') setConfirmCopy(null) // dialog ยืนยันคัดลอก: Esc = ยกเลิก (ไม่ปิดฟอร์ม)
+        return
+      }
       if (e.key === 'Escape' && !saving) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving, confirmDelete])
+  }, [onClose, saving, confirmDelete, confirmCopy])
 
   function set<K extends keyof AdmissionDraft>(key: K, value: AdmissionDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }))
@@ -202,8 +277,29 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setSaving(true)
     setError(null)
+
+    // ป้องกันสิทธิ + ผู้จ่ายซ้ำ (เฉพาะเพิ่มเคสใหม่): เทียบกับทุกแถวของ encounter เดียวกันที่พบในระบบ
+    if (!isEdit) {
+      if (source && (!draft.coverage_code || !draft.payer_id)) {
+        setError('กรุณาเลือกสิทธิการรักษาและผู้จ่ายของเคสใหม่ (ล้างค่าจากเคสเดิมไว้แล้ว)')
+        return
+      }
+      const sameEnc = [...dupMatches, ...(source ? [source] : [])].filter(
+        (a) => String(a.encounter_id) === String(draft.encounter_id),
+      )
+      const clash = sameEnc.find(
+        (a) => a.coverage_code === (draft.coverage_code || 'UNK') && a.payer_id === (draft.payer_id || 'UNK'),
+      )
+      if (clash) {
+        setError(
+          `ไม่สามารถบันทึกได้: encounter ${clash.encounter_id} มีสิทธิ ${clash.coverage_code} + ผู้จ่าย ${clash.payer_id} อยู่ในระบบแล้ว — เปลี่ยนสิทธิหรือผู้จ่ายอย่างใดอย่างหนึ่ง`,
+        )
+        return
+      }
+    }
+
+    setSaving(true)
 
     try {
       // admin: เพิ่ม/แก้ข้อมูลผู้ป่วยได้  |  user: เพิ่ม HN ใหม่ได้อย่างเดียว (HN ที่มีอยู่แล้วจะไม่ถูกเขียนทับ)
@@ -341,7 +437,52 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             </Field>
           </div>
 
-          {!isEdit && (
+          {/* พบ encounter / AN ซ้ำกับเคสในระบบ → ให้เลือกเคสเดิมเป็นต้นแบบสร้างสิทธิที่ 2 */}
+          {!isEdit && !source && (dupLoading || dupMatches.length > 0) && (
+            <div className="rounded-lg border border-line bg-paper p-3">
+              {dupMatches.length === 0 ? (
+                <p className="text-sm text-ink/60">กำลังตรวจสอบเคสที่ซ้ำ…</p>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-ink">
+                    พบเคสนี้ในระบบแล้ว {dupMatches.length} รายการ — ถ้าเป็นสิทธิที่ 2 ของผู้ป่วยรายเดิม เลือกเคสเพื่อคัดลอกข้อมูลได้
+                  </p>
+                  <div className="mt-2 space-y-1.5">
+                    {dupMatches.map((a) => (
+                      <button
+                        key={a.admission_id}
+                        type="button"
+                        onClick={() => setConfirmCopy(a)}
+                        className="block w-full rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm hover:bg-brand-soft"
+                      >
+                        <span className="font-mono font-medium">enc {a.encounter_id}</span>
+                        <span className="ml-2 font-mono">AN {a.an}</span>
+                        <span className="ml-2">{a.patients?.full_name ?? a.hn}</span>
+                        <span className="block text-ink/60">
+                          สิทธิ {a.coverage_code} · ผู้จ่าย {a.payer_id}
+                          {a.discharge_date ? ` · จำหน่าย ${a.discharge_date}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {!isEdit && source && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-line bg-brand-soft/60 px-3 py-2 text-sm">
+              <span className="text-ink/80">
+                ✓ คัดลอกจากเคส encounter {source.encounter_id} (สิทธิเดิม {source.coverage_code} · ผู้จ่าย {source.payer_id}) —
+                เลือกสิทธิและผู้จ่ายใหม่ด้านล่าง
+              </span>
+              <button type="button" onClick={cancelCopy} className="shrink-0 font-medium text-ink underline">
+                ยกเลิกการคัดลอก
+              </button>
+            </div>
+          )}
+
+          {!isEdit && !source && (
             <p className="rounded-lg bg-brand-soft/60 px-3 py-2 text-sm text-ink/70">
               พิมพ์ HN หรือชื่อผู้ป่วยช่องใดช่องหนึ่ง แล้วเลือกจากรายการ — ระบบจะเติมข้อมูลผู้ป่วยเดิมให้ทั้งหมด
             </p>
@@ -612,6 +753,29 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
         </div>
       </form>
     </div>
+
+    {confirmCopy && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
+        <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl">
+          <h3 className="text-base font-semibold text-ink">ใช้เคสเดิมเป็นต้นแบบ?</h3>
+          <p className="mt-2 text-sm text-ink/80">
+            คัดลอกข้อมูลจากเคส <span className="font-mono font-semibold">encounter {confirmCopy.encounter_id}</span>
+            {confirmCopy.patients?.full_name ? ` (${confirmCopy.patients.full_name})` : ''} มาสร้างเคสใหม่
+          </p>
+          <p className="mt-2 rounded-lg bg-brand-soft/60 px-3 py-2 text-sm text-ink/80">
+            ระบบจะล้างสิทธิและผู้จ่าย (ตอนนี้ {confirmCopy.coverage_code} · {confirmCopy.payer_id}) เพื่อให้เลือกใหม่ และไม่คัดลอกสถานะเคลม — เคสเดิมไม่ถูกแก้ไข
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="outline" type="button" onClick={() => setConfirmCopy(null)}>
+              ยกเลิก
+            </Button>
+            <Button variant="primary" type="button" autoFocus onClick={() => applyCopy(confirmCopy)}>
+              ใช้เคสนี้
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {confirmDelete && admission && (
       <ConfirmDeleteDialog
