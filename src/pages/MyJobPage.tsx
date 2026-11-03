@@ -5,7 +5,7 @@ import { pairKey } from '../lib/pairKey'
 import type { AssignableUser, AssignmentRequest, CoverageAssignment, CoveragePayerPair } from '../lib/types'
 import Button from '../components/ui/Button'
 
-type Mode = 'claim' | 'assign'
+type Mode = 'claim' | 'assign' | 'revoke'
 
 const ROLE_LABEL: Record<string, string> = { admin: 'Admin', user: 'User', developer: 'Developer' }
 const nameOf = (email: string | null | undefined) => (email ? email.split('@')[0] : '—')
@@ -74,11 +74,13 @@ function ConfirmDialog({
 export default function MyJobPage() {
   const { session, role, canAssign } = useAuth()
   const myId = session?.user.id ?? ''
-  // รับสิทธิให้ตัวเอง: admin / user  |  เลือกสิทธิให้ผู้อื่น: audit / developer (ฐานข้อมูลเช็ค role จริงซ้ำ)
+  // รับสิทธิให้ตัวเอง: admin / user  |  เลือกสิทธิให้ผู้อื่น: developer  |  ถอนสิทธิ: admin / developer (ฐานข้อมูลเช็ค role จริงซ้ำ)
   const canClaim = role === 'admin' || role === 'user'
+  const canRevoke = role === 'admin'
 
+  const availableModes: Mode[] = [...(canClaim ? (['claim'] as Mode[]) : []), ...(canAssign ? (['assign'] as Mode[]) : []), ...(canRevoke ? (['revoke'] as Mode[]) : [])]
   const [mode, setMode] = useState<Mode>(canClaim ? 'claim' : 'assign')
-  const activeMode: Mode = mode === 'assign' && canAssign ? 'assign' : canClaim ? 'claim' : canAssign ? 'assign' : 'claim'
+  const activeMode: Mode = availableModes.includes(mode) ? mode : (availableModes[0] ?? 'claim')
 
   const [pairs, setPairs] = useState<CoveragePayerPair[]>([])
   const [assignments, setAssignments] = useState<CoverageAssignment[]>([])
@@ -87,6 +89,7 @@ export default function MyJobPage() {
   const [saved, setSaved] = useState<Set<string>>(new Set()) // ที่ฉันรับไว้แล้ว (ล็อก ยกเลิกเองไม่ได้)
   const [selected, setSelected] = useState<Set<string>>(new Set()) // เลือกเพิ่มเอง (ยังไม่บันทึก)
   const [assignSel, setAssignSel] = useState<Set<string>>(new Set()) // เลือกให้ผู้อื่น (ยังไม่ส่ง)
+  const [revokeSel, setRevokeSel] = useState<Set<string>>(new Set()) // เลือกถอนสิทธิ (ยังไม่ยืนยัน)
   const [recipient, setRecipient] = useState('')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -118,8 +121,9 @@ export default function MyJobPage() {
     setSaved(new Set(list.filter((a) => a.user_id === myId).map((a) => pairKey(a.coverage_code, a.payer_id))))
     setSelected(new Set())
     setAssignSel(new Set())
+    setRevokeSel(new Set())
 
-    if (canAssign) {
+    if (canAssign || canRevoke) {
       const u = await supabase.rpc('list_assignable_users')
       if (!u.error) setUsers((u.data as AssignableUser[]) ?? [])
     }
@@ -129,7 +133,7 @@ export default function MyJobPage() {
   useEffect(() => {
     if (myId) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myId, canAssign])
+  }, [myId, canAssign, canRevoke])
 
   // 1 คู่ สิทธิ+payer มีผู้ดูแลได้คนเดียว — คู่ที่คนอื่นดูแลอยู่ (key → อีเมลของเขา)
   const ownerByPair = useMemo(() => {
@@ -150,6 +154,9 @@ export default function MyJobPage() {
 
   // ว่าง = ไม่มีใครดูแล ไม่ใช่ของฉัน และไม่มีคำขอรอยืนยัน
   const isFree = (key: string) => !ownerByPair.has(key) && !saved.has(key) && !pendingByPair.has(key)
+  // มีผู้ดูแลแล้ว (ของฉันหรือของคนอื่น) = ถอนสิทธิได้ในโหมดถอนสิทธิ
+  const isTaken = (key: string) => ownerByPair.has(key) || saved.has(key)
+  const isPickable = (key: string) => (activeMode === 'revoke' ? isTaken(key) : isFree(key))
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -164,9 +171,9 @@ export default function MyJobPage() {
   }, [pairs, query])
 
   const selectableVisible = useMemo(
-    () => visible.filter((c) => isFree(pairKey(c.coverage_code, c.payer_id))),
+    () => visible.filter((c) => isPickable(pairKey(c.coverage_code, c.payer_id))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible, ownerByPair, pendingByPair, saved],
+    [visible, ownerByPair, pendingByPair, saved, activeMode],
   )
 
   // สิทธิที่มีหลาย payer → มีปุ่ม "เลือกทั้งสิทธิ" ที่แถวแรกของกลุ่ม
@@ -176,13 +183,13 @@ export default function MyJobPage() {
     return m
   }, [pairs])
 
-  const activeSel = activeMode === 'claim' ? selected : assignSel
-  const setActiveSel = activeMode === 'claim' ? setSelected : setAssignSel
+  const activeSel = activeMode === 'claim' ? selected : activeMode === 'assign' ? assignSel : revokeSel
+  const setActiveSel = activeMode === 'claim' ? setSelected : activeMode === 'assign' ? setAssignSel : setRevokeSel
   const recipientUsers = useMemo(() => users.filter((u) => u.id !== myId), [users, myId])
   const recipientUser = recipientUsers.find((u) => u.id === recipient)
 
   function toggle(key: string) {
-    if (!isFree(key)) return
+    if (!isPickable(key)) return
     setMessage(null)
     setActiveSel((prev) => {
       const next = new Set(prev)
@@ -204,7 +211,7 @@ export default function MyJobPage() {
       const next = new Set(prev)
       for (const c of pairs) {
         const k = pairKey(c.coverage_code, c.payer_id)
-        if (c.coverage_code === code && isFree(k)) next.add(k)
+        if (c.coverage_code === code && isPickable(k)) next.add(k)
       }
       return next
     })
@@ -277,6 +284,31 @@ export default function MyJobPage() {
     await load()
   }
 
+  // Admin / Developer: ถอนสิทธิที่ถูกรับแล้ว — เลือกผู้รับใหม่ (ต้องกดยืนยัน) หรือปล่อยเป็นสิทธิว่าง
+  async function doRevoke() {
+    setSaving(true)
+    setMessage(null)
+    const { data, error } = await supabase.rpc('revoke_responsibilities', {
+      pairs: toPayload(revokeSel),
+      p_user: recipient || null,
+    })
+    setSaving(false)
+    setConfirm(null)
+    if (error) {
+      setMessage({ ok: false, text: `ถอนสิทธิไม่สำเร็จ: ${error.message}` })
+      return
+    }
+    const res = data as { revoked?: number; requested?: number; refused?: { coverage_code: string; payer_id: string; reason: string }[] } | null
+    const refused = (res?.refused ?? []).map((r) => `${r.coverage_code} (${r.payer_id}) — ${r.reason}`)
+    const revoked = res?.revoked ?? 0
+    const requested = res?.requested ?? 0
+    const base = recipient
+      ? `ถอนสิทธิ ${revoked} รายการ · ส่งคำขอให้ ${nameOf(recipientUser?.email)} ${requested} รายการ — รอผู้รับกดยืนยันที่หน้าหลัก`
+      : `ถอนสิทธิ ${revoked} รายการ — สิทธิกลับไปเป็นว่าง`
+    setMessage({ ok: revoked > 0, text: refused.length > 0 ? `${base} · ${refused.join('; ')}` : base })
+    await load()
+  }
+
   async function cancelRequest(id: number) {
     setMessage(null)
     const { error } = await supabase.rpc('cancel_assignment_requests', { p_ids: [id] })
@@ -290,7 +322,11 @@ export default function MyJobPage() {
 
   const freeCount = pairs.filter((c) => isFree(pairKey(c.coverage_code, c.payer_id))).length
   const actionDisabled =
-    saving || activeSel.size === 0 || (activeMode === 'assign' && (!recipient || setupMissing)) || (activeMode === 'claim' && setupMissing)
+    saving ||
+    activeSel.size === 0 ||
+    (activeMode === 'assign' && (!recipient || setupMissing)) ||
+    (activeMode === 'claim' && setupMissing) ||
+    (activeMode === 'revoke' && !!recipient && setupMissing)
 
   const cards: { label: string; value: string }[] = [
     ...(canClaim
@@ -305,10 +341,19 @@ export default function MyJobPage() {
     <main className="w-full space-y-5 px-4 py-6 sm:px-8">
       <div>
         <h1 className="text-xl font-bold text-ink">
-          {activeMode === 'assign' ? 'My claim — เลือกสิทธิให้ผู้ดูแล' : 'My claim — สิทธิที่ฉันดูแล'}
+          {activeMode === 'assign'
+            ? 'My claim — เลือกสิทธิให้ผู้ดูแล'
+            : activeMode === 'revoke'
+              ? 'My claim — ถอนสิทธิให้ผู้อื่น'
+              : 'My claim — สิทธิที่ฉันดูแล'}
         </h1>
         <p className="mt-1 text-sm text-ink/70">
-          {activeMode === 'assign' ? (
+          {activeMode === 'revoke' ? (
+            <>
+              เลือกสิทธิ+ผู้จ่ายที่มีผู้ดูแลอยู่แล้วเพื่อถอนสิทธิ แล้วเลือกผู้รับใหม่ (ผู้รับต้องกดยืนยันที่หน้าหลัก) หรือไม่เลือกก็ได้
+              ซึ่งสิทธิจะกลับไปเป็นว่าง ข้อมูลเคสเดิมไม่ถูกแตะ
+            </>
+          ) : activeMode === 'assign' ? (
             <>
               เลือกสิทธิ+ผู้จ่ายที่ยังไม่มีผู้ดูแล แล้วเลือกผู้รับ ระบบจะส่งแจ้งเตือนไปที่หน้าหลักของผู้รับให้กดยืนยัน
               จนกว่าผู้รับจะยืนยัน รายการนั้นจะถูกจองไว้และคนอื่นเลือกซ้ำไม่ได้
@@ -323,14 +368,17 @@ export default function MyJobPage() {
         </p>
       </div>
 
-      {canClaim && canAssign && (
+      {availableModes.length > 1 && (
         <div className="inline-flex rounded-lg border border-ink/30 p-0.5 text-sm" role="tablist">
           {(
             [
               ['claim', 'รับสิทธิให้ตัวเอง'],
               ['assign', 'เลือกสิทธิให้ผู้อื่น'],
+              ['revoke', 'ถอนสิทธิให้ผู้อื่น'],
             ] as [Mode, string][]
-          ).map(([m, label]) => (
+          )
+            .filter(([m]) => availableModes.includes(m))
+            .map(([m, label]) => (
             <button
               key={m}
               type="button"
@@ -338,6 +386,7 @@ export default function MyJobPage() {
               aria-selected={activeMode === m}
               onClick={() => {
                 setMode(m)
+                setRecipient('')
                 setMessage(null)
               }}
               className={
@@ -374,16 +423,16 @@ export default function MyJobPage() {
           placeholder="ค้นหารหัส/ชื่อสิทธิ หรือรหัส/ชื่อผู้จ่าย…"
           className="form-input lg:max-w-sm"
         />
-        {(canClaim || canAssign) && (
+        {(canClaim || canAssign || canRevoke) && (
           <div className="flex flex-wrap items-center gap-2">
-            {activeMode === 'assign' && (
+            {(activeMode === 'assign' || activeMode === 'revoke') && (
               <select
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 aria-label="ผู้รับ"
                 className="rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/60"
               >
-                <option value="">เลือกผู้รับ…</option>
+                <option value="">{activeMode === 'revoke' ? 'ไม่เลือกผู้รับ (ปล่อยเป็นสิทธิว่าง)' : 'เลือกผู้รับ…'}</option>
                 {recipientUsers.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.email.split('@')[0]}
@@ -397,7 +446,11 @@ export default function MyJobPage() {
               onClick={selectVisible}
               disabled={selectableVisible.length === 0}
             >
-              {query ? `เลือกที่ค้นเจอ (${selectableVisible.length})` : 'เลือกที่ว่างทั้งหมด'}
+              {query
+                ? `เลือกที่ค้นเจอ (${selectableVisible.length})`
+                : activeMode === 'revoke'
+                  ? 'เลือกที่มีผู้ดูแลทั้งหมด'
+                  : 'เลือกที่ว่างทั้งหมด'}
             </Button>
             <Button
               variant="outline"
@@ -411,7 +464,11 @@ export default function MyJobPage() {
               disabled={actionDisabled}
               className="rounded-lg bg-brand px-5 py-2 text-sm font-semibold text-ink hover:bg-brand-dark disabled:opacity-40"
             >
-              {activeMode === 'claim' ? 'บันทึก' : `มอบหมาย${assignSel.size ? ` (${assignSel.size})` : ''}`}
+              {activeMode === 'claim'
+                ? 'บันทึก'
+                : activeMode === 'revoke'
+                  ? `ถอนสิทธิ${revokeSel.size ? ` (${revokeSel.size})` : ''}`
+                  : `มอบหมาย${assignSel.size ? ` (${assignSel.size})` : ''}`}
             </button>
           </div>
         )}
@@ -420,7 +477,7 @@ export default function MyJobPage() {
       {message && (
         <p className={'text-sm ' + (message.ok ? 'text-ink font-semibold' : 'text-rose')}>{message.text}</p>
       )}
-      {!canClaim && !canAssign && <p className="text-sm text-ink/70">บัญชีนี้กำหนดสิทธิที่ดูแลไม่ได้</p>}
+      {!canClaim && !canAssign && !canRevoke && <p className="text-sm text-ink/70">บัญชีนี้กำหนดสิทธิที่ดูแลไม่ได้</p>}
 
       {loading ? (
         <div className="rounded-xl border border-line bg-surface p-8 text-center text-sm text-ink/60">กำลังโหลดข้อมูล…</div>
@@ -446,9 +503,8 @@ export default function MyJobPage() {
                 const pending = pendingByPair.get(key)
                 const firstOfGroup = i === 0 || visible[i - 1].coverage_code !== c.coverage_code
                 const multi = (payerCountByCoverage.get(c.coverage_code) ?? 0) > 1
-                const free = isFree(key)
-                const interactive = (canClaim || canAssign) && free
-                const dim = owner !== undefined || pending !== undefined
+                const interactive = (canClaim || canAssign || canRevoke) && isPickable(key)
+                const dim = activeMode === 'revoke' ? !isTaken(key) : owner !== undefined || pending !== undefined
                 // ช่องติ๊ก: รายการที่ฉันรับแล้ว (โหมดรับสิทธิ) ติ๊กค้างและกดเอาออกไม่ได้
                 const checked = activeMode === 'claim' ? mineSaved || picked : picked
                 return (
@@ -474,13 +530,13 @@ export default function MyJobPage() {
                         disabled={!interactive}
                         onChange={() => toggle(key)}
                         onClick={(e) => e.stopPropagation()}
-                        title={mineSaved ? 'รับสิทธิแล้ว — ยกเลิกเองไม่ได้' : undefined}
+                        title={mineSaved && activeMode !== 'revoke' ? 'รับสิทธิแล้ว — ยกเลิกเองไม่ได้' : undefined}
                         className="h-4 w-4 accent-black"
                       />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[13px] font-semibold text-ink">
                       {c.coverage_code}
-                      {(canClaim || canAssign) && multi && firstOfGroup && (
+                      {(canClaim || canAssign || canRevoke) && multi && firstOfGroup && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -498,7 +554,12 @@ export default function MyJobPage() {
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-ink/80">{c.case_count.toLocaleString()}</td>
                     <td className="px-3 py-2.5 text-ink/80">
-                      {owner !== undefined ? (
+                      {activeMode === 'revoke' && picked ? (
+                        <span className="font-semibold text-ink">
+                          จะถอนจาก {owner !== undefined ? nameOf(owner) : 'ฉัน'} →{' '}
+                          {recipientUser ? nameOf(recipientUser.email) : 'สิทธิว่าง'}
+                        </span>
+                      ) : owner !== undefined ? (
                         owner
                       ) : mineSaved ? (
                         <span className="font-semibold text-ink">
@@ -572,6 +633,33 @@ export default function MyJobPage() {
           <p className="font-mono text-[13px] text-ink/70">
             {[...assignSel].slice(0, 6).map((k) => k.replace('|', ' · ')).join(', ')}
             {assignSel.size > 6 ? ` … และอีก ${assignSel.size - 6} รายการ` : ''}
+          </p>
+        </ConfirmDialog>
+      )}
+      {confirm === 'revoke' && (
+        <ConfirmDialog
+          title={`ถอนสิทธิ ${revokeSel.size} รายการ?`}
+          confirmLabel="ยืนยันถอนสิทธิ"
+          busy={saving}
+          onConfirm={doRevoke}
+          onCancel={() => setConfirm(null)}
+        >
+          <p>
+            ผู้ดูแลเดิมจะไม่เป็นผู้ดูแลสิทธิเหล่านี้อีกต่อไป (ข้อมูลเคสไม่ถูกแตะ){' '}
+            {recipientUser ? (
+              <>
+                และส่งคำขอให้ <b className="font-semibold text-ink">{nameOf(recipientUser.email)}</b> กดยืนยันที่หน้าหลัก
+                (ระหว่างรอ รายการจะถูกจองไว้)
+              </>
+            ) : (
+              <>
+                และสิทธิจะ<b className="font-semibold text-ink">กลับไปเป็นว่าง</b> ให้ผู้อื่นเลือกได้
+              </>
+            )}
+          </p>
+          <p className="font-mono text-[13px] text-ink/70">
+            {[...revokeSel].slice(0, 6).map((k) => k.replace('|', ' · ')).join(', ')}
+            {revokeSel.size > 6 ? ` … และอีก ${revokeSel.size - 6} รายการ` : ''}
           </p>
         </ConfirmDialog>
       )}
