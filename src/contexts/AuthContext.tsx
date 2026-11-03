@@ -158,7 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const viewAs: UiRole | null = isDeveloper ? viewAsState : null
   const role: UiRole | null = realRole === null ? null : isDeveloper ? (viewAs ?? 'admin') : realRole
 
-  const canAssign = isDeveloper && viewAs === null
+  // เลือกสิทธิให้ผู้อื่นได้: admin และ developer (developer ที่จำลองเป็น role อื่นจะไม่ได้) — ฐานข้อมูลเช็ค role จริงซ้ำ
+  const canAssign = role === 'admin'
 
   function setViewAs(r: UiRole | null) {
     if (!isDeveloper) return

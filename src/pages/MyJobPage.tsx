@@ -74,7 +74,7 @@ function ConfirmDialog({
 export default function MyJobPage() {
   const { session, role, canAssign } = useAuth()
   const myId = session?.user.id ?? ''
-  // รับสิทธิให้ตัวเอง: admin / user  |  เลือกสิทธิให้ผู้อื่น: developer  |  ถอนสิทธิ: admin / developer (ฐานข้อมูลเช็ค role จริงซ้ำ)
+  // รับสิทธิให้ตัวเอง: admin / user  |  เลือกสิทธิให้ผู้อื่น และ ถอนสิทธิ: admin / developer (ฐานข้อมูลเช็ค role จริงซ้ำ)
   const canClaim = role === 'admin' || role === 'user'
   const canRevoke = role === 'admin'
 
