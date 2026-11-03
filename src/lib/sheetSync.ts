@@ -47,6 +47,67 @@ export interface PullResult {
   items: PullItem[]
 }
 
+// ---------- เคสที่ผู้ใช้ตรวจแล้วและเลือก "ข้าม" (ตาราง sheet_pull_skips) ----------
+export interface SkipTarget {
+  coverage_code: string
+  payer_id: string
+  existing: string | null
+}
+
+export interface SkipRow {
+  id: number
+  encounter_id: number
+  sheet_sithi: string
+  sheet_audit_date: string
+  reason: string
+  targets: SkipTarget[]
+  skipped_by: string | null
+  skipped_at: string
+}
+
+/** key ของเคสที่ข้าม = encounter_id + สิทธิในชีต (ตัวพิมพ์เล็ก) + วัน Audit ในชีต — ชีตเปลี่ยนวัน/สิทธิ เคสจะกลับมาให้ตรวจใหม่ */
+export const skipKey = (encounterId: number, sithi: string, auditDate: string) =>
+  `${encounterId}|${sithi.trim().toLowerCase()}|${auditDate}`
+
+/** อ่านรายการที่ข้ามไว้ทั้งหมด — ถ้ายังไม่ได้สร้างตาราง (ยังไม่รัน add_sheet_pull_skips.sql) คืนลิสต์ว่าง ไม่ถือเป็น error */
+export async function fetchSkips(): Promise<SkipRow[]> {
+  const out: SkipRow[] = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('sheet_pull_skips')
+      .select('*')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) return out
+    const rows = (data ?? []) as SkipRow[]
+    out.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return out
+}
+
+export async function saveSkip(input: {
+  encounter_id: number
+  sheet_sithi: string
+  sheet_audit_date: string
+  reason: string
+  targets: SkipTarget[]
+}): Promise<SkipRow> {
+  const { data, error } = await supabase
+    .from('sheet_pull_skips')
+    .upsert({ ...input, sheet_sithi: input.sheet_sithi.trim().toLowerCase() }, { onConflict: 'encounter_id,sheet_sithi,sheet_audit_date' })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as SkipRow
+}
+
+export async function removeSkip(id: number): Promise<void> {
+  const { error } = await supabase.from('sheet_pull_skips').delete().eq('id', id)
+  if (error) throw error
+}
+
 export interface SyncState {
   last_push_at: string | null
   last_push_by: string | null

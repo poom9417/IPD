@@ -1,7 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { saveCaseTracking } from '../lib/caseTracking'
-import { fmtIsoDate, previewSheetAudit, type PullItem, type PullResult } from '../lib/sheetSync'
+import {
+  fetchSkips,
+  fmtDateTime,
+  fmtIsoDate,
+  previewSheetAudit,
+  removeSkip,
+  saveSkip,
+  skipKey,
+  type PullItem,
+  type PullResult,
+  type SkipRow,
+  type SkipTarget,
+} from '../lib/sheetSync'
 import Button from './ui/Button'
 
 interface Props {
@@ -24,17 +36,29 @@ const TAB_LABEL: Record<Tab, string> = {
   all: 'ทั้งหมด',
 }
 
-/** มีแถวสิทธิในระบบอย่างน้อย 1 แถวที่ยังไม่เคยบันทึกวัน Audit */
-const hasNew = (i: PullItem) => i.targets.some((t) => t.state === 'new')
-/** เคสที่ทุกแถวสิทธิเคยบันทึกวัน Audit ไว้แล้ว (ไม่ผิดพลาด ไม่ถูกตัดเพราะซ้ำ) */
-const isRecorded = (i: PullItem) => !i.ignored && i.status !== 'error' && i.targets.length > 0 && !hasNew(i)
+/** แถวชีต + ข้อมูลว่าผู้ใช้กด "ข้าม" ไว้แล้วหรือไม่ (skip ≠ null = ตรวจแล้ว ย้ายไปแท็บ เคยบันทึกแล้ว) */
+type VItem = PullItem & { skip: SkipRow | null }
 
-function inTab(i: PullItem, tab: Tab): boolean {
+function decorate(items: PullItem[], skips: SkipRow[]): VItem[] {
+  const m = new Map(skips.map((s) => [skipKey(s.encounter_id, s.sheet_sithi, s.sheet_audit_date), s]))
+  return items.map((i) => ({
+    ...i,
+    skip: i.encounter_id !== null && i.audit_date ? (m.get(skipKey(i.encounter_id, i.sithi, i.audit_date)) ?? null) : null,
+  }))
+}
+
+/** มีแถวสิทธิในระบบอย่างน้อย 1 แถวที่ยังไม่เคยบันทึกวัน Audit */
+const hasNew = (i: VItem) => i.targets.some((t) => t.state === 'new')
+/** เคสที่ทุกแถวสิทธิเคยบันทึกวัน Audit ไว้แล้ว หรือผู้ใช้ตรวจแล้วกดข้าม (ไม่ถูกตัดเพราะซ้ำ) */
+const isRecorded = (i: VItem) =>
+  !i.ignored && (!!i.skip || (i.status !== 'error' && i.targets.length > 0 && !hasNew(i)))
+
+function inTab(i: VItem, tab: Tab): boolean {
   if (tab === 'all') return true
   if (tab === 'ignored') return !!i.ignored
   if (i.ignored) return false
   if (tab === 'recorded') return isRecorded(i)
-  if (tab === 'error') return i.status === 'error'
+  if (tab === 'error') return i.status === 'error' && !i.skip
   return i.status === tab && !isRecorded(i) // ok / warn = ยังมีส่วนที่ยังไม่เคยบันทึก
 }
 
@@ -56,7 +80,7 @@ const GROUP_HINT: Record<WarnGroup, string> = {
 /** กลุ่มที่ติ๊กผ่านทั้งกลุ่มได้ (เจอบ่อยและเสี่ยงต่ำ) */
 const BULK_GROUPS: WarnGroup[] = ['cov_mismatch', 'cov_not_master']
 
-function warnGroup(i: PullItem): WarnGroup {
+function warnGroup(i: VItem): WarnGroup {
   const f = i.flags
   if (!f || f.length === 0) return 'other' // ฟังก์ชันรุ่นเก่าไม่ส่ง flags → ให้ตรวจทีละเคสไว้ก่อน
   if (f.includes('before_discharge')) return 'before_discharge'
@@ -65,8 +89,8 @@ function warnGroup(i: PullItem): WarnGroup {
   return 'cov_mismatch'
 }
 
-/** แถวที่เลือกได้ = ยังไม่เคยบันทึก (ระบบไม่เขียนทับเคสที่เคยบันทึกวัน Audit แล้ว) */
-const selectable = (i: PullItem) => !i.ignored && i.status !== 'error' && hasNew(i)
+/** แถวที่เลือกได้ = ยังไม่เคยบันทึก และไม่ได้ถูกข้าม (ระบบไม่เขียนทับเคสที่เคยบันทึกวัน Audit แล้ว) */
+const selectable = (i: VItem) => !i.ignored && !i.skip && i.status !== 'error' && hasNew(i)
 
 interface Cand {
   admission_id: number
@@ -299,6 +323,9 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
   // เคสผิดพลาดที่ผู้ใช้ยืนยันนำเข้าเอง (key = แถวชีต)
   const [overrides, setOverrides] = useState<Map<number, Override>>(new Map())
   const [editing, setEditing] = useState<PullItem | null>(null)
+  // เคสที่ผู้ใช้ตรวจแล้วกด "ข้าม" (เก็บในตาราง sheet_pull_skips) + แถวชีตที่กำลังข้าม/เลิกข้ามอยู่
+  const [skips, setSkips] = useState<SkipRow[]>([])
+  const [skipBusy, setSkipBusy] = useState<number | null>(null)
 
   function load() {
     setLoading(true)
@@ -306,12 +333,14 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
     setResult(null)
     setSaved(false)
     setOverrides(new Map())
-    previewSheetAudit()
-      .then((res) => {
+    Promise.all([previewSheetAudit(), fetchSkips()])
+      .then(([res, sk]) => {
         setData(res)
+        setSkips(sk)
+        const vi = decorate(res.items, sk)
         // ค่าเริ่มต้น: เลือกเฉพาะแถวที่ไม่มีข้อควรตรวจ — แถวที่มีคำเตือนต้องให้คนตัดสินใจเอง
-        setIncluded(new Set(res.items.filter((i) => selectable(i) && i.status === 'ok').map((i) => i.row)))
-        const cnt = (t: Tab) => res.items.filter((i) => inTab(i, t)).length
+        setIncluded(new Set(vi.filter((i) => selectable(i) && i.status === 'ok').map((i) => i.row)))
+        const cnt = (t: Tab) => vi.filter((i) => inTab(i, t)).length
         setTab(cnt('ok') > 0 ? 'ok' : cnt('recorded') > 0 ? 'recorded' : cnt('warn') > 0 ? 'warn' : 'error')
         setPage(1)
       })
@@ -321,7 +350,79 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
 
   useEffect(load, [])
 
-  const items = data?.items ?? []
+  const items = useMemo(() => decorate(data?.items ?? [], skips), [data, skips])
+
+  /** ข้ามเคสที่ตรวจแล้ว → ย้ายไปแท็บ "เคยบันทึกแล้ว" พร้อมเก็บเหตุผลและวันที่ในระบบ ณ ตอนที่ข้าม */
+  async function skipItem(i: VItem) {
+    if (i.encounter_id === null || !i.audit_date || skipBusy !== null) return
+    setSkipBusy(i.row)
+    setResult(null)
+    try {
+      let targets: SkipTarget[]
+      if (i.targets.length > 0) {
+        targets = i.targets.map((t) => ({ coverage_code: t.coverage_code, payer_id: t.payer_id, existing: t.existing }))
+      } else {
+        // เคสผิดพลาดไม่มี targets จากฟังก์ชัน → อ่านสิทธิ/วัน Audit ในระบบเอง
+        const { data: adm, error: e } = await supabase
+          .from('admissions')
+          .select('coverage_code,payer_id,case_tracking(audit_date)')
+          .eq('encounter_id', i.encounter_id)
+        if (e) throw e
+        type R = { coverage_code: string; payer_id: string; case_tracking: { audit_date: string | null } | { audit_date: string | null }[] | null }
+        targets = ((adm ?? []) as unknown as R[]).map((r) => ({
+          coverage_code: r.coverage_code,
+          payer_id: r.payer_id,
+          existing: one(r.case_tracking)?.audit_date ?? null,
+        }))
+      }
+      const missing = targets.filter((t) => t.existing === null)
+      if (
+        missing.length > 0 &&
+        !window.confirm(
+          `สิทธิ ${missing.map((t) => t.coverage_code).join(', ')} ของเคสนี้ยังไม่เคยบันทึกวัน Audit\nต้องการข้ามเคสนี้ต่อไปหรือไม่? (เคสจะถูกย้ายไปแท็บ เคยบันทึกแล้ว)`,
+        )
+      ) {
+        return
+      }
+      let reason = i.messages.join(' · ')
+      if (i.status === 'error' && targets.length > 1 && /แยกหลายสิทธิ/.test(i.messages[0] ?? '')) {
+        reason = `สิทธิไม่ตรง (ระบบ: ${[...new Set(targets.map((t) => t.coverage_code))].join(', ')} / Audit: ${i.sithi || 'ว่าง'})`
+      }
+      const row = await saveSkip({
+        encounter_id: i.encounter_id,
+        sheet_sithi: i.sithi,
+        sheet_audit_date: i.audit_date,
+        reason,
+        targets,
+      })
+      setSkips((prev) => [...prev.filter((s) => s.id !== row.id), row])
+      setIncluded((prev) => {
+        const next = new Set(prev)
+        next.delete(i.row)
+        return next
+      })
+    } catch (e) {
+      setResult(`ข้ามเคสไม่สำเร็จ: ${e instanceof Error ? e.message : ((e as { message?: string })?.message ?? String(e))}`)
+    } finally {
+      setSkipBusy(null)
+    }
+  }
+
+  /** เลิกข้าม → เคสกลับไปอยู่แท็บเดิม (ผิดพลาด / มีข้อควรตรวจ / พร้อมนำเข้า) */
+  async function unskipItem(i: VItem) {
+    if (!i.skip || skipBusy !== null) return
+    setSkipBusy(i.row)
+    setResult(null)
+    try {
+      await removeSkip(i.skip.id)
+      const id = i.skip.id
+      setSkips((prev) => prev.filter((s) => s.id !== id))
+    } catch (e) {
+      setResult(`เลิกข้ามไม่สำเร็จ: ${e instanceof Error ? e.message : ((e as { message?: string })?.message ?? String(e))}`)
+    } finally {
+      setSkipBusy(null)
+    }
+  }
   const shown = useMemo(
     () => items.filter((i) => inTab(i, tab) && (tab !== 'warn' || warnGroup(i) === grp)),
     [items, tab, grp],
@@ -439,11 +540,11 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
           <>
             <p className="mb-2 text-sm text-ink/70">
               อ่านจากแท็บ AUDIT_VIEW {data.summary.total.toLocaleString()} แถว · ยังไม่เคยบันทึก {tabCount('ok').toLocaleString()} · เคยบันทึกแล้ว{' '}
-              {tabCount('recorded').toLocaleString()} · มีข้อควรตรวจ {tabCount('warn').toLocaleString()} · ผิดพลาด {data.summary.error.toLocaleString()}
+              {tabCount('recorded').toLocaleString()} · มีข้อควรตรวจ {tabCount('warn').toLocaleString()} · ผิดพลาด {tabCount('error').toLocaleString()}
               {data.summary.ignored > 0 && <> · ซ้ำในชีต {data.summary.ignored.toLocaleString()}</>}
             </p>
             <p className="mb-3 text-xs text-ink/50">
-              เคสในแท็บ “ผิดพลาด” ไม่ถูกนำเข้าอัตโนมัติ — กด “นำเข้าเคสนี้…” เพื่อตรวจและยืนยันทีละเคส (แก้ได้เฉพาะวัน Audit และสิทธิที่จะลง) ·
+              เคสในแท็บ “ผิดพลาด” ไม่ถูกนำเข้าอัตโนมัติ — กด “นำเข้าเคสนี้…” เพื่อตรวจและยืนยันทีละเคส (แก้ได้เฉพาะวัน Audit และสิทธิที่จะลง) หรือกด “ข้ามเคสนี้” ถ้าตรวจแล้วไม่ต้องนำเข้า (ย้ายไปแท็บ เคยบันทึกแล้ว) ·
               นำเข้าเฉพาะเคสที่ยังไม่เคยบันทึกวัน Audit — แถวที่พร้อมนำเข้าถูกเลือกไว้ให้แล้ว ส่วนแถวที่มีข้อควรตรวจ (เช่น สิทธิ/HN/ชื่อไม่ตรง) ต้องติ๊กเองหลังตรวจดู
               เคสที่เคยบันทึกแล้วอยู่ในแท็บ “เคยบันทึกแล้ว” ระบบไม่เขียนทับ — การจับคู่ใช้ encounter_id + สิทธิ
             </p>
@@ -527,6 +628,10 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                   )}
                   {pageRows.map((i) => {
                     const can = selectable(i)
+                    // สิทธิในระบบ: ใช้ข้อมูลสดจากฟังก์ชัน ถ้าไม่มี (เคสผิดพลาดที่ถูกข้าม) ใช้ snapshot ตอนกดข้าม
+                    const tl: SkipTarget[] = i.targets.length > 0 ? i.targets : (i.skip?.targets ?? [])
+                    const busy = skipBusy === i.row
+                    const canSkip = !i.skip && !i.ignored && i.encounter_id !== null && !!i.audit_date
                     return (
                       <tr key={i.row} className={`border-t border-line align-top ${i.ignored ? 'opacity-60' : ''}`}>
                         <td className="px-2 py-1.5">
@@ -539,14 +644,14 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                         <td className="px-2 py-1.5">{i.sithi || '—'}</td>
                         <td className="px-2 py-1.5">{fmtIsoDate(i.audit_date)}</td>
                         <td className="px-2 py-1.5">
-                          {i.targets.length === 0
+                          {tl.length === 0
                             ? '—'
-                            : i.targets.map((t) => (
-                                <span key={t.admission_id} className="block">
-                                  {i.targets.length > 1 && <span className="text-ink/50">{t.coverage_code}/{t.payer_id}: </span>}
-                                  {t.state === 'new' ? (
+                            : tl.map((t) => (
+                                <span key={`${t.coverage_code}/${t.payer_id}`} className="block">
+                                  {tl.length > 1 && <span className="text-ink/50">{t.coverage_code}/{t.payer_id}: </span>}
+                                  {t.existing === null ? (
                                     <span>ยังไม่เคยบันทึก</span>
-                                  ) : t.state === 'same' ? (
+                                  ) : t.existing === i.audit_date ? (
                                     <span className="text-ink/50">เคยบันทึกแล้ว {fmtIsoDate(t.existing)} (ตรงกับชีต)</span>
                                   ) : (
                                     <span className="text-alert">
@@ -559,6 +664,22 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                         <td className="px-2 py-1.5">
                           {i.ignored ? (
                             <span className="text-ink/60">{i.ignored}</span>
+                          ) : i.skip ? (
+                            <span>
+                              <span className="block text-ink/70">ตรวจแล้ว ข้ามเคสนี้{i.skip.reason ? ` — ${i.skip.reason}` : ''}</span>
+                              <span className="mt-1 flex flex-wrap items-center gap-2 text-ink/40">
+                                <span>
+                                  โดย {i.skip.skipped_by ?? '—'} · {fmtDateTime(i.skip.skipped_at)}
+                                </span>
+                                <button
+                                  onClick={() => unskipItem(i)}
+                                  disabled={busy || saved}
+                                  className="rounded border border-ink/30 px-2 py-0.5 text-ink hover:bg-brand-soft disabled:opacity-40"
+                                >
+                                  {busy ? 'กำลังบันทึก…' : 'เลิกข้าม'}
+                                </button>
+                              </span>
+                            </span>
                           ) : i.status === 'error' ? (
                             <span>
                               <span className="block text-rose">{i.messages.join(' · ')}</span>
@@ -586,14 +707,38 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
                                 </span>
                               ) : (
                                 i.encounter_id !== null && (
-                                  <button onClick={() => setEditing(i)} disabled={saved} className="mt-1 rounded border border-ink/40 px-2 py-0.5 font-medium text-ink hover:bg-brand-soft disabled:opacity-40">
-                                    นำเข้าเคสนี้…
-                                  </button>
+                                  <span className="mt-1 flex flex-wrap items-center gap-2">
+                                    <button onClick={() => setEditing(i)} disabled={saved} className="rounded border border-ink/40 px-2 py-0.5 font-medium text-ink hover:bg-brand-soft disabled:opacity-40">
+                                      นำเข้าเคสนี้…
+                                    </button>
+                                    {canSkip && (
+                                      <button
+                                        onClick={() => skipItem(i)}
+                                        disabled={busy || saved}
+                                        title="ตรวจแล้ว ไม่ต้องนำเข้า — ย้ายไปแท็บ เคยบันทึกแล้ว"
+                                        className="rounded border border-ink/30 px-2 py-0.5 text-ink hover:bg-brand-soft disabled:opacity-40"
+                                      >
+                                        {busy ? 'กำลังบันทึก…' : 'ข้ามเคสนี้'}
+                                      </button>
+                                    )}
+                                  </span>
                                 )
                               )}
                             </span>
                           ) : i.status === 'warn' ? (
-                            <span className="text-alert">{i.messages.join(' · ')}</span>
+                            <span>
+                              <span className="block text-alert">{i.messages.join(' · ')}</span>
+                              {canSkip && (
+                                <button
+                                  onClick={() => skipItem(i)}
+                                  disabled={busy || saved}
+                                  title="ตรวจแล้ว ไม่ต้องนำเข้า — ย้ายไปแท็บ เคยบันทึกแล้ว"
+                                  className="mt-1 rounded border border-ink/30 px-2 py-0.5 text-ink hover:bg-brand-soft disabled:opacity-40"
+                                >
+                                  {busy ? 'กำลังบันทึก…' : 'ข้ามเคสนี้'}
+                                </button>
+                              )}
+                            </span>
                           ) : (
                             <span className="font-semibold text-ink">ผ่าน</span>
                           )}
@@ -631,7 +776,7 @@ export default function SheetAuditPull({ onClose, onDone }: Props) {
 
             <p className="mb-3 text-sm text-ink/70">
               ที่เลือกไว้จะบันทึก {writeCount.toLocaleString()} แถวสิทธิ (เฉพาะที่ยังไม่เคยบันทึกวัน Audit)
-              {tab === 'recorded' && ' — แท็บนี้แสดงไว้ให้ดูเท่านั้น ไม่มีการนำเข้า ถ้าวันในชีตต่างจากที่บันทึกไว้จะแสดงเป็นสีแดง'}
+              {tab === 'recorded' && ' — แท็บนี้แสดงไว้ให้ดูเท่านั้น ไม่มีการนำเข้า ถ้าวันในชีตต่างจากที่บันทึกไว้จะแสดงเป็นสีแดง · เคสที่กด “ข้ามเคสนี้” อยู่ที่นี่ กด “เลิกข้าม” เพื่อให้กลับไปตรวจใหม่'}
             </p>
           </>
         )}
