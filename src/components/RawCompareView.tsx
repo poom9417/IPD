@@ -30,6 +30,8 @@ interface ViewRow {
   cur_pairs: string | null
   first_uploaded: string | null
   status: string
+  discharge_date: string | null
+  last_updated: string | null
 }
 interface RawRow {
   raw_id: number
@@ -206,6 +208,11 @@ export default function RawCompareView() {
   const [filter, setFilter] = useState('diff_all')
   const [q, setQ] = useState('')
   const [applied, setApplied] = useState('')
+  // ช่วงวันที่ (YYYY-MM-DD): วันที่จำหน่าย / วันที่แก้ไขล่าสุดในระบบ — ว่าง = ไม่กรอง, ใส่วันเดียว = วันนั้นวันเดียว
+  const [disFrom, setDisFrom] = useState('')
+  const [disTo, setDisTo] = useState('')
+  const [updFrom, setUpdFrom] = useState('')
+  const [updTo, setUpdTo] = useState('')
   const [page, setPage] = useState(0)
   const [rows, setRows] = useState<ViewRow[]>([])
   const [total, setTotal] = useState(0)
@@ -220,6 +227,21 @@ export default function RawCompareView() {
     if (filter === 'diff_all') qb = qb.neq('status', S_SAME)
     else if (filter !== 'all') qb = qb.eq('status', filter)
     if (applied) qb = qb.eq('encounter_id', applied)
+    if (disFrom || disTo) {
+      const a = disFrom || disTo
+      const b = disTo || disFrom
+      qb = qb.gte('discharge_date', a <= b ? a : b).lte('discharge_date', a <= b ? b : a)
+    }
+    if (updFrom || updTo) {
+      const a = updFrom || updTo
+      const b = updTo || updFrom
+      const lo = a <= b ? a : b
+      const hi = a <= b ? b : a
+      // วันตามเวลาไทย (UTC+7): ตั้งแต่ 00:00 ของวันเริ่ม ถึงก่อน 00:00 ของวันถัดจากวันสุดท้าย
+      const next = new Date(hi + 'T00:00:00+07:00')
+      next.setDate(next.getDate() + 1)
+      qb = qb.gte('last_updated', lo + 'T00:00:00+07:00').lt('last_updated', next.toISOString())
+    }
     const { data, count, error } = await qb
       .order('encounter_id', { ascending: false })
       .range(page * PAGE, page * PAGE + PAGE - 1)
@@ -230,7 +252,7 @@ export default function RawCompareView() {
     }
     setRows((data ?? []) as ViewRow[])
     setTotal(count ?? 0)
-  }, [filter, applied, page])
+  }, [filter, applied, disFrom, disTo, updFrom, updTo, page])
 
   useEffect(() => {
     void load()
@@ -292,6 +314,31 @@ export default function RawCompareView() {
           )}
           <span className="ml-auto text-sm text-ink/60">{loading ? 'กำลังโหลด…' : `${total.toLocaleString('th-TH')} encounter`}</span>
         </form>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink/70">
+          <DateRange
+            label="วันที่จำหน่าย"
+            from={disFrom}
+            to={disTo}
+            onChange={(f, t) => {
+              setDisFrom(f)
+              setDisTo(t)
+              setPage(0)
+              setOpen(null)
+            }}
+          />
+          <DateRange
+            label="วันที่แก้ไข"
+            from={updFrom}
+            to={updTo}
+            onChange={(f, t) => {
+              setUpdFrom(f)
+              setUpdTo(t)
+              setPage(0)
+              setOpen(null)
+            }}
+          />
+          <span className="text-xs text-ink/50">วันที่แก้ไข = ครั้งล่าสุดที่แถวในระบบถูกแก้/อัปเดตหลังสร้าง · ใส่วันเดียว = เฉพาะวันนั้น</span>
+        </div>
       </div>
 
       {err && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
@@ -304,6 +351,8 @@ export default function RawCompareView() {
               <th className="px-3 py-2">สถานะ</th>
               <th className="px-3 py-2">ดิบ (สิทธิ/ผู้จ่าย)</th>
               <th className="px-3 py-2">ระบบปัจจุบัน (สิทธิ/ผู้จ่าย)</th>
+              <th className="px-3 py-2">วันที่จำหน่าย</th>
+              <th className="px-3 py-2">แก้ไขล่าสุด</th>
               <th className="px-3 py-2">ดิบครั้งแรก</th>
             </tr>
           </thead>
@@ -313,7 +362,7 @@ export default function RawCompareView() {
             ))}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-ink/60">
+                <td colSpan={7} className="px-3 py-6 text-center text-ink/60">
                   ไม่พบรายการ
                 </td>
               </tr>
@@ -349,15 +398,34 @@ function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggl
         </td>
         <td className="px-3 py-2 font-mono text-xs">{r.raw_pairs ?? '—'}</td>
         <td className="px-3 py-2 font-mono text-xs">{r.cur_pairs ?? '—'}</td>
+        <td className="px-3 py-2 text-xs">{fmtDate(r.discharge_date)}</td>
+        <td className="px-3 py-2 text-xs">{fmtDateTime(r.last_updated)}</td>
         <td className="px-3 py-2 text-xs text-ink/70">{fmtDateTime(r.first_uploaded)}</td>
       </tr>
       {open && (
         <tr className="border-b border-ink/10 bg-ink/[0.03]">
-          <td colSpan={5}>
+          <td colSpan={7}>
             <Detail enc={r.encounter_id} />
           </td>
         </tr>
       )}
     </>
+  )
+}
+
+function DateRange({ label, from, to, onChange }: { label: string; from: string; to: string; onChange: (f: string, t: string) => void }) {
+  const cls = inputCls + ' py-1'
+  return (
+    <div className="flex items-center gap-1.5">
+      <span>{label}</span>
+      <input type="date" className={cls} value={from} onChange={(e) => onChange(e.target.value, to)} />
+      <span>–</span>
+      <input type="date" className={cls} value={to} onChange={(e) => onChange(from, e.target.value)} />
+      {(from || to) && (
+        <button type="button" className="text-xs underline" onClick={() => onChange('', '')}>
+          ล้าง
+        </button>
+      )}
+    </div>
   )
 }

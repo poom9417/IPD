@@ -6,7 +6,7 @@ export type MineMode = 'main' | 'dashboard' | 'raw'
 const ALL_MODES: { key: MineMode; label: string }[] = [
   { key: 'main', label: 'Main' },
   { key: 'dashboard', label: 'Dashboard' },
-  { key: 'raw', label: 'เทียบดิบ' },
+  { key: 'raw', label: 'Compare' },
 ]
 
 interface Props {
