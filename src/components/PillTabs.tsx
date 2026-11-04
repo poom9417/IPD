@@ -1,10 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 
-export type MineMode = 'main' | 'dashboard'
+export type MineMode = 'main' | 'dashboard' | 'raw'
 
-const MODES: { key: MineMode; label: string }[] = [
+const ALL_MODES: { key: MineMode; label: string }[] = [
   { key: 'main', label: 'Main' },
   { key: 'dashboard', label: 'Dashboard' },
+  { key: 'raw', label: 'เทียบดิบ' },
 ]
 
 interface Props {
@@ -21,6 +23,9 @@ const itemCls = 'relative z-10 rounded-full px-3 py-1 text-sm font-semibold sm:p
  *   (ชั้นในเลื่อนสวนทางกับเม็ดด้วย easing เดียวกัน ตัวอักษรจึงอยู่กับที่)
  */
 export default function PillTabs({ mode, onChange }: Props) {
+  // 'เทียบดิบ' เห็นเฉพาะ admin/developer (ข้อมูลดิบอ่านได้เฉพาะ admin ในฐานข้อมูล)
+  const { role } = useAuth()
+  const MODES = ALL_MODES.filter((m) => m.key !== 'raw' || role === 'admin')
   const trackRef = useRef<HTMLDivElement>(null)
   const btnRefs = useRef<Partial<Record<MineMode, HTMLButtonElement | null>>>({})
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number; tw: number; th: number } | null>(null)

@@ -1,0 +1,363 @@
+import { useCallback, useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
+import Button from './ui/Button'
+
+/**
+ * เทียบ "ข้อมูลในระบบปกติ" (admissions) กับ "ข้อมูลดิบที่อัปโหลด" (admissions_raw)
+ * - อ่านอย่างเดียว ไม่แก้ข้อมูลใดๆ และไม่เกี่ยวกับการส่ง Google Sheet
+ * - เห็นได้เฉพาะ admin/developer (ฐานข้อมูลบังคับสิทธิ์อ่าน admissions_raw ซ้ำอีกชั้น)
+ */
+
+const S_SAME = 'ตรงกับดิบ'
+const S_DIFF = 'สิทธิ/ผู้จ่ายต่างจากดิบ'
+const S_NORAW = 'ไม่มีในข้อมูลดิบ (เพิ่มเอง/ไม่ทราบที่มา)'
+const S_DELETED = 'อยู่ในดิบ แต่ถูกลบจากระบบ'
+
+const FILTERS: { key: string; label: string }[] = [
+  { key: 'diff_all', label: 'ทุกรายการที่ต่างจากดิบ' },
+  { key: S_DIFF, label: 'สิทธิ/ผู้จ่ายต่างจากดิบ' },
+  { key: S_NORAW, label: 'ไม่มีในข้อมูลดิบ' },
+  { key: S_DELETED, label: 'ถูกลบจากระบบ' },
+  { key: S_SAME, label: 'ตรงกับดิบ' },
+  { key: 'all', label: 'ทั้งหมด' },
+]
+
+const PAGE = 50
+
+interface ViewRow {
+  encounter_id: string
+  raw_pairs: string | null
+  cur_pairs: string | null
+  first_uploaded: string | null
+  status: string
+}
+interface RawRow {
+  raw_id: number
+  batch_id: string
+  file_date: string | null
+  batch_kind: string
+  source_file: string | null
+  uploaded_at: string
+  hn: string | null
+  an: string | null
+  coverage_code: string | null
+  coverage_name: string | null
+  payer_id: string | null
+  payer_name: string | null
+  discharge_date: string | null
+  division_code: string | null
+}
+interface CurRow {
+  admission_id: number
+  coverage_code: string
+  payer_id: string
+  discharge_date: string | null
+  division_code: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+const inputCls =
+  'rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/60'
+
+// ทำให้ค่า NULL / ว่าง ของดิบเทียบกับ UNK ในระบบได้ (ใช้กฎเดียวกับ view ฝั่งฐานข้อมูล)
+const norm = (v: string | null | undefined) => {
+  const t = (v ?? '').trim().toUpperCase()
+  return t === '' || t === 'NULL' ? 'UNK' : t
+}
+const pairOf = (c: string | null, p: string | null) => `${norm(c)}/${norm(p)}`
+
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+function fmtDateTime(iso: string | null) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function statusCls(s: string) {
+  if (s === S_SAME) return 'bg-emerald-100 text-emerald-800'
+  if (s === S_DIFF) return 'bg-amber-100 text-amber-900'
+  if (s === S_NORAW) return 'bg-sky-100 text-sky-900'
+  return 'bg-red-100 text-red-800'
+}
+
+function Detail({ enc }: { enc: string }) {
+  const [raw, setRaw] = useState<RawRow[] | null>(null)
+  const [cur, setCur] = useState<CurRow[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const [r, c] = await Promise.all([
+        supabase
+          .from('admissions_raw')
+          .select('raw_id,batch_id,file_date,batch_kind,source_file,uploaded_at,hn,an,coverage_code,coverage_name,payer_id,payer_name,discharge_date,division_code')
+          .eq('encounter_id', enc)
+          .order('uploaded_at')
+          .order('raw_id'),
+        supabase
+          .from('admissions')
+          .select('admission_id,coverage_code,payer_id,discharge_date,division_code,created_at,updated_at')
+          .eq('encounter_id', Number(enc)),
+      ])
+      if (!alive) return
+      if (r.error || c.error) {
+        setErr((r.error ?? c.error)?.message ?? 'โหลดไม่สำเร็จ')
+        return
+      }
+      setRaw((r.data ?? []) as RawRow[])
+      setCur((c.data ?? []) as CurRow[])
+    })()
+    return () => {
+      alive = false
+    }
+  }, [enc])
+
+  if (err) return <p className="p-3 text-sm text-red-700">{err}</p>
+  if (!raw || !cur) return <p className="p-3 text-sm text-ink/60">กำลังโหลด…</p>
+
+  const curSet = new Set(cur.map((x) => pairOf(x.coverage_code, x.payer_id)))
+  const rawSet = new Set(raw.map((x) => pairOf(x.coverage_code, x.payer_id)))
+
+  return (
+    <div className="grid gap-4 p-3 lg:grid-cols-2">
+      <div>
+        <h4 className="mb-1.5 text-sm font-semibold text-ink">ข้อมูลดิบที่อัปโหลด ({raw.length} แถว)</h4>
+        {raw.length === 0 ? (
+          <p className="text-sm text-ink/60">ไม่มีในข้อมูลดิบ</p>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-ink/60">
+                <th className="py-1 pr-2">ไฟล์ / วันที่</th>
+                <th className="py-1 pr-2">สิทธิ</th>
+                <th className="py-1 pr-2">ผู้จ่าย</th>
+                <th className="py-1 pr-2">จำหน่าย</th>
+                <th className="py-1">หอ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {raw.map((x) => {
+                const same = curSet.has(pairOf(x.coverage_code, x.payer_id))
+                return (
+                  <tr key={x.raw_id} className={'border-t border-ink/10 ' + (same ? '' : 'bg-amber-50')}>
+                    <td className="py-1 pr-2">
+                      {fmtDate(x.file_date)}
+                      <span className="ml-1 text-ink/50">{x.batch_kind === 'snapshot' ? '(snapshot)' : '(อัปโหลด)'}</span>
+                      {x.source_file && <div className="text-ink/50">{x.source_file}</div>}
+                    </td>
+                    <td className="py-1 pr-2 font-mono">{norm(x.coverage_code)}</td>
+                    <td className="py-1 pr-2 font-mono">{norm(x.payer_id)}</td>
+                    <td className="py-1 pr-2">{fmtDate(x.discharge_date)}</td>
+                    <td className="py-1">{x.division_code ?? '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div>
+        <h4 className="mb-1.5 text-sm font-semibold text-ink">ข้อมูลในระบบปัจจุบัน ({cur.length} แถว)</h4>
+        {cur.length === 0 ? (
+          <p className="text-sm text-ink/60">ไม่มีในระบบ (ถูกลบ)</p>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-ink/60">
+                <th className="py-1 pr-2">สิทธิ</th>
+                <th className="py-1 pr-2">ผู้จ่าย</th>
+                <th className="py-1 pr-2">จำหน่าย</th>
+                <th className="py-1 pr-2">หอ</th>
+                <th className="py-1">สร้าง / แก้ล่าสุด</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cur.map((x) => {
+                const same = rawSet.has(pairOf(x.coverage_code, x.payer_id))
+                return (
+                  <tr key={x.admission_id} className={'border-t border-ink/10 ' + (same ? '' : 'bg-amber-50')}>
+                    <td className="py-1 pr-2 font-mono">{x.coverage_code}</td>
+                    <td className="py-1 pr-2 font-mono">{x.payer_id}</td>
+                    <td className="py-1 pr-2">{fmtDate(x.discharge_date)}</td>
+                    <td className="py-1 pr-2">{x.division_code ?? '—'}</td>
+                    <td className="py-1 text-ink/70">
+                      {fmtDateTime(x.created_at)}
+                      {x.updated_at && x.updated_at !== x.created_at && <div>แก้ {fmtDateTime(x.updated_at)}</div>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <p className="text-xs text-ink/50 lg:col-span-2">
+        แถวที่ไฮไลต์สีเหลือง = คู่ สิทธิ/ผู้จ่าย ที่ไม่มีอยู่อีกฝั่ง · ข้อมูลดิบเก็บแบบเพิ่มอย่างเดียว ไม่ถูกแก้หรือลบ
+      </p>
+    </div>
+  )
+}
+
+export default function RawCompareView() {
+  const [filter, setFilter] = useState('diff_all')
+  const [q, setQ] = useState('')
+  const [applied, setApplied] = useState('')
+  const [page, setPage] = useState(0)
+  const [rows, setRows] = useState<ViewRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setErr(null)
+    let qb = supabase.from('v_raw_vs_current').select('*', { count: 'exact' })
+    if (filter === 'diff_all') qb = qb.neq('status', S_SAME)
+    else if (filter !== 'all') qb = qb.eq('status', filter)
+    if (applied) qb = qb.eq('encounter_id', applied)
+    const { data, count, error } = await qb
+      .order('encounter_id', { ascending: false })
+      .range(page * PAGE, page * PAGE + PAGE - 1)
+    setLoading(false)
+    if (error) {
+      setErr(error.message)
+      return
+    }
+    setRows((data ?? []) as ViewRow[])
+    setTotal(count ?? 0)
+  }, [filter, applied, page])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const pages = Math.max(1, Math.ceil(total / PAGE))
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-surface p-4 shadow-sm">
+        <h2 className="text-base font-semibold text-ink">เทียบข้อมูลระบบปกติ กับ ข้อมูลดิบที่อัปโหลด</h2>
+        <p className="mt-0.5 text-sm text-ink/60">
+          ดูอย่างเดียว — ไม่แก้ข้อมูล และไม่เกี่ยวกับการส่ง Google Sheet · ระดับ encounter เทียบคู่ สิทธิ/ผู้จ่าย
+        </p>
+        <form
+          className="mt-3 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setPage(0)
+            setOpen(null)
+            setApplied(q.trim())
+          }}
+        >
+          <select
+            className={inputCls}
+            value={filter}
+            onChange={(e) => {
+              setFilter(e.target.value)
+              setPage(0)
+              setOpen(null)
+            }}
+          >
+            {FILTERS.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className={inputCls + ' w-48'}
+            inputMode="numeric"
+            placeholder="ค้นหา encounter_id"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <Button type="submit">ค้นหา</Button>
+          {applied && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setQ('')
+                setApplied('')
+                setPage(0)
+              }}
+            >
+              ล้าง
+            </Button>
+          )}
+          <span className="ml-auto text-sm text-ink/60">{loading ? 'กำลังโหลด…' : `${total.toLocaleString('th-TH')} encounter`}</span>
+        </form>
+      </div>
+
+      {err && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
+
+      <div className="overflow-x-auto rounded-2xl bg-surface shadow-sm">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-ink/10 text-left text-xs text-ink/60">
+              <th className="px-3 py-2">Encounter ID</th>
+              <th className="px-3 py-2">สถานะ</th>
+              <th className="px-3 py-2">ดิบ (สิทธิ/ผู้จ่าย)</th>
+              <th className="px-3 py-2">ระบบปัจจุบัน (สิทธิ/ผู้จ่าย)</th>
+              <th className="px-3 py-2">ดิบครั้งแรก</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <FragmentRow key={r.encounter_id} r={r} open={open === r.encounter_id} onToggle={() => setOpen(open === r.encounter_id ? null : r.encounter_id)} />
+            ))}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-ink/60">
+                  ไม่พบรายการ
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <Button type="button" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            ‹ ก่อนหน้า
+          </Button>
+          <span className="text-ink/70">
+            หน้า {page + 1} / {pages}
+          </span>
+          <Button type="button" variant="outline" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}>
+            ถัดไป ›
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggle: () => void }) {
+  return (
+    <>
+      <tr className="cursor-pointer border-b border-ink/10 hover:bg-brand/10" onClick={onToggle}>
+        <td className="px-3 py-2 font-mono">{r.encounter_id}</td>
+        <td className="px-3 py-2">
+          <span className={'rounded-full px-2 py-0.5 text-xs font-semibold ' + statusCls(r.status)}>{r.status}</span>
+        </td>
+        <td className="px-3 py-2 font-mono text-xs">{r.raw_pairs ?? '—'}</td>
+        <td className="px-3 py-2 font-mono text-xs">{r.cur_pairs ?? '—'}</td>
+        <td className="px-3 py-2 text-xs text-ink/70">{fmtDateTime(r.first_uploaded)}</td>
+      </tr>
+      {open && (
+        <tr className="border-b border-ink/10 bg-ink/[0.03]">
+          <td colSpan={5}>
+            <Detail enc={r.encounter_id} />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
