@@ -32,6 +32,8 @@ interface ViewRow {
   status: string
   discharge_date: string | null
   last_updated: string | null
+  /** อีเมลผู้แก้ไขล่าสุด (มีเฉพาะการแก้หลังรัน SQL เพิ่มคอลัมน์ updated_by — แก้ก่อนหน้านั้นไม่ทราบผู้แก้) */
+  last_editor?: string | null
 }
 interface RawRow {
   raw_id: number
@@ -353,6 +355,7 @@ export default function RawCompareView() {
               <th className="px-3 py-2">ระบบปัจจุบัน (สิทธิ/ผู้จ่าย)</th>
               <th className="px-3 py-2">วันที่จำหน่าย</th>
               <th className="px-3 py-2">แก้ไขล่าสุด</th>
+              <th className="px-3 py-2">แก้ไขโดย</th>
               <th className="px-3 py-2">ดิบครั้งแรก</th>
             </tr>
           </thead>
@@ -362,7 +365,7 @@ export default function RawCompareView() {
             ))}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-ink/60">
+                <td colSpan={8} className="px-3 py-6 text-center text-ink/60">
                   ไม่พบรายการ
                 </td>
               </tr>
@@ -400,11 +403,14 @@ function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggl
         <td className="px-3 py-2 font-mono text-xs">{r.cur_pairs ?? '—'}</td>
         <td className="px-3 py-2 text-xs">{fmtDate(r.discharge_date)}</td>
         <td className="px-3 py-2 text-xs">{fmtDateTime(r.last_updated)}</td>
+        <td className="px-3 py-2 text-xs">
+          {r.last_editor ?? (r.last_updated ? <span className="text-ink/50">ไม่ทราบ (แก้ก่อนเริ่มบันทึกผู้แก้)</span> : '—')}
+        </td>
         <td className="px-3 py-2 text-xs text-ink/70">{fmtDateTime(r.first_uploaded)}</td>
       </tr>
       {open && (
         <tr className="border-b border-ink/10 bg-ink/[0.03]">
-          <td colSpan={7}>
+          <td colSpan={8}>
             <Detail enc={r.encounter_id} />
           </td>
         </tr>
