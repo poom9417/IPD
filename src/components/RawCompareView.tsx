@@ -26,7 +26,7 @@ const FILTERS: { key: string; label: string }[] = [
 const PAGE = 50
 
 // ช่วงวันที่ลัด คิดตามเวลาไทย (YYYY-MM-DD)
-type PresetKey = 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth'
+type PresetKey = 'today' | 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth'
 const bkkToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
 const addDays = (ymd: string, n: number) => {
   const d = new Date(ymd + 'T00:00:00Z')
@@ -35,6 +35,7 @@ const addDays = (ymd: string, n: number) => {
 }
 export function presetRange(k: PresetKey): [string, string] {
   const t = bkkToday()
+  if (k === 'today') return [t, t]
   if (k === 'yesterday') return [addDays(t, -1), addDays(t, -1)]
   if (k === 'last7') return [addDays(t, -6), t]
   const first = t.slice(0, 8) + '01'
@@ -455,6 +456,7 @@ function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggl
 }
 
 const PRESETS: { key: PresetKey; label: string }[] = [
+  { key: 'today', label: 'วันนี้' },
   { key: 'yesterday', label: 'เมื่อวาน' },
   { key: 'last7', label: '7 วันล่าสุด' },
   { key: 'thisMonth', label: 'เดือนนี้' },
