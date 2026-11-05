@@ -46,14 +46,14 @@ const FULL_SELECT =
   '*, patients:patients_v(*), coverage_master(*), payer_master(*), case_tracking(encounter_id, document_received_date, audit_date, submission_date, claim_no, admission_id, updated_at, updated_by)'
 
 // ทั้งระบบ (admin/developer): เรียกฟังก์ชัน DB คำสั่งเดียว คืนข้อมูลแบบกะทัดรัด — ไม่ join/แบ่งหน้าฝั่งเว็บจึงไม่ time out
-// แต่ละแถว = [admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, document_received_date, audit_date, submission_date]
-type SysRow = [number, number, number, string, string | null, string, string, string | null, string | null, string | null, string | null]
+// แต่ละแถว = [admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, document_received_date, audit_date, submission_date, claim_no]
+type SysRow = [number, number, number, string, string | null, string, string, string | null, string | null, string | null, string | null, string | null]
 
 async function fetchSystemAdmissions(): Promise<Admission[]> {
   const { data, error } = await supabase.rpc('myjob_system_rows')
   if (error) throw error
   return ((data ?? []) as unknown as SysRow[]).map(
-    ([admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, doc, audit, sub]) =>
+    ([admission_id, encounter_id, an, hn, full_name, coverage_code, payer_id, discharge_date, doc, audit, sub, claim_no]) =>
       ({
         admission_id,
         encounter_id,
@@ -63,7 +63,7 @@ async function fetchSystemAdmissions(): Promise<Admission[]> {
         payer_id,
         discharge_date,
         patients: { hn, full_name: full_name ?? '', birthdate: null },
-        case_tracking: { admission_id, encounter_id, document_received_date: doc, audit_date: audit, submission_date: sub },
+        case_tracking: { admission_id, encounter_id, document_received_date: doc, audit_date: audit, submission_date: sub, claim_no },
       }) as unknown as Admission,
   )
 }

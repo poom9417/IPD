@@ -135,22 +135,25 @@ export interface SummaryRow {
   discharge_date: string | null
   submission_date: string | null
   amount: number | null
+  /** เลขตั้งเบิก — เคสที่ "ไม่มี claim_no" ถือว่าค้างส่งเบิกเสมอ */
+  claim_no: string | null
 }
 
 // ดึงทีเดียวแล้วคำนวณในเครื่อง → เปลี่ยนวันที่ "ณ" ได้ทันทีโดยไม่ต้องโหลดใหม่
 // ใช้ฟังก์ชัน ar_summary_rows() ที่ DB คำสั่งเดียว (เดิมยิงหลาย request ขนาน + offset ลึก → เกิน statement_timeout)
-// แต่ละแถว = [coverage_code, payer_id, discharge_date, submission_date, document_received_amount]
-type RawRow = [string, string, string | null, string | null, number | string | null]
+// แต่ละแถว = [coverage_code, payer_id, discharge_date, submission_date, document_received_amount, claim_no]
+type RawRow = [string, string, string | null, string | null, number | string | null, string | null]
 
 export async function fetchSummaryRows(): Promise<SummaryRow[]> {
   const { data, error } = await supabase.rpc('ar_summary_rows')
   if (error) throw error
-  return ((data ?? []) as unknown as RawRow[]).map(([coverage_code, payer_id, discharge_date, submission_date, amt]) => ({
+  return ((data ?? []) as unknown as RawRow[]).map(([coverage_code, payer_id, discharge_date, submission_date, amt, claim_no]) => ({
     coverage_code,
     payer_id,
     discharge_date,
     submission_date,
     amount: amt === null || amt === undefined ? null : Number(amt),
+    claim_no: claim_no?.trim() || null,
   }))
 }
 
@@ -221,8 +224,10 @@ export type RowClass =
 export function classifyRow(r: SummaryRow, asOfDay: number): RowClass {
   const dc = dayNum(r.discharge_date)
   if (dc === null || dc > asOfDay) return { kind: 'future' }
+  // ส่งเบิกแล้ว = "มี claim_no" เท่านั้น (ไม่มี claim_no = ค้างเสมอ ต่อให้มีวันส่งเบิกก็ตาม)
+  // ดูย้อนหลัง ณ วันที่เลือก: ถ้ามี claim_no และมีวันส่งเบิก ต้องส่งภายในวันนั้น; มี claim_no แต่ไม่มีวันส่งเบิก = ถือว่าส่งแล้ว
   const sub = dayNum(r.submission_date)
-  if (sub !== null && sub <= asOfDay) return { kind: 'submitted' }
+  if (r.claim_no && (sub === null || sub <= asOfDay)) return { kind: 'submitted' }
   // ----- เคสนี้ค้างส่งเบิก ณ asOf -----
   if (EXCLUDED_COVERAGES.has(r.coverage_code)) return { kind: 'unk' }
   if (isDiscountCoverage(r.coverage_code)) return { kind: 'dis' }

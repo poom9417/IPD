@@ -53,12 +53,15 @@ export function computeTiming(a: Admission, basis: TimingBasis, today: number): 
   const audit = dayNumber(ct?.audit_date)
   const submission = dayNumber(ct?.submission_date)
   const start = basis === 'discharge' ? discharge : basis === 'document' ? document : audit
-  const submitted = submission !== null
+  // ส่งเบิกแล้ว = "มี claim_no" เท่านั้น (ไม่มี claim_no = ค้างเสมอ ต่อให้มีวันส่งเบิกก็ตาม)
+  const submitted = !!ct?.claim_no?.trim()
+  // ปลายทางของการนับ: ส่งแล้ว → วันส่งเบิก (ถ้าไม่มีวันส่งเบิกจะวัดระยะเวลาไม่ได้ → days = null), ค้าง → วันนี้
+  const end = submitted ? submission : today
 
   let days: number | null = null
   let invalid = false
-  if (start !== null) {
-    days = (submitted ? submission : today) - start
+  if (start !== null && end !== null) {
+    days = end - start
     if (days < 0) {
       invalid = true
       days = null

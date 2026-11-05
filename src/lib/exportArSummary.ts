@@ -22,6 +22,7 @@ const asSummaryRow = (a: Admission): SummaryRow => {
     discharge_date: a.discharge_date,
     submission_date: a.case_tracking?.submission_date ?? null,
     amount: amt === null || amt === undefined ? null : Number(amt),
+    claim_no: a.case_tracking?.claim_no?.trim() || null,
   }
 }
 
