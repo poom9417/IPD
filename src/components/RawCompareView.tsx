@@ -14,6 +14,7 @@ const S_NORAW = 'ไม่มีในข้อมูลดิบ (เพิ่�
 const S_DELETED = 'อยู่ในดิบ แต่ถูกลบจากระบบ'
 
 const FILTERS: { key: string; label: string }[] = [
+  { key: 'alert', label: 'ที่ต้องตรวจ: ต่างจากดิบ + ถูกลบ' },
   { key: 'diff_all', label: 'ทุกรายการที่ต่างจากดิบ' },
   { key: S_DIFF, label: 'สิทธิ/ผู้จ่ายต่างจากดิบ' },
   { key: S_NORAW, label: 'ไม่มีในข้อมูลดิบ' },
@@ -23,6 +24,24 @@ const FILTERS: { key: string; label: string }[] = [
 ]
 
 const PAGE = 50
+
+// ช่วงวันที่ลัด คิดตามเวลาไทย (YYYY-MM-DD)
+type PresetKey = 'yesterday' | 'last7' | 'thisMonth' | 'lastMonth'
+const bkkToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
+const addDays = (ymd: string, n: number) => {
+  const d = new Date(ymd + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+export function presetRange(k: PresetKey): [string, string] {
+  const t = bkkToday()
+  if (k === 'yesterday') return [addDays(t, -1), addDays(t, -1)]
+  if (k === 'last7') return [addDays(t, -6), t]
+  const first = t.slice(0, 8) + '01'
+  if (k === 'thisMonth') return [first, t]
+  const lastEnd = addDays(first, -1)
+  return [lastEnd.slice(0, 8) + '01', lastEnd]
+}
 
 interface ViewRow {
   encounter_id: string
@@ -206,7 +225,7 @@ function Detail({ enc }: { enc: string }) {
   )
 }
 
-export default function RawCompareView() {
+export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: number }) {
   const [filter, setFilter] = useState('diff_all')
   const [q, setQ] = useState('')
   const [applied, setApplied] = useState('')
@@ -227,6 +246,7 @@ export default function RawCompareView() {
     setErr(null)
     let qb = supabase.from('v_raw_vs_current').select('*', { count: 'exact' })
     if (filter === 'diff_all') qb = qb.neq('status', S_SAME)
+    else if (filter === 'alert') qb = qb.in('status', [S_DIFF, S_DELETED])
     else if (filter !== 'all') qb = qb.eq('status', filter)
     if (applied) qb = qb.eq('encounter_id', applied)
     if (disFrom || disTo) {
@@ -259,6 +279,21 @@ export default function RawCompareView() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // เปิดจากการ์ดแจ้งเตือน: ตั้งตัวกรอง = 2 สถานะที่ต้องตรวจ + วันที่แก้ไขเมื่อวาน
+  useEffect(() => {
+    if (presetNonce === 0) return
+    const y = presetRange('yesterday')
+    setFilter('alert')
+    setApplied('')
+    setQ('')
+    setDisFrom('')
+    setDisTo('')
+    setUpdFrom(y[0])
+    setUpdTo(y[1])
+    setPage(0)
+    setOpen(null)
+  }, [presetNonce])
 
   const pages = Math.max(1, Math.ceil(total / PAGE))
 
@@ -419,14 +454,35 @@ function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggl
   )
 }
 
+const PRESETS: { key: PresetKey; label: string }[] = [
+  { key: 'yesterday', label: 'เมื่อวาน' },
+  { key: 'last7', label: '7 วันล่าสุด' },
+  { key: 'thisMonth', label: 'เดือนนี้' },
+  { key: 'lastMonth', label: 'เดือนที่แล้ว' },
+]
+
 function DateRange({ label, from, to, onChange }: { label: string; from: string; to: string; onChange: (f: string, t: string) => void }) {
   const cls = inputCls + ' py-1'
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <span>{label}</span>
       <input type="date" className={cls} value={from} onChange={(e) => onChange(e.target.value, to)} />
       <span>–</span>
       <input type="date" className={cls} value={to} onChange={(e) => onChange(from, e.target.value)} />
+      {PRESETS.map((p) => {
+        const r = presetRange(p.key)
+        const on = from === r[0] && to === r[1]
+        return (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => onChange(r[0], r[1])}
+            className={'rounded-full border px-2.5 py-0.5 text-xs font-semibold ' + (on ? 'border-brand bg-brand text-ink' : 'border-ink/25 text-ink/70 hover:bg-brand/20')}
+          >
+            {p.label}
+          </button>
+        )
+      })}
       {(from || to) && (
         <button type="button" className="text-xs underline" onClick={() => onChange('', '')}>
           ล้าง

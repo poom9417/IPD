@@ -8,6 +8,7 @@ import MyJobDashboardPage from '../pages/MyJobDashboardPage'
 import OnboardingTour from './OnboardingTour'
 import CodeCNotifier from './CodeCNotifier'
 import UnassignedPairsNotifier from './UnassignedPairsNotifier'
+import RawChangeNotice from './RawChangeNotice'
 import { useAuth } from '../contexts/AuthContext'
 
 const VALID: PageKey[] = ['mine', 'codec', 'myjob-dashboard', 'myjob-claim']
@@ -24,6 +25,8 @@ export default function AppLayout() {
   const [page, setPage] = useState<PageKey>(readHash)
   // โหมดของหน้าหลัก (Main / Dashboard) — อยู่ที่นี่เพราะปุ่มสลับอยู่บน Navbar ส่วนเนื้อหาอยู่ใน MinePage
   const [mineMode, setMineMode] = useState<MineMode>('main')
+  // เปิดหน้า Compare จากการ์ดแจ้งเตือน (เพิ่มค่าทุกครั้งเพื่อให้ตั้งตัวกรองใหม่)
+  const [compareNonce, setCompareNonce] = useState(0)
 
   // My job: เฉพาะ admin และ user (audit / viewer เข้าไม่ได้ แม้พิมพ์ #myjob-dashboard / #myjob-claim ใน URL เอง)
   const canJob = role === 'admin' || role === 'user'
@@ -55,9 +58,16 @@ export default function AppLayout() {
       <Navbar page={page} onNavigate={go} mode={mineMode} onModeChange={setMineMode} />
       <OnboardingTour page={page} onNavigate={go} />
       <CodeCNotifier onNavigate={go} />
+      <RawChangeNotice
+        onOpen={() => {
+          go('mine')
+          setMineMode('raw')
+          setCompareNonce((n) => n + 1)
+        }}
+      />
       <UnassignedPairsNotifier page={page} onNavigate={go} />
       <div className="min-w-0">
-        {page === 'mine' && <MinePage mode={mineMode} />}
+        {page === 'mine' && <MinePage mode={mineMode} comparePreset={compareNonce} />}
         {page === 'codec' && <CodeCPage />}
         {page === 'myjob-dashboard' && canJob && <MyJobDashboardPage />}
         {page === 'myjob-claim' && canClaimPage && <MyJobPage />}

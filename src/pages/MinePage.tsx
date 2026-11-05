@@ -8,6 +8,8 @@ import { useAuth } from '../contexts/AuthContext'
 interface Props {
   /** โหมดที่เลือก — ปุ่มสลับอยู่บน Navbar (ต่อจากปุ่ม Menu) */
   mode: MineMode
+  /** เพิ่มค่าเมื่อเปิดจากการ์ดแจ้งเตือน — ให้หน้า Compare ตั้งตัวกรอง "เมื่อวาน" */
+  comparePreset?: number
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * ทั้งสองโหมดค้างอยู่ใน DOM (ซ่อนด้วย hidden) — สลับกลับมาแล้วตัวกรอง/หน้าตารางใน Main ไม่หาย
  * และ Dashboard จะโหลดข้อมูลเมื่อเปิดครั้งแรกเท่านั้น
  */
-export default function MinePage({ mode }: Props) {
+export default function MinePage({ mode, comparePreset = 0 }: Props) {
   const { role } = useAuth()
   // audit ไม่เห็นข้อมูลการเงิน → ไม่ render Dashboard เลย (ไม่โหลดข้อมูลด้วย)
   const canDashboard = role !== 'audit'
@@ -44,7 +46,7 @@ export default function MinePage({ mode }: Props) {
       )}
       {rawOpened && canRaw && (
         <div className={mode === 'raw' ? '' : 'hidden'}>
-          <RawCompareView />
+          <RawCompareView presetNonce={comparePreset} />
         </div>
       )}
     </div>
