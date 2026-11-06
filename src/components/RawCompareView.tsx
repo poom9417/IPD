@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useSheetPush } from '../lib/sheetSync'
 import Button from './ui/Button'
 
 /**
  * เทียบ "ข้อมูลในระบบปกติ" (admissions) กับ "ข้อมูลดิบที่อัปโหลด" (admissions_raw)
  * - ไม่แก้ข้อมูลดิบ และไม่เกี่ยวกับการส่ง Google Sheet
  * - ยกเว้นปุ่ม "เพิ่มเคสจากดิบ" (เฉพาะสถานะถูกลบจากระบบ) ที่สร้างแถวใน admissions จากดิบ — อ่านดิบอย่างเดียว
+ *   ฝั่งฐานข้อมูลบันทึกผู้เพิ่ม/เวลา/แถวดิบต้นทางไว้ใน admissions_restore_log และส่งไป Google Sheet ต่อทันทีเหมือนการลบ/นำเข้า
  * - เห็นได้เฉพาะ admin/developer (ฐานข้อมูลบังคับสิทธิ์อ่าน admissions_raw ซ้ำอีกชั้น)
  */
 
@@ -13,13 +15,18 @@ const S_SAME = 'ตรงกับดิบ'
 const S_DIFF = 'สิทธิ/ผู้จ่ายต่างจากดิบ'
 const S_NORAW = 'ไม่มีในข้อมูลดิบ (เพิ่มเอง/ไม่ทราบที่มา)'
 const S_DELETED = 'อยู่ในดิบ แต่ถูกลบจากระบบ'
+const S_NEW = 'เพิ่มใหม่จากดิบ'
+
+/** เวลาที่โชว์เคสที่เพิ่งเพิ่มจากดิบ ก่อนหุบกลับเอง (มิลลิวินาที) */
+const FLASH_MS = 8000
 
 const FILTERS: { key: string; label: string }[] = [
-  { key: 'alert', label: 'ที่ต้องตรวจ: ต่างจากดิบ + ถูกลบ' },
+  { key: 'alert', label: 'ที่ต้องตรวจ: ต่างจากดิบ + ถูกลบ + เพิ่มใหม่' },
   { key: 'diff_all', label: 'ทุกรายการที่ต่างจากดิบ' },
   { key: S_DIFF, label: 'สิทธิ/ผู้จ่ายต่างจากดิบ' },
   { key: S_NORAW, label: 'ไม่มีในข้อมูลดิบ' },
   { key: S_DELETED, label: 'ถูกลบจากระบบ' },
+  { key: S_NEW, label: 'เพิ่มใหม่จากดิบ' },
   { key: S_SAME, label: 'ตรงกับดิบ' },
   { key: 'all', label: 'ทั้งหมด' },
 ]
@@ -53,8 +60,21 @@ interface ViewRow {
   status: string
   discharge_date: string | null
   last_updated: string | null
-  /** อีเมลผู้แก้ไขล่าสุด (มีเฉพาะการแก้หลังรัน SQL เพิ่มคอลัมน์ updated_by — แก้ก่อนหน้านั้นไม่ทราบผู้แก้) */
+  /** อีเมลผู้ทำล่าสุด (แก้ / ลบ / เพิ่มใหม่จากดิบ) — แก้ก่อนเริ่มบันทึกผู้แก้ไม่ทราบผู้ทำ */
   last_editor?: string | null
+  restored_at?: string | null
+}
+interface EventRow {
+  event: 'deleted' | 'restored'
+  admission_id: number | null
+  coverage_code: string | null
+  payer_id: string | null
+  at: string
+  by_email: string | null
+  raw_id: number | null
+  source_file: string | null
+  file_date: string | null
+  raw_uploaded_at: string | null
 }
 interface RawRow {
   raw_id: number
@@ -105,18 +125,20 @@ function statusCls(s: string) {
   if (s === S_SAME) return 'bg-emerald-100 text-emerald-800'
   if (s === S_DIFF) return 'bg-amber-100 text-amber-900'
   if (s === S_NORAW) return 'bg-sky-100 text-sky-900'
+  if (s === S_NEW) return 'bg-violet-100 text-violet-800'
   return 'bg-red-100 text-red-800'
 }
 
 function Detail({ enc }: { enc: string }) {
   const [raw, setRaw] = useState<RawRow[] | null>(null)
   const [cur, setCur] = useState<CurRow[] | null>(null)
+  const [events, setEvents] = useState<EventRow[]>([])
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [r, c] = await Promise.all([
+      const [r, c, ev] = await Promise.all([
         supabase
           .from('admissions_raw')
           .select('raw_id,batch_id,file_date,batch_kind,source_file,uploaded_at,hn,an,coverage_code,coverage_name,payer_id,payer_name,discharge_date,division_code')
@@ -127,6 +149,8 @@ function Detail({ enc }: { enc: string }) {
           .from('admissions')
           .select('admission_id,coverage_code,payer_id,discharge_date,division_code,created_at,updated_at')
           .eq('encounter_id', Number(enc)),
+        // ประวัติเพิ่ม/ลบ — ถ้ายังไม่ได้รัน SQL สร้าง view จะ error → แสดงเป็นว่าง ไม่กระทบส่วนอื่น
+        supabase.from('v_admission_events').select('*').eq('encounter_id', enc).order('at'),
       ])
       if (!alive) return
       if (r.error || c.error) {
@@ -135,6 +159,7 @@ function Detail({ enc }: { enc: string }) {
       }
       setRaw((r.data ?? []) as RawRow[])
       setCur((c.data ?? []) as CurRow[])
+      setEvents(ev.error ? [] : ((ev.data ?? []) as EventRow[]))
     })()
     return () => {
       alive = false
@@ -220,6 +245,49 @@ function Detail({ enc }: { enc: string }) {
           </table>
         )}
       </div>
+      {events.length > 0 && (
+        <div className="lg:col-span-2">
+          <h4 className="mb-1.5 text-sm font-semibold text-ink">ประวัติ เพิ่ม / ลบ ของเคสนี้ ({events.length} เหตุการณ์)</h4>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-ink/60">
+                <th className="py-1 pr-2">เวลา</th>
+                <th className="py-1 pr-2">เหตุการณ์</th>
+                <th className="py-1 pr-2">สิทธิ/ผู้จ่าย</th>
+                <th className="py-1 pr-2">รหัสแถว</th>
+                <th className="py-1 pr-2">โดย</th>
+                <th className="py-1">แถวดิบต้นทาง</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e, i) => (
+                <tr key={i} className="border-t border-ink/10">
+                  <td className="py-1 pr-2">{fmtDateTime(e.at)}</td>
+                  <td className="py-1 pr-2">
+                    <span className={'rounded-full px-2 py-0.5 font-semibold ' + (e.event === 'restored' ? 'bg-violet-100 text-violet-800' : 'bg-red-100 text-red-800')}>
+                      {e.event === 'restored' ? 'เพิ่มใหม่จากดิบ' : 'ถูกลบจากระบบ'}
+                    </span>
+                  </td>
+                  <td className="py-1 pr-2 font-mono">{norm(e.coverage_code)}/{norm(e.payer_id)}</td>
+                  <td className="py-1 pr-2 font-mono">{e.admission_id ?? '—'}</td>
+                  <td className="py-1 pr-2">{e.by_email ?? <span className="text-ink/50">ไม่ทราบ</span>}</td>
+                  <td className="py-1 text-ink/70">
+                    {e.raw_id != null ? (
+                      <>
+                        raw #{e.raw_id}
+                        {e.source_file && <span className="ml-1">· {e.source_file}</span>}
+                        {e.file_date && <span className="ml-1">· ไฟล์วันที่ {fmtDate(e.file_date)}</span>}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <p className="text-xs text-ink/50 lg:col-span-2">
         แถวที่ไฮไลต์สีเหลือง = คู่ สิทธิ/ผู้จ่าย ที่ไม่มีอยู่อีกฝั่ง · ข้อมูลดิบเก็บแบบเพิ่มอย่างเดียว ไม่ถูกแก้หรือลบ
       </p>
@@ -244,6 +312,26 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
   const [open, setOpen] = useState<string | null>(null)
   const [restoring, setRestoring] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // เคสที่เพิ่งเพิ่มจากดิบ: ปักไว้บนสุดและกางรายละเอียดชั่วครู่ แล้วหุบกลับเอง
+  const [pinned, setPinned] = useState<ViewRow | null>(null)
+  const flashTimer = useRef<number | null>(null)
+  const sheetPush = useSheetPush(true)
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current)
+    },
+    [],
+  )
+
+  function endFlashLater(enc: string | null) {
+    if (flashTimer.current) window.clearTimeout(flashTimer.current)
+    flashTimer.current = window.setTimeout(() => {
+      setPinned(null)
+      setNotice(null)
+      if (enc) setOpen((o) => (o === enc ? null : o))
+    }, FLASH_MS)
+  }
 
   // สร้างเคสที่ถูกลบกลับเข้าระบบจากข้อมูลดิบ (ฟังก์ชันฝั่ง DB อ่านดิบอย่างเดียว ไม่แก้ดิบ)
   async function restoreFromRaw(enc: string) {
@@ -258,13 +346,23 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       return
     }
     const n = (data as { admissions_inserted?: number } | null)?.admissions_inserted ?? 0
-    setNotice(
-      n > 0
-        ? `เพิ่มเคส ${enc} เข้าระบบแล้ว ${n} สิทธิ/ผู้จ่าย (ข้อมูลดิบไม่ถูกแก้ไข)`
-        : `เคส ${enc} มีในระบบอยู่แล้ว ไม่มีการเพิ่ม`,
-    )
-    setOpen(null)
+    if (n === 0) {
+      setNotice(`เคส ${enc} มีในระบบอยู่แล้ว ไม่มีการเพิ่ม`)
+      void load()
+      endFlashLater(null)
+      return
+    }
+    setNotice(`เพิ่มเคส ${enc} เข้าระบบแล้ว ${n} สิทธิ/ผู้จ่าย (ข้อมูลดิบไม่ถูกแก้ไข · บันทึกประวัติผู้เพิ่มแล้ว)`)
+    // รีเฟรชรายการ + ปักเคสที่เพิ่มไว้บนสุดและกางรายละเอียดให้ตรวจ
+    const { data: row } = await supabase.from('v_raw_vs_current').select('*').eq('encounter_id', enc).maybeSingle()
+    if (row) {
+      setPinned(row as ViewRow)
+      setOpen(enc)
+    }
     void load()
+    // ส่งไป Google Sheet ต่อทันที เหมือนตอนลบ/นำเข้า (ถ้า Google ขัดข้อง เคสยังถูกเพิ่มในระบบเรียบร้อย)
+    await sheetPush.push()
+    endFlashLater(enc)
   }
 
   const load = useCallback(async () => {
@@ -328,7 +426,7 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       <div className="rounded-2xl bg-surface p-4 shadow-sm">
         <h2 className="text-base font-semibold text-ink">เทียบข้อมูลระบบปกติ กับ ข้อมูลดิบที่อัปโหลด</h2>
         <p className="mt-0.5 text-sm text-ink/60">
-          ไม่แก้ข้อมูลดิบ และไม่เกี่ยวกับการส่ง Google Sheet · เคส "ถูกลบจากระบบ" เพิ่มกลับเข้าระบบจากดิบได้ · ระดับ encounter เทียบคู่ สิทธิ/ผู้จ่าย
+          ไม่แก้ข้อมูลดิบ และไม่เกี่ยวกับการส่ง Google Sheet · เคส "ถูกลบจากระบบ" เพิ่มกลับเข้าระบบจากดิบได้ (บันทึกประวัติผู้เพิ่ม) · ระดับ encounter เทียบคู่ สิทธิ/ผู้จ่าย
         </p>
         <form
           className="mt-3 flex flex-wrap items-center gap-2"
@@ -405,7 +503,17 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       </div>
 
       {err && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
-      {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+      {notice && (
+        <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+          <p>{notice}</p>
+          {sheetPush.status.phase !== 'idle' && sheetPush.status.phase !== 'error' && <p className="mt-0.5 text-emerald-900/80">{sheetPush.status.message}</p>}
+        </div>
+      )}
+      {sheetPush.status.phase === 'error' && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          {sheetPush.status.message} — เคสถูกเพิ่มในระบบแล้ว กดปุ่ม “ส่งไป Google Sheet” ที่หน้าหลักเพื่อส่งซ้ำได้
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-2xl bg-surface shadow-sm">
         <table className="w-full text-sm">
@@ -423,7 +531,21 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {pinned && (
+              <FragmentRow
+                key={'pin-' + pinned.encounter_id}
+                r={pinned}
+                highlight
+                open={open === pinned.encounter_id}
+                onToggle={() => setOpen(open === pinned.encounter_id ? null : pinned.encounter_id)}
+                restoring={false}
+                busy={restoring !== null}
+                onRestore={() => void restoreFromRaw(pinned.encounter_id)}
+              />
+            )}
+            {rows
+              .filter((r) => r.encounter_id !== pinned?.encounter_id)
+              .map((r) => (
               <FragmentRow
                 key={r.encounter_id}
                 r={r}
@@ -464,6 +586,7 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
 
 function FragmentRow({
   r,
+  highlight = false,
   open,
   onToggle,
   restoring,
@@ -471,6 +594,7 @@ function FragmentRow({
   onRestore,
 }: {
   r: ViewRow
+  highlight?: boolean
   open: boolean
   onToggle: () => void
   restoring: boolean
@@ -479,7 +603,7 @@ function FragmentRow({
 }) {
   return (
     <>
-      <tr className="cursor-pointer border-b border-ink/10 hover:bg-brand/10" onClick={onToggle}>
+      <tr className={'cursor-pointer border-b border-ink/10 hover:bg-brand/10 ' + (highlight ? 'bg-violet-50' : '')} onClick={onToggle}>
         <td className="px-3 py-2 font-mono">{r.encounter_id}</td>
         <td className="px-3 py-2">
           <span className={'rounded-full px-2 py-0.5 text-xs font-semibold ' + statusCls(r.status)}>{r.status}</span>

@@ -5,6 +5,7 @@ import NoticeCard, { btnGhost, btnPrimary } from './NoticeCard'
 
 const S_DIFF = 'สิทธิ/ผู้จ่ายต่างจากดิบ'
 const S_DELETED = 'อยู่ในดิบ แต่ถูกลบจากระบบ'
+const S_NEW = 'เพิ่มใหม่จากดิบ'
 const HIDE_KEY = 'rawNoticeHiddenOn'
 
 const bkkToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
@@ -15,13 +16,13 @@ function addDays(ymd: string, n: number) {
 }
 
 /**
- * แจ้งเตือน admin/developer เมื่อเข้าเว็บ: เมื่อวานมีเคส "สิทธิ/ผู้จ่ายต่างจากดิบ" / "ถูกลบจากระบบ" กี่ราย
+ * แจ้งเตือน admin/developer เมื่อเข้าเว็บ: เมื่อวานมีเคส "สิทธิ/ผู้จ่ายต่างจากดิบ" / "ถูกลบจากระบบ" / "เพิ่มใหม่จากดิบ" กี่ราย
  * (นับจากวันที่แก้ไข/ลบ = เมื่อวานตามเวลาไทย) — ติ๊ก "ไม่แสดงอีกในวันนี้" ได้ · อ่านอย่างเดียว ไม่แก้ข้อมูล
  */
 export default function RawChangeNotice({ onOpen }: { onOpen: () => void }) {
   const { role, session } = useAuth()
   const active = role === 'admin' && !!session
-  const [counts, setCounts] = useState<{ diff: number; del: number } | null>(null)
+  const [counts, setCounts] = useState<{ diff: number; del: number; add: number } | null>(null)
   const [dontShow, setDontShow] = useState(false)
   const [hidden, setHidden] = useState(false)
 
@@ -43,9 +44,10 @@ export default function RawChangeNotice({ onOpen }: { onOpen: () => void }) {
         .eq('status', status)
         .gte('last_updated', from)
         .lt('last_updated', to)
-    void Promise.all([cnt(S_DIFF), cnt(S_DELETED)]).then(([a, b]) => {
+    void Promise.all([cnt(S_DIFF), cnt(S_DELETED), cnt(S_NEW)]).then(([a, b, c]) => {
       if (!alive || a.error || b.error) return
-      setCounts({ diff: a.count ?? 0, del: b.count ?? 0 })
+      // c.error = ยังไม่ได้รัน SQL สถานะใหม่ → นับเป็น 0
+      setCounts({ diff: a.count ?? 0, del: b.count ?? 0, add: c.error ? 0 : (c.count ?? 0) })
     })
     return () => {
       alive = false
@@ -63,7 +65,7 @@ export default function RawChangeNotice({ onOpen }: { onOpen: () => void }) {
     setHidden(true)
   }
 
-  if (!active || hidden || !counts || counts.diff + counts.del === 0) return null
+  if (!active || hidden || !counts || counts.diff + counts.del + counts.add === 0) return null
   const y = addDays(bkkToday(), -1)
 
   return (
@@ -71,7 +73,7 @@ export default function RawChangeNotice({ onOpen }: { onOpen: () => void }) {
       <NoticeCard
         label="แจ้งเตือนข้อมูลต่างจากดิบ"
         icon={<span className="text-xl font-bold">!</span>}
-        count={counts.diff + counts.del}
+        count={counts.diff + counts.del + counts.add}
         title="เมื่อวานมีเคสที่ต้องตรวจเพิ่ม"
         onClosed={finish}
         actions={(close) => (
@@ -98,6 +100,7 @@ export default function RawChangeNotice({ onOpen }: { onOpen: () => void }) {
         <ul className="mt-1 space-y-0.5 text-sm text-ink">
           <li>สิทธิ/ผู้จ่ายต่างจากดิบ: <b>{counts.diff}</b> ราย</li>
           <li>ถูกลบจากระบบ: <b>{counts.del}</b> ราย</li>
+          <li>เพิ่มใหม่จากดิบ: <b>{counts.add}</b> ราย</li>
         </ul>
         <label className="mt-2 flex items-center gap-2 text-xs text-ink/70">
           <input type="checkbox" checked={dontShow} onChange={(e) => setDontShow(e.target.checked)} />
