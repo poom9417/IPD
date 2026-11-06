@@ -10,6 +10,7 @@ import {
 import { exportArSummaryToExcel } from '../lib/exportArSummary'
 import { copyElementAsImage } from '../lib/copyTableImage'
 import { useAuth } from '../contexts/AuthContext'
+import DateInput from './DateInput'
 import WaveExportButton from './WaveExportButton'
 import Button from './ui/Button'
 
@@ -135,7 +136,7 @@ export default function ArSummaryDashboard() {
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm text-ink/70">
             <div className="mb-1">ค้างส่งเบิก ณ วันที่</div>
-            <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={inputCls} />
+            <DateInput value={asOf} onChange={setAsOf} className={inputCls} />
           </label>
           <Button
             variant="outline"

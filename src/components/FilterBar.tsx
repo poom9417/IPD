@@ -1,4 +1,5 @@
 import CoverageMultiSelect from './CoverageMultiSelect'
+import DateInput from './DateInput'
 import { CLAIM_STAGE_LABELS, type ClaimStage } from '../lib/claimStatus'
 import type { CoverageMaster, PayerMaster } from '../lib/types'
 
@@ -134,18 +135,12 @@ export default function FilterBar({
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm text-ink/70">
           <div className="mb-1">วันจำหน่าย: เริ่ม</div>
-          <input type="date" value={dischargeFrom} onChange={(e) => onDischargeFromChange(e.target.value)} className={inputCls} />
+          <DateInput value={dischargeFrom} onChange={onDischargeFromChange} className={inputCls} />
         </label>
 
         <label className="text-sm text-ink/70">
           <div className="mb-1">สิ้นสุด</div>
-          <input
-            type="date"
-            value={dischargeTo}
-            min={dischargeFrom || undefined}
-            onChange={(e) => onDischargeToChange(e.target.value)}
-            className={inputCls}
-          />
+          <DateInput value={dischargeTo} min={dischargeFrom || undefined} onChange={onDischargeToChange} className={inputCls} />
         </label>
 
         <div className="flex flex-wrap gap-1.5 pb-1.5">

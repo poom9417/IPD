@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useSheetPush } from '../lib/sheetSync'
 import Button from './ui/Button'
+import DateInput from './DateInput'
 
 /**
  * เทียบ "ข้อมูลในระบบปกติ" (admissions) กับ "ข้อมูลดิบที่อัปโหลด" (admissions_raw)
@@ -656,9 +657,9 @@ function DateRange({ label, from, to, onChange }: { label: string; from: string;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span>{label}</span>
-      <input type="date" className={cls} value={from} onChange={(e) => onChange(e.target.value, to)} />
+      <DateInput className={cls} value={from} onChange={(v) => onChange(v, to)} />
       <span>–</span>
-      <input type="date" className={cls} value={to} onChange={(e) => onChange(from, e.target.value)} />
+      <DateInput className={cls} value={to} onChange={(v) => onChange(from, v)} />
       {PRESETS.map((p) => {
         const r = presetRange(p.key)
         const on = from === r[0] && to === r[1]

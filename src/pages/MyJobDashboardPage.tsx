@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { pairKey } from '../lib/pairKey'
 import { useAuth } from '../contexts/AuthContext'
 import CoverageMultiSelect from '../components/CoverageMultiSelect'
+import DateInput from '../components/DateInput'
 import CaseDetailModal from '../components/CaseDetailModal'
 import { BarChart, ChartCard, EmptyChart, HBarChart, LineChart } from '../components/charts'
 import type { Admission, CoverageMaster, PayerMaster } from '../lib/types'
@@ -438,11 +439,11 @@ export default function MyJobDashboardPage() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-sm text-ink/70">
             <div className="mb-1">วันจำหน่าย: เริ่ม</div>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+            <DateInput value={from} onChange={setFrom} className={inputCls} />
           </label>
           <label className="text-sm text-ink/70">
             <div className="mb-1">สิ้นสุด</div>
-            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={inputCls} />
+            <DateInput value={to} min={from || undefined} onChange={setTo} className={inputCls} />
           </label>
           <div className="flex flex-wrap gap-1.5 pb-1.5">
             {presets.map((p) => (
