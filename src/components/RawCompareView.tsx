@@ -4,7 +4,8 @@ import Button from './ui/Button'
 
 /**
  * เทียบ "ข้อมูลในระบบปกติ" (admissions) กับ "ข้อมูลดิบที่อัปโหลด" (admissions_raw)
- * - อ่านอย่างเดียว ไม่แก้ข้อมูลใดๆ และไม่เกี่ยวกับการส่ง Google Sheet
+ * - ไม่แก้ข้อมูลดิบ และไม่เกี่ยวกับการส่ง Google Sheet
+ * - ยกเว้นปุ่ม "เพิ่มเคสจากดิบ" (เฉพาะสถานะถูกลบจากระบบ) ที่สร้างแถวใน admissions จากดิบ — อ่านดิบอย่างเดียว
  * - เห็นได้เฉพาะ admin/developer (ฐานข้อมูลบังคับสิทธิ์อ่าน admissions_raw ซ้ำอีกชั้น)
  */
 
@@ -241,6 +242,30 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  // สร้างเคสที่ถูกลบกลับเข้าระบบจากข้อมูลดิบ (ฟังก์ชันฝั่ง DB อ่านดิบอย่างเดียว ไม่แก้ดิบ)
+  async function restoreFromRaw(enc: string) {
+    if (!window.confirm(`เพิ่มเคส encounter ${enc} เข้าระบบจากข้อมูลดิบ?\n(ข้อมูลดิบจะไม่ถูกแก้ไข)`)) return
+    setRestoring(enc)
+    setErr(null)
+    setNotice(null)
+    const { data, error } = await supabase.rpc('restore_admission_from_raw', { p_encounter_id: enc })
+    setRestoring(null)
+    if (error) {
+      setErr(error.message)
+      return
+    }
+    const n = (data as { admissions_inserted?: number } | null)?.admissions_inserted ?? 0
+    setNotice(
+      n > 0
+        ? `เพิ่มเคส ${enc} เข้าระบบแล้ว ${n} สิทธิ/ผู้จ่าย (ข้อมูลดิบไม่ถูกแก้ไข)`
+        : `เคส ${enc} มีในระบบอยู่แล้ว ไม่มีการเพิ่ม`,
+    )
+    setOpen(null)
+    void load()
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -303,7 +328,7 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       <div className="rounded-2xl bg-surface p-4 shadow-sm">
         <h2 className="text-base font-semibold text-ink">เทียบข้อมูลระบบปกติ กับ ข้อมูลดิบที่อัปโหลด</h2>
         <p className="mt-0.5 text-sm text-ink/60">
-          ดูอย่างเดียว — ไม่แก้ข้อมูล และไม่เกี่ยวกับการส่ง Google Sheet · ระดับ encounter เทียบคู่ สิทธิ/ผู้จ่าย
+          ไม่แก้ข้อมูลดิบ และไม่เกี่ยวกับการส่ง Google Sheet · เคส "ถูกลบจากระบบ" เพิ่มกลับเข้าระบบจากดิบได้ · ระดับ encounter เทียบคู่ สิทธิ/ผู้จ่าย
         </p>
         <form
           className="mt-3 flex flex-wrap items-center gap-2"
@@ -380,6 +405,7 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       </div>
 
       {err && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}
+      {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
 
       <div className="overflow-x-auto rounded-2xl bg-surface shadow-sm">
         <table className="w-full text-sm">
@@ -393,15 +419,24 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
               <th className="px-3 py-2">แก้ไขล่าสุด</th>
               <th className="px-3 py-2">แก้ไขโดย</th>
               <th className="px-3 py-2">ดิบครั้งแรก</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <FragmentRow key={r.encounter_id} r={r} open={open === r.encounter_id} onToggle={() => setOpen(open === r.encounter_id ? null : r.encounter_id)} />
+              <FragmentRow
+                key={r.encounter_id}
+                r={r}
+                open={open === r.encounter_id}
+                onToggle={() => setOpen(open === r.encounter_id ? null : r.encounter_id)}
+                restoring={restoring === r.encounter_id}
+                busy={restoring !== null}
+                onRestore={() => void restoreFromRaw(r.encounter_id)}
+              />
             ))}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-ink/60">
+                <td colSpan={9} className="px-3 py-6 text-center text-ink/60">
                   ไม่พบรายการ
                 </td>
               </tr>
@@ -427,7 +462,21 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
   )
 }
 
-function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggle: () => void }) {
+function FragmentRow({
+  r,
+  open,
+  onToggle,
+  restoring,
+  busy,
+  onRestore,
+}: {
+  r: ViewRow
+  open: boolean
+  onToggle: () => void
+  restoring: boolean
+  busy: boolean
+  onRestore: () => void
+}) {
   return (
     <>
       <tr className="cursor-pointer border-b border-ink/10 hover:bg-brand/10" onClick={onToggle}>
@@ -443,10 +492,25 @@ function FragmentRow({ r, open, onToggle }: { r: ViewRow; open: boolean; onToggl
           {r.last_editor ?? (r.last_updated ? <span className="text-ink/50">ไม่ทราบ (แก้ก่อนเริ่มบันทึกผู้แก้)</span> : '—')}
         </td>
         <td className="px-3 py-2 text-xs text-ink/70">{fmtDateTime(r.first_uploaded)}</td>
+        <td className="px-3 py-2 text-right">
+          {r.status === S_DELETED && (
+            <Button
+              type="button"
+              variant="primary"
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRestore()
+              }}
+            >
+              {restoring ? 'กำลังเพิ่ม…' : '+ เพิ่มเคสจากดิบ'}
+            </Button>
+          )}
+        </td>
       </tr>
       {open && (
         <tr className="border-b border-ink/10 bg-ink/[0.03]">
-          <td colSpan={8}>
+          <td colSpan={9}>
             <Detail enc={r.encounter_id} />
           </td>
         </tr>
