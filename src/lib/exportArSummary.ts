@@ -23,6 +23,7 @@ const asSummaryRow = (a: Admission): SummaryRow => {
     submission_date: a.case_tracking?.submission_date ?? null,
     amount: amt === null || amt === undefined ? null : Number(amt),
     claim_no: a.case_tracking?.claim_no?.trim() || null,
+    no_claim: a.case_tracking?.no_claim === true,
   }
 }
 
@@ -134,6 +135,7 @@ export async function exportArSummaryToExcel(asOf: string, opts: { role?: string
   note('ต้นสังกัด PRI = ทุกสิทธิที่ไม่อยู่ในกลุ่มอื่น (เช่น AR003, AR006, EMU4) · ไม่นับสิทธิส่วนลด DIS_*')
   note(`ไม่นับสิทธิ UNK (เงินสด / ไม่เบิก) ที่ค้างอยู่ ${summary.excludedCount.toLocaleString('th-TH')} ราย`)
   note(`ไม่นับสิทธิส่วนลด DIS_* ที่ค้างอยู่ ${summary.excludedDisCount.toLocaleString('th-TH')} ราย`)
+  note(`ไม่นับเคสที่ตั้งเป็น "ไม่ส่งเบิก" ${summary.noClaimCount.toLocaleString('th-TH')} ราย`)
   if (summary.ungrouped.length > 0) {
     note(
       'ยังไม่ได้จัดเข้ากลุ่ม (ไม่รวมในผลรวม): ' +

@@ -186,6 +186,13 @@ export default function Dashboard() {
     return true
   }
 
+  // แก้ Note / "ไม่ส่งเบิก" สำเร็จ (บันทึกที่ DB แล้ว โดย CaseNotePanel) → อัปเดตแถวในตารางและหน้ารายละเอียดทันที แล้วโหลดใหม่
+  function handleCaseChanged(a: Admission, data: Admission['case_tracking']) {
+    setAdmissions((prev) => prev.map((x) => (x.admission_id === a.admission_id ? { ...x, case_tracking: data } : x)))
+    setViewing((v) => (v && v.admission_id === a.admission_id ? { ...v, case_tracking: data } : v))
+    reload()
+  }
+
   // Export ตามตัวกรองบนหน้าจอ (ไม่ได้กรองอะไร = ทั้งหมด) — ดึงทุกแถวที่ตรงตัวกรองจาก DB ตอนกดปุ่ม ไม่แบ่งหน้า ไม่ตัด
   async function handleExport() {
     if (!canExport) return
@@ -487,6 +494,8 @@ export default function Dashboard() {
         <CaseDetailModal
           admission={viewing}
           showMoney={!isAudit}
+          canNote={canEdit}
+          onCaseChanged={handleCaseChanged}
           onClose={() => setViewing(null)}
           onEdit={
             isAdmin
@@ -513,6 +522,7 @@ export default function Dashboard() {
           admission={editing}
           coverageOptions={coverageOptions}
           payerOptions={payerOptions}
+          onCaseChanged={handleCaseChanged}
           onClose={() => setEditing(undefined)}
           onSaved={() => {
             setEditing(undefined)

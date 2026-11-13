@@ -29,6 +29,15 @@ export interface CaseTracking {
   submission_amount: number | null
   claim_no: string | null
   updated_at: string
+  /** note สั้นๆ ไว้อ่านเอง (≤300 ตัวอักษร) */
+  note?: string | null
+  note_by_email?: string | null
+  note_at?: string | null
+  /** true = ไม่ส่งเบิก (ไม่นับเป็นค้างเบิก) */
+  no_claim?: boolean
+  no_claim_reason?: string | null
+  no_claim_by_email?: string | null
+  no_claim_at?: string | null
 }
 
 export interface AppUser {

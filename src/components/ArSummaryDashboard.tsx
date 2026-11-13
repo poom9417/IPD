@@ -261,6 +261,9 @@ export default function ArSummaryDashboard() {
             <li>
               • ไม่นับสิทธิส่วนลด DIS_* ที่ค้างอยู่ {count(summary.excludedDisCount)} ราย
             </li>
+            <li>
+              • ไม่นับเคสที่ตั้งเป็น "ไม่ส่งเบิก" {count(summary.noClaimCount)} ราย
+            </li>
             {summary.ungrouped.length > 0 && (
               <li>
                 • <span className="font-semibold text-ink">ยังไม่ได้จัดเข้ากลุ่ม (ไม่รวมในผลรวม):</span>{' '}

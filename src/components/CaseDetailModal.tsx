@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import type { Admission } from '../lib/types'
 import { CLAIM_STAGE_LABELS, getClaimStage } from '../lib/claimStatus'
 import Button from './ui/Button'
+import CaseNotePanel from './CaseNotePanel'
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return '—'
@@ -31,10 +32,14 @@ interface Props {
   onEditReceive?: (a: Admission) => void
   /** false = ซ่อนยอดเงิน (role audit) */
   showMoney?: boolean
+  /** true = แก้ Note / ตั้ง "ไม่ส่งเบิก" ได้ (admin + user) — false = ดู Note/สถานะอย่างเดียว */
+  canNote?: boolean
+  /** แจ้งหน้าแม่ให้รีเฟรชเคสหลังแก้ Note / ไม่ส่งเบิก */
+  onCaseChanged?: (a: Admission, ct: Admission['case_tracking']) => void
 }
 
 /** หน้าต่างดูรายละเอียดเคส — หน้าตาเหมือนฟอร์มแก้ไข แต่แก้ไขไม่ได้ (read-only) */
-export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditReceive, showMoney = true }: Props) {
+export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditReceive, showMoney = true, canNote = false, onCaseChanged }: Props) {
   const ct = a.case_tracking
   const stage = getClaimStage(a)
 
@@ -133,6 +138,8 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
               <p className="mt-2 text-sm text-ink/60">แก้ไขล่าสุด {fmtDateTime(ct.updated_at)}</p>
             )}
           </div>
+
+          <CaseNotePanel admission={a} editable={canNote} onChanged={(data) => onCaseChanged?.(a, data)} />
         </div>
 
         <div className="shrink-0 border-t border-line px-6 py-3">

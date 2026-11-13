@@ -137,23 +137,27 @@ export interface SummaryRow {
   amount: number | null
   /** เลขตั้งเบิก — เคสที่ "ไม่มี claim_no" ถือว่าค้างส่งเบิกเสมอ */
   claim_no: string | null
+  /** true = เคสที่ตั้งเป็น "ไม่ส่งเบิก" — ไม่นับเป็นค้างเบิก */
+  no_claim: boolean
 }
 
 // ดึงทีเดียวแล้วคำนวณในเครื่อง → เปลี่ยนวันที่ "ณ" ได้ทันทีโดยไม่ต้องโหลดใหม่
 // ใช้ฟังก์ชัน ar_summary_rows() ที่ DB คำสั่งเดียว (เดิมยิงหลาย request ขนาน + offset ลึก → เกิน statement_timeout)
-// แต่ละแถว = [coverage_code, payer_id, discharge_date, submission_date, document_received_amount, claim_no]
-type RawRow = [string, string, string | null, string | null, number | string | null, string | null]
+// แต่ละแถว = [coverage_code, payer_id, discharge_date, submission_date, document_received_amount, claim_no, no_claim]
+// (ช่องที่ 7 เพิ่มทีหลัง — ถ้า DB เก่ายังไม่ส่งมาให้ถือว่า false)
+type RawRow = [string, string, string | null, string | null, number | string | null, string | null, boolean | null | undefined]
 
 export async function fetchSummaryRows(): Promise<SummaryRow[]> {
   const { data, error } = await supabase.rpc('ar_summary_rows')
   if (error) throw error
-  return ((data ?? []) as unknown as RawRow[]).map(([coverage_code, payer_id, discharge_date, submission_date, amt, claim_no]) => ({
+  return ((data ?? []) as unknown as RawRow[]).map(([coverage_code, payer_id, discharge_date, submission_date, amt, claim_no, no_claim]) => ({
     coverage_code,
     payer_id,
     discharge_date,
     submission_date,
     amount: amt === null || amt === undefined ? null : Number(amt),
     claim_no: claim_no?.trim() || null,
+    no_claim: no_claim === true,
   }))
 }
 
@@ -184,6 +188,8 @@ export interface SummaryResult {
   excludedDisCount: number
   /** เคสค้างที่ไม่อยู่ในกลุ่มใดเลย (ไม่รวมในผลรวม) — ปกติว่าง เพราะ PRI รับส่วนที่เหลือทั้งหมด */
   ungrouped: { coverage_code: string; n: number; amt: number }[]
+  /** เคสที่ตั้งเป็น "ไม่ส่งเบิก" (จำหน่ายแล้ว ณ วันนั้น) — ไม่นับเป็นค้างเบิก */
+  noClaimCount: number
   /** ใช้ตรวจ: จำนวนเคสที่จำหน่ายแล้ว ณ วันนั้นทั้งหมด (รวมที่ส่งเบิกแล้ว) */
   dischargedCount: number
 }
@@ -215,6 +221,7 @@ function finalize(g: GroupSummary) {
 // เพื่อให้ "รายการที่ถูกนับ" ตรงกับตัวเลขในตารางทุกแถว
 export type RowClass =
   | { kind: 'future' } // ยังไม่จำหน่าย ณ วันนั้น
+  | { kind: 'no_claim' } // ตั้งเป็น "ไม่ส่งเบิก" — ไม่นับเป็นค้างเบิก
   | { kind: 'submitted' } // ส่งเบิกแล้ว ณ วันนั้น
   | { kind: 'unk' } // สิทธิ UNK ไม่นับ
   | { kind: 'dis' } // สิทธิส่วนลด DIS_* ไม่นับ
@@ -224,6 +231,8 @@ export type RowClass =
 export function classifyRow(r: SummaryRow, asOfDay: number): RowClass {
   const dc = dayNum(r.discharge_date)
   if (dc === null || dc > asOfDay) return { kind: 'future' }
+  // เคส "ไม่ส่งเบิก" ไม่นับเป็นค้างเบิกเสมอ (ต่อให้ภายหลังมี claim_no จากไฟล์ GGO ก็ยังคงสถานะนี้ไว้)
+  if (r.no_claim) return { kind: 'no_claim' }
   // ส่งเบิกแล้ว = "มี claim_no" เท่านั้น (ไม่มี claim_no = ค้างเสมอ ต่อให้มีวันส่งเบิกก็ตาม)
   // ดูย้อนหลัง ณ วันที่เลือก: ถ้ามี claim_no และมีวันส่งเบิก ต้องส่งภายในวันนั้น; มี claim_no แต่ไม่มีวันส่งเบิก = ถือว่าส่งแล้ว
   const sub = dayNum(r.submission_date)
@@ -248,14 +257,19 @@ export function buildSummary(rows: SummaryRow[], asOf: string): SummaryResult {
   let excludedCount = 0
   let excludedDisCount = 0
   let dischargedCount = 0
+  let noClaimCount = 0
 
-  if (asOfDay === null) return { groups, total, noAmountCount, excludedCount, excludedDisCount, ungrouped: [], dischargedCount }
+  if (asOfDay === null) return { groups, total, noAmountCount, excludedCount, excludedDisCount, noClaimCount, ungrouped: [], dischargedCount }
 
   for (const r of rows) {
     const c = classifyRow(r, asOfDay)
     if (c.kind === 'future') continue
     dischargedCount++ // จำหน่ายแล้ว ณ วันนั้น (รวมที่ส่งเบิกแล้ว)
     if (c.kind === 'submitted') continue
+    if (c.kind === 'no_claim') {
+      noClaimCount++
+      continue
+    }
     if (c.kind === 'unk') {
       excludedCount++
       continue
@@ -294,6 +308,7 @@ export function buildSummary(rows: SummaryRow[], asOf: string): SummaryResult {
     noAmountCount,
     excludedCount,
     excludedDisCount,
+    noClaimCount,
     ungrouped: [...ungroupedMap.entries()]
       .map(([coverage_code, v]) => ({ coverage_code, ...v }))
       .sort((a, b) => b.n - a.n),

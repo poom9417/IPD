@@ -16,6 +16,7 @@ import PatientSearchInput from './PatientSearchInput'
 import CreatableSelect from './CreatableSelect'
 import AddMasterPanel from './AddMasterPanel'
 import Button from './ui/Button'
+import CaseNotePanel from './CaseNotePanel'
 
 type AddingKind = 'coverage' | 'payer' | 'division'
 
@@ -72,9 +73,11 @@ interface Props {
   payerOptions: PayerMaster[]
   onClose: () => void
   onSaved: () => void
+  /** แจ้งหน้าแม่ให้รีเฟรชเมื่อแก้ Note / "ไม่ส่งเบิก" ในหน้าต่างนี้ (ปุ่มกลุ่มนี้บันทึกทันที ไม่ต้องกด "บันทึก") */
+  onCaseChanged?: (a: Admission, ct: Admission['case_tracking']) => void
 }
 
-export default function AdmissionForm({ admission, coverageOptions, payerOptions, onClose, onSaved }: Props) {
+export default function AdmissionForm({ admission, coverageOptions, payerOptions, onClose, onSaved, onCaseChanged }: Props) {
   const [draft, setDraft] = useState<AdmissionDraft>(toDraft(admission))
   const [caseDraft, setCaseDraft] = useState<CaseTrackingDraft>(toCaseDraft(admission))
   const [saving, setSaving] = useState(false)
@@ -718,6 +721,15 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             </div>
             <p className="mt-1.5 text-sm text-ink/60">สถานะเคลมเก็บแยกตามสิทธิ/ผู้จ่ายของแถวนี้ · 1 แถวส่งเบิกได้ครั้งเดียว — กรอกซ้ำจะแก้ไขค่าเดิม ไม่สร้างประวัติใหม่ · encounter ที่แยกสิทธิ ให้เพิ่มเคสใหม่ด้วย encounter_id เดิมแต่เลือกสิทธิอื่น</p>
           </div>
+
+          {/* Note + ไม่ส่งเบิก — บันทึกทันทีด้วยปุ่มของแต่ละส่วน (เฉพาะโหมดแก้ไข เพราะต้องมีเคสอยู่ก่อน) */}
+          {isEdit && admission && (
+            <CaseNotePanel
+              admission={admission}
+              editable
+              onChanged={(data) => onCaseChanged?.(admission, data)}
+            />
+          )}
         </div>
 
         {/* ปุ่ม — ติดขอบล่างเสมอ ไม่ต้องเลื่อน */}
