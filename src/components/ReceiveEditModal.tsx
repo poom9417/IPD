@@ -5,15 +5,14 @@ import Button from './ui/Button'
 interface Props {
   admission: Admission
   onClose: () => void
-  /** admin/developer แก้ "ยอดเงินจาก HIS" ได้ — user แก้ได้เฉพาะวันที่ (DB บล็อกซ้ำอีกชั้น) */
+  /** role ที่แก้เคสได้ (admin / user) แก้ "ยอดเงินจาก HIS" ได้ */
   canEditAmount?: boolean
   /** บันทึกวันที่รับเอกสาร (+ ยอด ถ้า canEditAmount และมีการแก้) — คืน true เมื่อสำเร็จ (หน้าต่างจะปิดเอง) */
   onSave: (a: Admission, date: string, amount?: number | null) => Promise<boolean>
 }
 
 /**
- * หน้าต่างแก้ไข "วันที่รับเอกสาร" ของเคสที่รับเอกสารไปแล้ว (admin และ user)
- * ช่อง "ยอดเงินจาก HIS" แก้ได้เฉพาะ admin/developer — user ไม่เห็นช่องนี้ให้แก้
+ * หน้าต่างแก้ไข "วันที่รับเอกสาร" และ "ยอดเงินจาก HIS" ของเคสที่รับเอกสารไปแล้ว (admin และ user)
  */
 export default function ReceiveEditModal({ admission: a, onClose, onSave, canEditAmount = false }: Props) {
   const ct = a.case_tracking
@@ -106,9 +105,7 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave, canEdi
             </label>
           )}
           <p className="pb-1 text-sm text-ink/60">
-            {canEditAmount
-              ? 'แก้ได้เฉพาะวันที่รับเอกสารและยอดเงินจาก HIS'
-              : 'แก้ได้เฉพาะวันที่รับเอกสาร (ยอดเงินจาก HIS นำเข้าโดย admin)'}{' '}
+            {canEditAmount ? 'แก้ได้เฉพาะวันที่รับเอกสารและยอดเงินจาก HIS' : 'แก้ได้เฉพาะวันที่รับเอกสาร'}{' '}
             — ระบบจะบันทึกว่าใครแก้ไขล่าสุดและเมื่อไร
           </p>
         </div>

@@ -343,8 +343,8 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
       // role user ห้ามบันทึกวัน Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
       const canAuditFields = role === 'admin'
-      // ยอดเงินจาก HIS: admin เท่านั้นที่กรอก/แก้ได้ (user ไม่ส่งฟิลด์นี้ — นำเข้าจากไฟล์ HIS โดย admin/developer)
-      const canAmountField = role === 'admin'
+      // ยอดเงินจาก HIS: admin และ user แก้ได้ (audit / viewer ไม่ส่งฟิลด์นี้)
+      const canAmountField = role === 'admin' || role === 'user'
       const hasCaseData =
         caseDraft.document_received_date ||
         (canAmountField && caseDraft.document_received_amount) ||
@@ -672,7 +672,7 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   className="form-input"
                 />
               </Field>
-              {role === 'admin' && (
+              {(role === 'admin' || role === 'user') && (
                 <Field label="ยอดเงินจาก HIS (บาท)">
                   <input
                     type="number"

@@ -131,7 +131,7 @@ function ClaimStatus({
           <button
             key={s.key}
             type="button"
-            title={`${s.title} — คลิกเพื่อแก้ไขวันที่รับเอกสาร`}
+            title={`${s.title} — คลิกเพื่อแก้ไขวันที่/ยอด`}
             onClick={() => onEditReceive(admission)}
             className="whitespace-nowrap rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand-dark"
           >

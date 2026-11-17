@@ -531,7 +531,7 @@ export default function Dashboard() {
       {editingReceive && (
         <ReceiveEditModal
           admission={editingReceive}
-          canEditAmount={isAdmin}
+          canEditAmount={canReceiveDoc}
           onClose={() => setEditingReceive(null)}
           onSave={updateReceived}
         />
