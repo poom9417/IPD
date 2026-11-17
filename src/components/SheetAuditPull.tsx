@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { saveCaseTracking } from '../lib/caseTracking'
 import {
+  decorate,
   fetchSkips,
   fmtDateTime,
   fmtIsoDate,
+  hasNew,
+  isRecorded,
   previewSheetAudit,
   removeSkip,
   saveSkip,
@@ -12,6 +15,7 @@ import {
   type PullItem,
   type PullResult,
   type SkipRow,
+  type VItem,
   type SkipTarget,
 } from '../lib/sheetSync'
 import Button from './ui/Button'
@@ -35,23 +39,6 @@ const TAB_LABEL: Record<Tab, string> = {
   ignored: 'ซ้ำในชีต (ตัดออก)',
   all: 'ทั้งหมด',
 }
-
-/** แถวชีต + ข้อมูลว่าผู้ใช้กด "ข้าม" ไว้แล้วหรือไม่ (skip ≠ null = ตรวจแล้ว ย้ายไปแท็บ เคยบันทึกแล้ว) */
-type VItem = PullItem & { skip: SkipRow | null }
-
-function decorate(items: PullItem[], skips: SkipRow[]): VItem[] {
-  const m = new Map(skips.map((s) => [skipKey(s.encounter_id, s.sheet_sithi, s.sheet_audit_date), s]))
-  return items.map((i) => ({
-    ...i,
-    skip: i.encounter_id !== null && i.audit_date ? (m.get(skipKey(i.encounter_id, i.sithi, i.audit_date)) ?? null) : null,
-  }))
-}
-
-/** มีแถวสิทธิในระบบอย่างน้อย 1 แถวที่ยังไม่เคยบันทึกวัน Audit */
-const hasNew = (i: VItem) => i.targets.some((t) => t.state === 'new')
-/** เคสที่ทุกแถวสิทธิเคยบันทึกวัน Audit ไว้แล้ว หรือผู้ใช้ตรวจแล้วกดข้าม (ไม่ถูกตัดเพราะซ้ำ) */
-const isRecorded = (i: VItem) =>
-  !i.ignored && (!!i.skip || (i.status !== 'error' && i.targets.length > 0 && !hasNew(i)))
 
 function inTab(i: VItem, tab: Tab): boolean {
   if (tab === 'all') return true

@@ -108,6 +108,25 @@ export async function removeSkip(id: number): Promise<void> {
   if (error) throw error
 }
 
+/** แถวชีต + ข้อมูลว่าผู้ใช้กด "ข้าม" ไว้แล้วหรือไม่ (skip ≠ null = ตรวจแล้ว ย้ายไปแท็บ เคยบันทึกแล้ว) */
+export type VItem = PullItem & { skip: SkipRow | null }
+
+export function decorate(items: PullItem[], skips: SkipRow[]): VItem[] {
+  const m = new Map(skips.map((s) => [skipKey(s.encounter_id, s.sheet_sithi, s.sheet_audit_date), s]))
+  return items.map((i) => ({
+    ...i,
+    skip: i.encounter_id !== null && i.audit_date ? (m.get(skipKey(i.encounter_id, i.sithi, i.audit_date)) ?? null) : null,
+  }))
+}
+
+/** มีแถวสิทธิในระบบอย่างน้อย 1 แถวที่ยังไม่เคยบันทึกวัน Audit */
+export const hasNew = (i: VItem) => i.targets.some((t) => t.state === 'new')
+/** เคสที่ทุกแถวสิทธิเคยบันทึกวัน Audit ไว้แล้ว หรือผู้ใช้ตรวจแล้วกดข้าม (ไม่ถูกตัดเพราะซ้ำ) */
+export const isRecorded = (i: VItem) =>
+  !i.ignored && (!!i.skip || (i.status !== 'error' && i.targets.length > 0 && !hasNew(i)))
+/** แท็บ "พร้อมนำเข้า (ยังไม่เคยบันทึก)" — นิยามเดียวกับหน้าดึง Audit ทุกประการ */
+export const isReadyToImport = (i: VItem) => !i.ignored && i.status === 'ok' && !isRecorded(i)
+
 export interface SyncState {
   last_push_at: string | null
   last_push_by: string | null

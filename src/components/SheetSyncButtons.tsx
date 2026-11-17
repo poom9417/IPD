@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { consumeOpenPull, OPEN_PULL_EVENT, refreshReadyToImport, useReadyToImport } from '../lib/readyToImport'
 import { fetchSyncState, fmtDateTime, type PushMode, type PushStatus, type SyncState } from '../lib/sheetSync'
 import SheetAuditPull from './SheetAuditPull'
 import FlyShareButton from './FlyShareButton'
@@ -16,6 +17,17 @@ interface Props {
 export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
   const [state, setState] = useState<SyncState | null>(null)
   const [showPull, setShowPull] = useState(false)
+  const { count: readyCount } = useReadyToImport()
+
+  // การ์ดแจ้งเตือนสั่งเปิดหน้าดึง Audit (ปุ่มนี้อาจเพิ่งถูกสร้างหลังเปลี่ยนหน้า จึงเช็กค่าที่ฝากไว้ตอนเปิดด้วย)
+  useEffect(() => {
+    if (consumeOpenPull()) setShowPull(true)
+    const open = () => {
+      if (consumeOpenPull()) setShowPull(true)
+    }
+    window.addEventListener(OPEN_PULL_EVENT, open)
+    return () => window.removeEventListener(OPEN_PULL_EVENT, open)
+  }, [])
 
   // โหลดเวลาซิงก์ล่าสุดตอนเปิดหน้า และทุกครั้งที่การส่งรอบหนึ่งจบ
   useEffect(() => {
@@ -69,6 +81,15 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
             >
               ⬇ ดึง Audit จาก Sheet
             </Button>
+            {readyCount !== null && readyCount > 0 && (
+              <span
+                aria-label={`พร้อมนำเข้า ${readyCount} เคส`}
+                title={`พร้อมนำเข้า ${readyCount.toLocaleString()} เคส`}
+                className="pointer-events-none absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border border-ink bg-brand px-1 font-mono text-xs font-bold text-ink ring-2 ring-surface"
+              >
+                {readyCount > 99 ? '99+' : readyCount}
+              </span>
+            )}
             {pullLine && (
               <span
                 role="tooltip"
@@ -84,7 +105,10 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
 
       {showPull && (
         <SheetAuditPull
-          onClose={() => setShowPull(false)}
+          onClose={() => {
+            setShowPull(false)
+            void refreshReadyToImport() // นำเข้า/ข้ามเคสแล้ว → นับใหม่ให้ป้ายและการ์ดตรงกับความจริง
+          }}
           onDone={() => {
             onPulled()
             fetchSyncState().then(setState)

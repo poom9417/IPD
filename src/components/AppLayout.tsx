@@ -7,6 +7,8 @@ import MyJobPage from '../pages/MyJobPage'
 import MyJobDashboardPage from '../pages/MyJobDashboardPage'
 import OnboardingTour from './OnboardingTour'
 import CodeCNotifier from './CodeCNotifier'
+import ReadyToImportNotifier from './ReadyToImportNotifier'
+import { requestOpenPull } from '../lib/readyToImport'
 import UnassignedPairsNotifier from './UnassignedPairsNotifier'
 import RawChangeNotice from './RawChangeNotice'
 import { useAuth } from '../contexts/AuthContext'
@@ -66,6 +68,13 @@ export default function AppLayout() {
         }}
       />
       <UnassignedPairsNotifier page={page} onNavigate={go} />
+      <ReadyToImportNotifier
+        onReview={() => {
+          go('mine')
+          setMineMode('main')
+          requestOpenPull()
+        }}
+      />
       <div className="min-w-0">
         {page === 'mine' && <MinePage mode={mineMode} comparePreset={compareNonce} />}
         {page === 'codec' && <CodeCPage />}
