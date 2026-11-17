@@ -343,9 +343,11 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
 
       // role user ห้ามบันทึกวัน Audit (เป็นงานของ audit) — ฐานข้อมูลบล็อกซ้ำอีกชั้น
       const canAuditFields = role === 'admin'
+      // ยอดเงินจาก HIS: admin เท่านั้นที่กรอก/แก้ได้ (user ไม่ส่งฟิลด์นี้ — นำเข้าจากไฟล์ HIS โดย admin/developer)
+      const canAmountField = role === 'admin'
       const hasCaseData =
         caseDraft.document_received_date ||
-        caseDraft.document_received_amount ||
+        (canAmountField && caseDraft.document_received_amount) ||
         (canAuditFields && caseDraft.audit_date) ||
         caseDraft.submission_date ||
         caseDraft.submission_amount ||
@@ -360,8 +362,12 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
             admission_id: admissionId,
             encounter_id: Number(draft.encounter_id),
             document_received_date: caseDraft.document_received_date || null,
-            document_received_amount:
-              caseDraft.document_received_amount === '' ? null : Number(caseDraft.document_received_amount),
+            ...(canAmountField
+              ? {
+                  document_received_amount:
+                    caseDraft.document_received_amount === '' ? null : Number(caseDraft.document_received_amount),
+                }
+              : {}),
             ...(canAuditFields ? { audit_date: caseDraft.audit_date || null } : {}),
             submission_date: caseDraft.submission_date || null,
             submission_amount: caseDraft.submission_amount === '' ? null : Number(caseDraft.submission_amount),
@@ -666,15 +672,17 @@ export default function AdmissionForm({ admission, coverageOptions, payerOptions
                   className="form-input"
                 />
               </Field>
-              <Field label="ยอด claim จาก HIS (บาท)">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={caseDraft.document_received_amount}
-                  onChange={(e) => setCase('document_received_amount', e.target.value)}
-                  className="form-input"
-                />
-              </Field>
+              {role === 'admin' && (
+                <Field label="ยอดเงินจาก HIS (บาท)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={caseDraft.document_received_amount}
+                    onChange={(e) => setCase('document_received_amount', e.target.value)}
+                    className="form-input"
+                  />
+                </Field>
+              )}
             </div>
 
             {role === 'admin' && (

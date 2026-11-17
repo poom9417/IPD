@@ -28,7 +28,7 @@ interface Props {
   onClose: () => void
   /** ส่งมาเฉพาะ role ที่แก้ไขได้ (admin) — จะมีปุ่ม "แก้ไข" ในหน้าต่างนี้ */
   onEdit?: (a: Admission) => void
-  /** ส่งมาเฉพาะ role ที่แก้วันที่/ยอดรับเอกสารได้ (admin + user) */
+  /** ส่งมาเฉพาะ role ที่แก้วันที่รับเอกสารได้ (admin + user) */
   onEditReceive?: (a: Admission) => void
   /** false = ซ่อนยอดเงิน (role audit) */
   showMoney?: boolean
@@ -65,7 +65,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
         <div className="flex shrink-0 items-center justify-between px-6 pb-3 pt-5">
           <div>
             <h2 className="text-base font-semibold text-ink">รายละเอียดเคส</h2>
-            <p className="mt-0.5 text-sm text-ink/60">{onEditReceive ? 'ดูข้อมูล — แก้ได้เฉพาะวันที่/ยอดรับเอกสาร' : 'ดูข้อมูลอย่างเดียว — แก้ไขไม่ได้'}</p>
+            <p className="mt-0.5 text-sm text-ink/60">{onEditReceive ? 'ดูข้อมูล — แก้ได้เฉพาะวันที่รับเอกสาร' : 'ดูข้อมูลอย่างเดียว — แก้ไขไม่ได้'}</p>
           </div>
           <Button variant="icon" type="button" onClick={onClose}>
             ✕
@@ -118,7 +118,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="วันที่รับเอกสาร">{fmtDate(ct?.document_received_date)}</Field>
-              {showMoney && <Field label="ยอด claim จาก HIS">{fmtMoney(ct?.document_received_amount)}</Field>}
+              {showMoney && <Field label="ยอดเงินจาก HIS">{fmtMoney(ct?.document_received_amount)}</Field>}
             </div>
 
             <div className="mt-3">
@@ -150,7 +150,7 @@ export default function CaseDetailModal({ admission: a, onClose, onEdit, onEditR
                 onClick={() => onEditReceive(a)}
                 className="rounded-lg border border-ink/40 px-4 py-2 text-sm font-medium text-ink hover:bg-brand"
               >
-                แก้ไขวันที่/ยอดรับเอกสาร
+                แก้ไขวันที่รับเอกสาร
               </button>
             )}
             {onEdit && (

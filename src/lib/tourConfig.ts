@@ -11,7 +11,7 @@ export const TOUR_VERSION = 1
  * เลขย่อยของเนื้อหาทัวร์ (v1.1, v1.2 …) — เพิ่มเมื่อเพิ่ม/แก้คำอธิบายปุ่มใหม่
  * ไม่ทำให้ผู้ใช้เห็นทัวร์ซ้ำเอง (ซ้ำเฉพาะเมื่อ TOUR_VERSION เปลี่ยน)
  */
-export const TOUR_MINOR = 4
+export const TOUR_MINOR = 5
 export const TOUR_LABEL = `v${TOUR_VERSION}.${TOUR_MINOR}`
 
 export interface TourStep {
@@ -45,7 +45,7 @@ export const ROLE_INTRO: Record<UiRole, { name: string; can: string[] }> = {
   user: {
     name: 'ผู้ใช้ทั่วไป',
     can: [
-      'รับเอกสาร (กรอกยอด) และแก้ยอด/วันที่รับเอกสาร',
+      'รับเอกสาร (กดครั้งเดียว บันทึกวันที่วันนี้ ไม่ต้องกรอกยอด) และแก้วันที่รับเอกสาร',
       'เพิ่มเคส และอัพโหลดสถานะเคลม (รับเอกสาร / ส่งเบิก)',
       'แจ้งเคสติด C ที่หน้า Code C',
       'เลือกสิทธิที่ดูแลและดูระยะเวลาส่งเบิกที่ My job',
@@ -96,7 +96,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'stat-cards', page: 'mine', target: 'stat-cards', roles: ALL,
     title: 'ตัวเลขสรุป',
-    body: 'จำนวนเคส จำนวนผู้ป่วย LOS เฉลี่ย และยอด claim จาก HIS รวม คำนวณจากเคสที่แสดงอยู่ตามตัวกรอง',
+    body: 'จำนวนเคส จำนวนผู้ป่วย LOS เฉลี่ย และยอดเงินจาก HIS รวม คำนวณจากเคสที่แสดงอยู่ตามตัวกรอง',
   },
   {
     id: 'filters', page: 'mine', target: 'filters', roles: ALL,
@@ -124,6 +124,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'นำเข้าไฟล์เคสผู้ป่วยในจากระบบ HIS ระบบจะเพิ่มผู้ป่วย สิทธิ และผู้จ่ายใหม่ให้อัตโนมัติ เคสที่ไม่มีสิทธิ/ผู้จ่ายจะเก็บเป็น UNK',
   },
   {
+    id: 'his-amounts', page: 'mine', target: 'his-amounts', roles: ['admin'],
+    title: 'นำเข้ายอดจาก HIS',
+    body: 'อัพโหลดไฟล์ยอดเงินจาก HIS (.xlsx) ระบบจับคู่ Encounter ID + HN + สิทธิ + ผู้จ่าย แล้วบันทึก claimAmt + discount ลงช่อง "ยอดเงินจาก HIS" แทน user ไม่เขียนทับเคสที่มียอดแล้ว และจะแจ้งเตือนเคสที่หาไม่เจอ/ไม่ตรง',
+  },
+  {
     id: 'bulk-edit', page: 'mine', target: 'bulk', roles: ['admin', 'user'],
     title: 'อัพโหลดสถานะเคลม (CSV)',
     body: 'อัปเดตสถานะหลายเคสพร้อมกันจากไฟล์ เช่น วันที่ส่งเบิกจากไฟล์ตั้งเบิกของ GGO ผู้ใช้ทั่วไปอัปโหลดได้เฉพาะขั้นรับเอกสารและส่งเบิก',
@@ -141,7 +146,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'claim-edit', page: 'mine', target: 'claim-status', roles: EDIT,
     title: 'สถานะเคลม: รับเอกสาร',
-    body: 'ป้ายสถานะมี 3 ขั้น: รับเอกสาร → Audit → ส่งเบิก กดป้าย "รับเอกสาร" แล้วกรอกยอดและยืนยัน ระบบบันทึกวันที่รับเอกสารเป็นวันนี้ ถ้ากรอกผิดกดป้ายเดิมอีกครั้งเพื่อแก้วันที่/ยอด',
+    body: 'ป้ายสถานะมี 3 ขั้น: รับเอกสาร → Audit → ส่งเบิก กดป้าย "รับเอกสาร" ครั้งเดียว ระบบบันทึกวันที่รับเอกสารเป็นวันนี้ทันที (ไม่ต้องกรอกยอด — ยอดเงินจาก HIS admin นำเข้าให้) ถ้าวันที่ผิดกดป้ายเดิมอีกครั้งเพื่อแก้วันที่',
   },
   {
     id: 'claim-view', page: 'mine', target: 'claim-status', roles: ['audit', 'viewer'],

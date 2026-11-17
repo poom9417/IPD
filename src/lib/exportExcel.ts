@@ -15,7 +15,7 @@ const asText = (x: CellValue) => (x === null || x === undefined || x === '' ? nu
 
 export const HEADERS = [
   'HN', 'AN', 'encounter_id', 'ชื่อผู้ป่วย', 'วันเกิด', 'วันที่แอดมิท', 'เวลาแอดมิท', 'วันที่จำหน่าย', 'เวลาจำหน่าย',
-  'หอผู้ป่วย', 'LOS', 'สิทธิการรักษา', 'ผู้จ่าย', 'วันที่รับเอกสาร', 'ยอดรับเอกสาร', 'วันที่Audit', 'วันที่ส่งเบิก',
+  'หอผู้ป่วย', 'LOS', 'สิทธิการรักษา', 'ผู้จ่าย', 'วันที่รับเอกสาร', 'ยอดเงินจาก HIS', 'วันที่Audit', 'วันที่ส่งเบิก',
   'ยอดส่งเบิก', 'claim_no', 'admission_id', 'coverage_code', 'payer_id', 'hospital_status_code', 'สถานะเคลม',
 ]
 
@@ -48,7 +48,7 @@ export function admissionRecord(a: Admission): Record<string, string | number | 
     สิทธิการรักษา: v(a.coverage_master?.coverage_name),
     ผู้จ่าย: v(a.payer_master?.payer_name),
     วันที่รับเอกสาร: v(ct?.document_received_date),
-    ยอดรับเอกสาร: v(ct?.document_received_amount),
+    'ยอดเงินจาก HIS': v(ct?.document_received_amount),
     วันที่Audit: v(ct?.audit_date),
     วันที่ส่งเบิก: v(ct?.submission_date),
     ยอดส่งเบิก: v(ct?.submission_amount),

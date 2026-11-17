@@ -5,15 +5,17 @@ import Button from './ui/Button'
 interface Props {
   admission: Admission
   onClose: () => void
-  /** บันทึกวันที่รับเอกสาร + ยอด — คืน true เมื่อสำเร็จ (หน้าต่างจะปิดเอง) */
-  onSave: (a: Admission, date: string, amount: number) => Promise<boolean>
+  /** admin/developer แก้ "ยอดเงินจาก HIS" ได้ — user แก้ได้เฉพาะวันที่ (DB บล็อกซ้ำอีกชั้น) */
+  canEditAmount?: boolean
+  /** บันทึกวันที่รับเอกสาร (+ ยอด ถ้า canEditAmount และมีการแก้) — คืน true เมื่อสำเร็จ (หน้าต่างจะปิดเอง) */
+  onSave: (a: Admission, date: string, amount?: number | null) => Promise<boolean>
 }
 
 /**
- * หน้าต่างแก้ไข "วันที่รับเอกสาร" และ "ยอด claim จาก HIS" ของเคสที่รับเอกสารไปแล้ว
- * ใช้ได้กับ role admin และ user — แก้เฉพาะ 2 ช่องนี้ ไม่แตะฟิลด์อื่น
+ * หน้าต่างแก้ไข "วันที่รับเอกสาร" ของเคสที่รับเอกสารไปแล้ว (admin และ user)
+ * ช่อง "ยอดเงินจาก HIS" แก้ได้เฉพาะ admin/developer — user ไม่เห็นช่องนี้ให้แก้
  */
-export default function ReceiveEditModal({ admission: a, onClose, onSave }: Props) {
+export default function ReceiveEditModal({ admission: a, onClose, onSave, canEditAmount = false }: Props) {
   const ct = a.case_tracking
   const [date, setDate] = useState(ct?.document_received_date?.slice(0, 10) ?? '')
   const [amount, setAmount] = useState(ct?.document_received_amount != null ? String(ct.document_received_amount) : '')
@@ -28,22 +30,25 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, saving])
 
+  // ช่องยอดเว้นว่างได้ (= ไม่มียอด/ล้างยอด) แต่ถ้ากรอกต้องเป็นเลขไม่ติดลบ
+  const amountEmpty = amount.trim() === ''
   const amountNum = Number(amount)
-  const amountValid = amount.trim() !== '' && Number.isFinite(amountNum) && amountNum >= 0
+  const amountValid = amountEmpty || (Number.isFinite(amountNum) && amountNum >= 0)
   const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(date)
-  const changed =
-    date !== (ct?.document_received_date?.slice(0, 10) ?? '') ||
-    (amountValid && amountNum !== (ct?.document_received_amount ?? null))
+  const oldAmount = ct?.document_received_amount ?? null
+  const newAmount = amountEmpty ? null : amountNum
+  const amountChanged = canEditAmount && amountValid && newAmount !== oldAmount
+  const changed = date !== (ct?.document_received_date?.slice(0, 10) ?? '') || amountChanged
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (saving) return
     if (!dateValid) return setError('กรุณาเลือกวันที่รับเอกสาร')
-    if (!amountValid) return setError('กรุณากรอกยอดเป็นตัวเลข (ไม่ติดลบ)')
+    if (canEditAmount && !amountValid) return setError('กรุณากรอกยอดเป็นตัวเลข (ไม่ติดลบ)')
     setError(null)
     setSaving(true)
     try {
-      const ok = await onSave(a, date, amountNum)
+      const ok = await onSave(a, date, amountChanged ? newAmount : undefined)
       if (ok) onClose()
     } finally {
       setSaving(false)
@@ -86,20 +91,25 @@ export default function ReceiveEditModal({ admission: a, onClose, onSave }: Prop
               className="form-input"
             />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink/80">ยอด claim จาก HIS (บาท)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="form-input"
-            />
-          </label>
+          {canEditAmount && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-ink/80">ยอดเงินจาก HIS (บาท)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="form-input"
+              />
+            </label>
+          )}
           <p className="pb-1 text-sm text-ink/60">
-            แก้ได้เฉพาะวันที่และยอดรับเอกสาร — ระบบจะบันทึกว่าใครแก้ไขล่าสุดและเมื่อไร
+            {canEditAmount
+              ? 'แก้ได้เฉพาะวันที่รับเอกสารและยอดเงินจาก HIS'
+              : 'แก้ได้เฉพาะวันที่รับเอกสาร (ยอดเงินจาก HIS นำเข้าโดย admin)'}{' '}
+            — ระบบจะบันทึกว่าใครแก้ไขล่าสุดและเมื่อไร
           </p>
         </div>
 

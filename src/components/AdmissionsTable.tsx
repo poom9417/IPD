@@ -54,83 +54,24 @@ function ClaimStatus({
   admission: Admission
   showMoney?: boolean
   canReceive: boolean
-  onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
+  onReceiveDoc: (a: Admission) => Promise<boolean>
   onEditReceive?: (a: Admission) => void
   canAudit: boolean
   onAuditToday: (a: Admission) => Promise<void>
 }) {
-  const [entering, setEntering] = useState(false)
   const [receiving, setReceiving] = useState(false)
-  const [amount, setAmount] = useState('')
   const [auditing, setAuditing] = useState(false)
   const ct = admission.case_tracking
 
-  const amountNum = Number(amount)
-  const amountValid = amount.trim() !== '' && Number.isFinite(amountNum) && amountNum >= 0
-
+  // กด "รับเอกสาร" = บันทึกวันที่วันนี้ทันที (ไม่ต้องกรอกยอด — ยอดมาจากไฟล์ HIS ที่ admin/developer นำเข้า)
   async function confirmReceive() {
-    if (!amountValid || receiving) return
+    if (receiving) return
     setReceiving(true)
     try {
-      const ok = await onReceiveDoc(admission, amountNum)
-      if (ok) {
-        setEntering(false)
-        setAmount('')
-      }
+      await onReceiveDoc(admission)
     } finally {
       setReceiving(false)
     }
-  }
-
-  function cancelReceive() {
-    setEntering(false)
-    setAmount('')
-  }
-
-  // กำลังกรอกยอดรับเอกสาร: แสดงเฉพาะช่องกรอก (ซ่อนป้ายอื่นชั่วคราวให้พอดีคอลัมน์)
-  if (entering && !ct?.document_received_date && canReceive) {
-    return (
-      <div className="flex flex-nowrap items-center gap-1">
-        <input
-          autoFocus
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          min="0"
-          placeholder="ยอด claim จาก HIS (บาท)"
-          value={amount}
-          disabled={receiving}
-          onChange={(e) => setAmount(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              void confirmReceive()
-            } else if (e.key === 'Escape') {
-              cancelReceive()
-            }
-          }}
-          className="w-32 rounded-md border border-ink/40 bg-surface px-2 py-0.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
-        />
-        <button
-          type="button"
-          title="ยืนยัน: รับเอกสารวันนี้"
-          disabled={!amountValid || receiving}
-          onClick={() => void confirmReceive()}
-          className="rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink hover:bg-brand-dark disabled:opacity-40"
-        >
-          {receiving ? '…' : '✓'}
-        </button>
-        <button
-          type="button"
-          title="ยกเลิก"
-          disabled={receiving}
-          onClick={cancelReceive}
-          className="rounded-full border border-ink/40 px-2 py-0.5 text-xs text-ink hover:bg-brand-soft disabled:opacity-40"
-        >
-          ✕
-        </button>
-      </div>
-    )
   }
 
   const steps: { key: string; label: string; done: boolean; title: string }[] = [
@@ -179,17 +120,18 @@ function ClaimStatus({
           <button
             key={s.key}
             type="button"
-            title="คลิกเพื่อกรอกยอดและบันทึกว่ารับเอกสารวันนี้"
-            onClick={() => setEntering(true)}
-            className="rounded-full border border-ink bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand"
+            title="คลิกเพื่อบันทึกว่ารับเอกสารวันนี้"
+            disabled={receiving}
+            onClick={() => void confirmReceive()}
+            className="rounded-full border border-ink bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
           >
-            รับเอกสาร
+            {receiving ? 'กำลังบันทึก…' : 'รับเอกสาร'}
           </button>
         ) : s.key === 'doc' && s.done && canReceive && onEditReceive ? (
           <button
             key={s.key}
             type="button"
-            title={`${s.title} — คลิกเพื่อแก้ไขวันที่/ยอด`}
+            title={`${s.title} — คลิกเพื่อแก้ไขวันที่รับเอกสาร`}
             onClick={() => onEditReceive(admission)}
             className="whitespace-nowrap rounded-full bg-brand px-2.5 py-0.5 text-xs font-semibold text-ink transition-colors hover:bg-brand-dark"
           >
@@ -221,9 +163,9 @@ interface Props {
   onEdit: (a: Admission) => void
   /** คลิกที่แถว = เปิดหน้าต่างดูรายละเอียด (ทุก role) */
   onView?: (a: Admission) => void
-  /** กรอกยอดรับเอกสารแล้วบันทึก — คืน true เมื่อสำเร็จ */
-  onReceiveDoc: (a: Admission, amount: number) => Promise<boolean>
-  /** แก้ไขวันที่/ยอดรับเอกสารที่บันทึกไปแล้ว (admin + user) */
+  /** กดรับเอกสาร = บันทึกวันที่วันนี้ (ไม่ต้องกรอกยอด) — คืน true เมื่อสำเร็จ */
+  onReceiveDoc: (a: Admission) => Promise<boolean>
+  /** แก้ไขวันที่รับเอกสารที่บันทึกไปแล้ว (admin + user) */
   onEditReceive?: (a: Admission) => void
   /** role audit (หรือ admin) กดบันทึกวัน Audit = วันนี้ได้ */
   canAudit?: boolean
@@ -233,7 +175,7 @@ interface Props {
 }
 
 // ความกว้างคอลัมน์แบบล็อก (px) — ตารางจะไม่ขยับตามความยาวข้อมูล
-// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, วัน Audit, ค้างเบิก(วัน), สิทธิ, ยอด claim จาก HIS, สถานะเคลม, (แก้ไข)
+// ลำดับ: encounter_id, HN, ชื่อผู้ป่วย, วันรับ, วันจำหน่าย, วัน Audit, ค้างเบิก(วัน), สิทธิ, ยอดเงินจาก HIS, สถานะเคลม, (แก้ไข)
 const COL_WIDTHS = [114, 82, 150, 94, 94, 94, 104, 180, 140, 232]
 const EDIT_COL_WIDTH = 76
 
@@ -290,7 +232,7 @@ export default function AdmissionsTable({
               ค้างเบิก (วัน)
             </th>
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สิทธิการรักษา</th>
-            {showMoney && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอด claim จาก HIS</th>}
+            {showMoney && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">ยอดเงินจาก HIS</th>}
             <th className="whitespace-nowrap px-3 py-3 font-semibold">สถานะเคลม</th>
             {isAdmin && <th className="whitespace-nowrap px-3 py-3 font-semibold text-right">แก้ไข</th>}
           </tr>

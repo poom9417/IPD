@@ -29,10 +29,8 @@ const STAGE_CONFIG: Record<
   document: {
     label: 'รับเอกสาร',
     dateCol: 'document_received_date',
-    amountCol: 'document_received_amount',
-    amountRequired: true,
     example:
-      'encounter_id,document_received_date,document_received_amount\n3043836,2026-09-24,12500.50\n\n(ต้องมียอดรับเอกสารทุกแถว — ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
+      'encounter_id,document_received_date\n3043836,2026-09-24\n\n(ไม่ต้องมียอด — ยอดเงินจาก HIS นำเข้าโดย admin/developer จากไฟล์ HIS — ถ้า encounter แยกหลายสิทธิ เพิ่มคอลัมน์ payer_id เพื่อระบุแถว — ถ้าไม่ใส่จะลงทุกสิทธิของ encounter นั้น)',
   },
   audit: {
     label: 'Audit',

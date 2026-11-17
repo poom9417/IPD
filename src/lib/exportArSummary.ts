@@ -127,7 +127,7 @@ export async function exportArSummaryToExcel(asOf: string, opts: { role?: string
   ws1.addRow([])
   const note = (t: string) => ws1.addRow([t])
   note(
-    'จำนวนเงิน = ยอดที่รับเอกสาร (ยอด claim จาก HIS) · ' +
+    'จำนวนเงิน = ยอดเงินจาก HIS · ' +
       (summary.noAmountCount > 0
         ? `มี ${summary.noAmountCount.toLocaleString('th-TH')} รายที่ยังไม่มียอด (ยังไม่รับเอกสาร) จึงนับเป็น 0 บาท`
         : 'ทุกรายที่ค้างมียอดครบ'),

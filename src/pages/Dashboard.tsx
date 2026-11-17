@@ -9,6 +9,7 @@ import AdmissionForm from '../components/AdmissionForm'
 import CaseDetailModal from '../components/CaseDetailModal'
 import ReceiveEditModal from '../components/ReceiveEditModal'
 import BulkClaimUpload from '../components/BulkClaimUpload'
+import ImportHisAmounts from '../components/ImportHisAmounts'
 import ImportAdmissionsCsv from '../components/ImportAdmissionsCsv'
 import { saveCaseTracking, fetchCaseTracking } from '../lib/caseTracking'
 import PendingAssignmentsBanner from '../components/PendingAssignmentsBanner'
@@ -65,6 +66,7 @@ export default function Dashboard() {
   const [editingReceive, setEditingReceive] = useState<Admission | null>(null)
   const [showBulk, setShowBulk] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showHisAmounts, setShowHisAmounts] = useState(false)
   const [myPairs, setMyPairs] = useState<Set<string>>(new Set())
   // เพิ่มค่านี้เมื่อยืนยันรับสิทธิจากแบนเนอร์ → โหลด "สิทธิของฉัน" ใหม่
   const [pairsTick, setPairsTick] = useState(0)
@@ -126,9 +128,9 @@ export default function Dashboard() {
   }, [sessionUid, pairsTick])
 
 
-  // กดปุ่ม "รับเอกสาร" + กรอกยอด → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) และยอดรับเอกสารลง case_tracking
-  // คืน true เมื่อสำเร็จ (ช่องกรอกยอดในตารางจะปิดเองเฉพาะตอนสำเร็จ)
-  async function receiveDocument(a: Admission, amount: number): Promise<boolean> {
+  // กดปุ่ม "รับเอกสาร" → บันทึกวันที่วันนี้ (เวลาท้องถิ่น) ลง case_tracking เท่านั้น
+  // ยอดเงินจาก HIS ไม่ต้องกรอก — admin/developer นำเข้าจากไฟล์ HIS ให้ (ปุ่ม "นำเข้ายอดจาก HIS")
+  async function receiveDocument(a: Admission): Promise<boolean> {
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     let data: Admission['case_tracking']
@@ -138,7 +140,6 @@ export default function Dashboard() {
           admission_id: a.admission_id,
           encounter_id: a.encounter_id,
           document_received_date: today,
-          document_received_amount: amount,
         },
       ])
       data = await fetchCaseTracking(a.admission_id)
@@ -155,9 +156,9 @@ export default function Dashboard() {
     return true
   }
 
-  // แก้ไข "วันที่รับเอกสาร" + "ยอด claim จาก HIS" ของเคสที่รับเอกสารแล้ว (admin + user)
-  // ส่งเฉพาะ 2 ฟิลด์นี้ — ไม่แตะ audit / ส่งเบิก; ฐานข้อมูลบันทึก updated_by/updated_at ให้อัตโนมัติ
-  async function updateReceived(a: Admission, date: string, amount: number): Promise<boolean> {
+  // แก้ไข "วันที่รับเอกสาร" ของเคสที่รับเอกสารแล้ว (admin + user) — admin ยังแก้ "ยอดเงินจาก HIS" ได้ (amount เป็น undefined = ไม่แตะยอด)
+  // ไม่แตะ audit / ส่งเบิก; ฐานข้อมูลบันทึก updated_by/updated_at ให้อัตโนมัติ และบล็อก user ไม่ให้แก้ยอดซ้ำอีกชั้น
+  async function updateReceived(a: Admission, date: string, amount?: number | null): Promise<boolean> {
     let data: Admission['case_tracking']
     try {
       await saveCaseTracking([
@@ -165,7 +166,7 @@ export default function Dashboard() {
           admission_id: a.admission_id,
           encounter_id: a.encounter_id,
           document_received_date: date,
-          document_received_amount: amount,
+          ...(amount !== undefined ? { document_received_amount: amount } : {}),
         },
       ])
       data = await fetchCaseTracking(a.admission_id)
@@ -387,6 +388,16 @@ export default function Dashboard() {
               </Button>
             )}
             {isAdmin && (
+              <Button
+                variant="outline"
+                data-tour="his-amounts"
+                onClick={() => setShowHisAmounts(true)}
+                className="whitespace-nowrap"
+              >
+                นำเข้ายอดจาก HIS
+              </Button>
+            )}
+            {isAdmin && (
               <SheetSyncButtons status={sheetPush.status} onPush={(m) => void sheetPush.push(m)} onPulled={loadData} />
             )}
             {canBulk && (
@@ -477,6 +488,14 @@ export default function Dashboard() {
         />
       )}
 
+      {showHisAmounts && isAdmin && (
+        <ImportHisAmounts
+          onClose={() => setShowHisAmounts(false)}
+          // ไม่ปิด modal เพื่อให้เห็นสรุปผล/รายการที่ต้องตรวจเอง
+          onDone={reload}
+        />
+      )}
+
       {showBulk && (
         <BulkClaimUpload
           admissions={bulkLookup}
@@ -512,6 +531,7 @@ export default function Dashboard() {
       {editingReceive && (
         <ReceiveEditModal
           admission={editingReceive}
+          canEditAmount={isAdmin}
           onClose={() => setEditingReceive(null)}
           onSave={updateReceived}
         />

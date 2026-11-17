@@ -247,7 +247,7 @@ export default function ArSummaryDashboard() {
 
           <ul className="space-y-1 text-sm text-ink/70">
             <li>
-              • จำนวนเงิน = ยอดที่รับเอกสาร (ยอด claim จาก HIS) ·{' '}
+              • จำนวนเงิน = ยอดเงินจาก HIS ·{' '}
               {summary.noAmountCount > 0
                 ? `มี ${count(summary.noAmountCount)} รายที่ยังไม่มียอด (ยังไม่รับเอกสาร) จึงนับเป็น 0 บาท`
                 : 'ทุกรายที่ค้างมียอดครบ'}

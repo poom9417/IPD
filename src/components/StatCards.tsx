@@ -9,7 +9,7 @@ export default function StatCards({ stats }: { stats: AdmissionStats | null }) {
     { label: 'จำนวนผู้ป่วย', value: stats ? stats.patients.toLocaleString() : dash },
     { label: 'LOS เฉลี่ย (วัน)', value: stats ? stats.avg_los.toLocaleString() : dash },
     {
-      label: 'ยอด claim จาก HIS รวม (บาท)',
+      label: 'ยอดเงินจาก HIS รวม (บาท)',
       value: stats
         ? stats.received_total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : dash,
