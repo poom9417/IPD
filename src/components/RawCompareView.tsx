@@ -512,7 +512,7 @@ export default function RawCompareView({ presetNonce = 0 }: { presetNonce?: numb
       )}
       {sheetPush.status.phase === 'error' && (
         <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          {sheetPush.status.message} — เคสถูกเพิ่มในระบบแล้ว กดปุ่ม “ส่งไป Google Sheet” ที่หน้าหลักเพื่อส่งซ้ำได้
+          {sheetPush.status.message} — เคสถูกเพิ่มในระบบแล้ว ระบบจะส่งใหม่อัตโนมัติเมื่อมีการนำเข้า/แก้เคสครั้งถัดไป (หรือแจ้ง developer)
         </p>
       )}
 

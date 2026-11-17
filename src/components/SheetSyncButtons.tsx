@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { consumeOpenPull, OPEN_PULL_EVENT, refreshReadyToImport, useReadyToImport } from '../lib/readyToImport'
 import { fetchSyncState, fmtDateTime, type PushMode, type PushStatus, type SyncState } from '../lib/sheetSync'
 import SheetAuditPull from './SheetAuditPull'
@@ -13,8 +14,10 @@ interface Props {
   onPulled: () => void
 }
 
-/** ปุ่ม "ส่งไป Google Sheet" และ "ดึง Audit จาก Sheet" (เฉพาะ admin / developer) */
+/** ปุ่ม "ดึง Audit จาก Sheet" (admin / developer) และ "ส่งไป Google Sheet" (เฉพาะ developer ที่ไม่ได้จำลอง role อื่น) */
 export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
+  const { isDeveloper, viewAs } = useAuth()
+  const canPush = isDeveloper && viewAs === null
   const [state, setState] = useState<SyncState | null>(null)
   const [showPull, setShowPull] = useState(false)
   const { count: readyCount } = useReadyToImport()
@@ -56,20 +59,24 @@ export default function SheetSyncButtons({ status, onPush, onPulled }: Props) {
     <>
       <div className="flex flex-col items-start gap-0.5">
         <div className="flex gap-2">
-          {/* ปุ่มส่ง: ลิงก์ "ซ่อม" อยู่เหนือปุ่ม (ไม่ดันความสูงแถว) — ตอนชี้เมาส์ที่ปุ่ม popup "ส่งล่าสุด" จะทับลิงก์นี้ */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('สร้างชีตใหม่ทั้งหมด?\n\nระบบจะล้างข้อมูลในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 แล้วเขียนใหม่ทั้งหมดจากระบบ (สีแดงที่ทำไว้จะหาย) ใช้เมื่อชีตผิดเพี้ยนเท่านั้น')) onPush('rebuild')
-              }}
-              disabled={running}
-              className="absolute bottom-full left-0 mb-0.5 whitespace-nowrap text-xs leading-4 text-ink/40 underline hover:text-ink disabled:opacity-40"
-            >
-              ซ่อม: สร้างชีตใหม่ทั้งหมด
-            </button>
-            <FlyShareButton dataTour="sheet-push" status={status} onPush={() => onPush()} tooltip={tooltip} />
-          </div>
+          {canPush && (
+            <>
+            {/* ปุ่มส่ง: ลิงก์ "ซ่อม" อยู่เหนือปุ่ม (ไม่ดันความสูงแถว) — ตอนชี้เมาส์ที่ปุ่ม popup "ส่งล่าสุด" จะทับลิงก์นี้ */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('สร้างชีตใหม่ทั้งหมด?\n\nระบบจะล้างข้อมูลในแท็บ ทะเบียนคุมเอกสารสิทธิ 70 แล้วเขียนใหม่ทั้งหมดจากระบบ (สีแดงที่ทำไว้จะหาย) ใช้เมื่อชีตผิดเพี้ยนเท่านั้น')) onPush('rebuild')
+                }}
+                disabled={running}
+                className="absolute bottom-full left-0 mb-0.5 whitespace-nowrap text-xs leading-4 text-ink/40 underline hover:text-ink disabled:opacity-40"
+              >
+                ซ่อม: สร้างชีตใหม่ทั้งหมด
+              </button>
+              <FlyShareButton dataTour="sheet-push" status={status} onPush={() => onPush()} tooltip={tooltip} />
+            </div>
+            </>
+          )}
 
           {/* ปุ่มดึง: "ดึงล่าสุด ..." เป็น popup เหนือปุ่มตอนชี้เมาส์ */}
           <span className="group relative inline-flex">

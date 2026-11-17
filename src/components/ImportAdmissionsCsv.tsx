@@ -161,7 +161,7 @@ export default function ImportAdmissionsCsv({ onClose, onDone, sheetStatus }: Pr
             {sheetStatus && sheetStatus.phase !== 'idle' && (
               <p className={`mt-1.5 text-sm ${sheetStatus.phase === 'error' ? 'text-rose' : 'text-ink/70'}`}>
                 {sheetStatus.message}
-                {sheetStatus.phase === 'error' && ' — กดปุ่ม “ส่งไป Google Sheet” ที่หน้าหลักเพื่อส่งซ้ำได้ ข้อมูลที่นำเข้าบันทึกในระบบเรียบร้อยแล้ว'}
+                {sheetStatus.phase === 'error' && ' — ข้อมูลที่นำเข้าบันทึกในระบบเรียบร้อยแล้ว ระบบจะส่งใหม่อัตโนมัติเมื่อมีการนำเข้า/แก้เคสครั้งถัดไป (หรือแจ้ง developer)'}
               </p>
             )}
           </div>

@@ -54,7 +54,8 @@ Push ขึ้น `main` ที่ GitHub แล้ว Vercel จะ build ใ�
 | Export Excel | ✅ | ✅ | ✅ | ✅ (7 คอลัมน์) | – |
 | + เพิ่มเคส | ✅ | ✅ | ✅ | – | – |
 | แก้ไข / ลบเคส | ✅ | ✅ | – | – | – |
-| ปุ่ม "รับเอกสาร" แก้ยอด/วันที่รับเอกสาร | ✅ | ✅ | ✅ | – | – |
+| ปุ่ม "รับเอกสาร" (บันทึกวันที่ ไม่ต้องกรอกยอด) / แก้วันที่รับเอกสาร | ✅ | ✅ | ✅ | – | – |
+| นำเข้ายอดเงินจาก HIS (ไฟล์ .xlsx) / แก้ยอดเงินจาก HIS | ✅ | ✅ | – | – | – |
 | อัพโหลดสถานะเคลม (bulk) | ทุกขั้น | ทุกขั้น | รับเอกสาร / ส่งเบิก | – | – |
 | บันทึกวัน Audit (ปุ่ม / bulk / ดึงจาก Sheet) | ✅ | ✅ | – | – | – |
 | นำเข้าเคสใหม่ (CSV) | ✅ | ✅ | – | – | – |
@@ -127,7 +128,7 @@ Push ขึ้น `main` ที่ GitHub แล้ว Vercel จะ build ใ�
 
 | ขั้นตอน | ไฟล์ | หมายเหตุ |
 |---|---|---|
-| รับเอกสาร | CSV: `encounter_id, document_received_date, document_received_amount` | ต้องมียอดทุกแถว |
+| รับเอกสาร | CSV: `encounter_id, document_received_date` | ไม่ต้องมียอด (ยอดนำเข้าด้วยปุ่ม "นำเข้ายอดจาก HIS") |
 | Audit | CSV: `encounter_id, audit_date` | ใช้แค่ `encounter_id` |
 | ส่งเบิก | ไฟล์ `.xls` ของระบบเบิก GGO ใช้ได้เลยไม่ต้องแก้ | แมพ `enc_id→encounter_id`, `payer→payer_id`, `claim_no`, `dateclaim→submission_date` (แปลง พ.ศ. → ค.ศ.), `claim_amount→submission_amount`; แถวที่ `claimcancel` มี "X" ไม่นับ |
 
