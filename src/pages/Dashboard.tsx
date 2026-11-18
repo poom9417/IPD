@@ -499,7 +499,7 @@ export default function Dashboard() {
       {showBulk && (
         <BulkClaimUpload
           admissions={bulkLookup}
-          allowedStages={role === 'user' ? ['document', 'submission'] : undefined}
+          allowedStages={role === 'user' ? ['submission'] : undefined}
           onClose={() => setShowBulk(false)}
           onDone={() => {
             setShowBulk(false)

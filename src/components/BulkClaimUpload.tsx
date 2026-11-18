@@ -357,23 +357,28 @@ export default function BulkClaimUpload({ admissions, onClose, onDone, allowedSt
         </div>
 
         <label className="mb-1 block text-sm font-medium text-ink/80">ขั้นตอนที่จะอัพเดต</label>
-        <select
-          value={stage}
-          onChange={(e) => {
-            setStage(e.target.value as BulkStage)
-            setRows([])
-            setFileName('')
-            setResult(null)
-            setDupMode('skip')
-          }}
-          className="form-input mb-3"
-        >
-          {stageList.map((s) => (
-            <option key={s} value={s}>
-              {STAGE_CONFIG[s].label}
-            </option>
-          ))}
-        </select>
+        {stageList.length === 1 ? (
+          // มีขั้นตอนเดียว (เช่น role user = ส่งเบิก) → ไม่ต้องให้เลือก แสดงเป็นป้ายคงที่
+          <div className="form-input mb-3 font-semibold">{STAGE_CONFIG[stageList[0]].label}</div>
+        ) : (
+          <select
+            value={stage}
+            onChange={(e) => {
+              setStage(e.target.value as BulkStage)
+              setRows([])
+              setFileName('')
+              setResult(null)
+              setDupMode('skip')
+            }}
+            className="form-input mb-3"
+          >
+            {stageList.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_CONFIG[s].label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <p className="mb-2 whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 font-mono text-sm text-ink/70">{cfg.example}</p>
         {cfg.needsPayerCheck && (
