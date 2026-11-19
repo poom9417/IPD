@@ -6,7 +6,8 @@
  *   H   หัวเอกสาร   : วันที่จำหน่าย, วันที่ตอบกลับ, เลข Ref (claim_no)
  *   L09 ยอดที่จ่าย  : บัญชี ACCOUNT_09
  *   L40 ส่วนต่าง    : บัญชี ACCOUNT_40 = HIS − ยอดที่จ่าย (เมื่อ HIS มากกว่า)
- *   L11 ลูกหนี้     : C+HN = ยอด HIS (ยอดรับเอกสาร)
+ *   L11 ลูกหนี้     : C+HN = ยอด HIS (ยอดรับเอกสาร) — HN เติมศูนย์ให้ครบ 8 หลัก
+ *   L09 คอลัมน์ D   : 'C' (เดิม 'E')
  *
  * กติกายอด (ยืนยันกับผู้ใช้ 2026-11-11):
  *   จ่าย < HIS  → 09 = จ่าย,  40 = HIS − จ่าย,  11 = HIS
@@ -39,7 +40,7 @@ export const SAP_PAYERS: Record<string, SapPayerConfig> = {
     payerId: '50257',
     account09: '0030001515',
     account40: '0043002200',
-    col09Flag: 'E',
+    col09Flag: 'C',
     companyCode: '1000',
     profitCenter: '2001',
     col40Ref: '30RC00000',
@@ -77,6 +78,16 @@ export interface SapAmounts {
 }
 
 const COLS = 47
+
+/**
+ * HN ให้ครบ 8 หลัก: ตัวอักษรนำหน้า + ตัวเลขเติมศูนย์ด้านหน้าให้รวมเป็น 8 ตัว (C289507 → C0289507)
+ * ใช้กับทั้งคอลัมน์ HN (บรรทัด 11) และ HN เต็ม ("HN" + HN) — HN ที่ยาว 8 ตัวอยู่แล้วไม่เปลี่ยน
+ */
+export function padHn(hn: string, len = 8): string {
+  const m = hn.trim().match(/^([A-Za-z]*)(\d+)$/)
+  if (!m) return hn.trim()
+  return m[1] + m[2].padStart(Math.max(len - m[1].length, m[2].length), '0')
+}
 const toSatang = (n: number) => Math.round(n * 100)
 const fromSatang = (s: number) => s / 100
 
@@ -107,7 +118,8 @@ function row(cells: Record<number, string>): string[] {
 
 export function buildCaseRows(c: SapCase, cfg: SapPayerConfig): string[][] {
   const amt = computeAmounts(c.hisAmount, c.paid)
-  const hnFull = `HN${c.hn}`
+  const hn = padHn(c.hn)
+  const hnFull = `HN${hn}`
   const enc = String(c.encounterId)
   const reply = ddmmyyyy(c.replyDate)
   const rows: string[][] = []
@@ -166,7 +178,7 @@ export function buildCaseRows(c: SapCase, cfg: SapPayerConfig): string[][] {
     row({
       0: 'L',
       1: '11',
-      2: c.hn,
+      2: hn,
       4: fmtAmount(amt.a11),
       6: cfg.companyCode,
       7: cfg.profitCenter,
@@ -176,7 +188,7 @@ export function buildCaseRows(c: SapCase, cfg: SapPayerConfig): string[][] {
       32: cfg.tagA,
       33: cfg.tagB,
       34: enc,
-      44: c.hn,
+      44: hn,
       46: fmtAmount(amt.a11),
     }),
   )
