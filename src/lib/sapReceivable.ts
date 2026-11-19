@@ -6,7 +6,7 @@
  *   H   หัวเอกสาร   : วันที่จำหน่าย, วันที่ตอบกลับ, เลข Ref (claim_no)
  *   L09 ยอดที่จ่าย  : บัญชี ACCOUNT_09
  *   L40 ส่วนต่าง    : บัญชี ACCOUNT_40 = HIS − ยอดที่จ่าย (เมื่อ HIS มากกว่า)
- *   L11 ลูกหนี้     : C+HN = ยอด HIS (ยอดรับเอกสาร) — HN เติมศูนย์ให้ครบ 8 หลัก
+ *   L11 ลูกหนี้     : C+HN = ยอด HIS (ยอดรับเอกสาร) — HN = ตัวอักษร + ตัวเลข 8 หลัก (เติมศูนย์หน้า)
  *   L09 คอลัมน์ D   : 'C' (เดิม 'E')
  *
  * กติกายอด (ยืนยันกับผู้ใช้ 2026-11-11):
@@ -80,13 +80,13 @@ export interface SapAmounts {
 const COLS = 47
 
 /**
- * HN ให้ครบ 8 หลัก: ตัวอักษรนำหน้า + ตัวเลขเติมศูนย์ด้านหน้าให้รวมเป็น 8 ตัว (C289507 → C0289507)
- * ใช้กับทั้งคอลัมน์ HN (บรรทัด 11) และ HN เต็ม ("HN" + HN) — HN ที่ยาว 8 ตัวอยู่แล้วไม่เปลี่ยน
+ * HN ให้ครบ "ตัวเลข 8 หลัก" ต่อจากตัวอักษรนำหน้า: เติมศูนย์หน้าตัวเลขให้ได้ 8 หลัก (C289507 → C00289507)
+ * ใช้กับทั้งคอลัมน์ HN (บรรทัด 11) และ HN เต็ม ("HN" + HN) — ตัวเลขที่ยาว 8 หลักขึ้นไปอยู่แล้วไม่เปลี่ยน
  */
-export function padHn(hn: string, len = 8): string {
+export function padHn(hn: string, digits = 8): string {
   const m = hn.trim().match(/^([A-Za-z]*)(\d+)$/)
   if (!m) return hn.trim()
-  return m[1] + m[2].padStart(Math.max(len - m[1].length, m[2].length), '0')
+  return m[1] + m[2].padStart(digits, '0')
 }
 const toSatang = (n: number) => Math.round(n * 100)
 const fromSatang = (s: number) => s / 100
