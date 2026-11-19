@@ -1,0 +1,5 @@
+-- Code C ใหม่ + Master C (รันแล้วบนฐานข้อมูลจริงผ่าน migration rep_master_c_foundation และ rep_master_c_set_fix_rpc — เก็บไว้เป็นบันทึกใน repo)
+-- 1) สำรอง rep_items  2) เติม master C 8 รหัสจาก legend ของ REP 1975 (ผู้จ่าย 50257)
+-- 3) แยกรหัส error ของเคส C ลง rep_item_codes  4) codes_more จาก "+ ... (N)"  5) view case_rep_latest (เลขที่เอกสารตอบรับล่าสุดต่อเคส)
+-- 6) RPC set_rep_code_fix: บันทึก "วิธีแก้ของเรา" (user แก้ได้เฉพาะช่องนี้)
+-- ดูเนื้อหาเต็มใน supabase_migrations (rep_master_c_foundation, rep_master_c_set_fix_rpc)

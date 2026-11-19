@@ -28,6 +28,55 @@ export interface RepItem {
   name: string
 }
 
+/** รหัสผลการตรวจรับ 1 ตัวท้ายบรรทัด เช่น "662:L03650" (code = 662, detail = L03650) */
+export interface RepCode {
+  code: string
+  /** ค่าอ้างอิงหลังเครื่องหมาย ":" — รหัสรายการที่ผิด (ค่าบริการ/Lab/ยา/หัตถการ) ใช้ตอนไปแก้ */
+  detail: string | null
+  kind: 'error' | 'warning' | 'info'
+}
+
+/**
+ * แยกชนิดรหัสตามที่ผู้ใช้จริงใช้งาน: รหัสที่มาก่อน 837 (212, 350, 661, 662, 673 …) คือ error ที่ต้องแก้
+ * 837 / 83A คือคำเตือน ไม่ต้องแก้ · 926 คือแจ้งเพื่อทราบ (ยอดยากลับบ้าน)
+ * (ไฟล์เรียงรหัสจากน้อยไปมาก จึงตัดที่ 837 ได้ — ชนิดที่แท้จริงของแต่ละรหัสดูจาก master C ถ้ามี)
+ */
+export function classifyCode(code: string): RepCode['kind'] {
+  if (/^\d{3}$/.test(code)) {
+    if (Number(code) < 837) return 'error'
+    if (code === '926') return 'info'
+  }
+  return 'warning'
+}
+
+/** แยกข้อความท้ายบรรทัด (msg) เป็นรายการรหัส + จำนวนรหัสที่ไฟล์ตัดไม่แสดง ("+ ... (16)") */
+export function splitMsg(raw: string | null | undefined): { codes: RepCode[]; more: number } {
+  const codes: RepCode[] = []
+  let more = 0
+  for (const tok of (raw ?? '').split(',')) {
+    const t = tok.trim()
+    if (!t) continue
+    const m = t.match(/^\+\s*\.\.\.\s*\((\d+)\)$/)
+    if (m) {
+      more = Number(m[1])
+      continue
+    }
+    const i = t.indexOf(':')
+    const code = (i < 0 ? t : t.slice(0, i)).trim()
+    const detail = i < 0 ? '' : t.slice(i + 1).trim()
+    if (!code) continue
+    codes.push({ code, detail: detail || null, kind: classifyCode(code) })
+  }
+  return { codes, more }
+}
+
+/** คำอธิบายรหัสจากตาราง "รหัสผลการตรวจรับ" ท้ายไฟล์ REP */
+export interface RepLegendEntry {
+  code: string
+  description: string
+  advice: string | null
+}
+
 export interface RepRejected {
   encounterId: number
   tcode: string
@@ -51,6 +100,10 @@ export interface RepFile {
   notPassed: RepRejected[]
   /** บรรทัดที่ตรวจผ่านแต่โปรแกรมยังอ่านไม่ได้ (เช่น รูปแบบ FFS/PD) — ต้องแจ้งเตือน ห้ามข้ามเงียบ ๆ */
   unreadable: string[]
+  /** ตาราง "รหัสผลการตรวจรับ" ท้ายไฟล์ (รหัส + คำอธิบาย + คำแนะนำ) ใช้เติม master C */
+  legend: RepLegendEntry[]
+  /** ข้อความเต็มของไฟล์ REP — เก็บไว้ให้ผู้ใช้เปิดดูแบบเดียวกับที่เคยเปิดใน Notepad */
+  rawText: string
 }
 
 const num = (s: string) => Number(s.replace(/,/g, ''))
@@ -159,5 +212,14 @@ export function parseRep(text: string): RepFile {
     })
   }
 
-  return { hospCode, repNo, issueDate, headerCount, headerTotal, items, notPassed, unreadable }
+  // ตารางรหัสท้ายไฟล์: "--662: คำอธิบาย" ตามด้วยบรรทัด "\t(คำแนะนำ:...)" (บางรหัสไม่มีคำแนะนำ)
+  const legend: RepLegendEntry[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const lm = lines[i].match(/^--(\w{3}):\s*(.*)$/)
+    if (!lm) continue
+    const adv = (lines[i + 1] ?? '').match(/^\s*\(คำแนะนำ:(.*)\)\s*$/)
+    legend.push({ code: lm[1], description: lm[2].trim(), advice: adv ? adv[1].trim() : null })
+  }
+
+  return { hospCode, repNo, issueDate, headerCount, headerTotal, items, notPassed, unreadable, legend, rawText: text }
 }

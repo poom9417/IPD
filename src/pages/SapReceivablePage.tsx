@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Button from '../components/ui/Button'
-import { decodeRep, parseRep, type RepFile } from '../lib/cignRep'
+import { decodeRep, parseRep, splitMsg, type RepFile } from '../lib/cignRep'
+import RepOriginalView from '../components/RepOriginalView'
 import {
+  DUP_LABEL,
   MATCH_LABEL,
+  checkDuplicates,
   findSavedFile,
+  loadRawText,
   listSavedFiles,
   loadSavedItems,
   markSapGenerated,
   matchEncounters,
   saveRep,
   updateMatches,
+  type DupInfo,
   type MatchResult,
   type SavedFile,
   type SavedItem,
@@ -71,12 +76,19 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
+  const [dups, setDups] = useState<Map<number, DupInfo>>(new Map())
+  // encounter_id ที่เลือกข้าม (ไม่บันทึก) — เคสซ้ำผิดปกติถูกตั้งเป็น "ข้าม" ไว้ก่อน ผู้ใช้เปลี่ยนเป็น "บันทึก" ได้
+  const [skip, setSkip] = useState<Set<number>>(new Set())
+  const [showRaw, setShowRaw] = useState(false)
 
   async function onFile(f: File) {
     setError(null)
     setDone(null)
     setRep(null)
     setExisting(null)
+    setDups(new Map())
+    setSkip(new Set())
+    setShowRaw(false)
     setLoading(true)
     try {
       const parsed = parseRep(decodeRep(await f.arrayBuffer()))
@@ -86,7 +98,11 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
         ...parsed.items.map((i) => ({ encounterId: i.encounterId, section: i.section })),
         ...parsed.notPassed.map((n) => ({ encounterId: n.encounterId, section: 0 })),
       ]
-      setMatches(await matchEncounters(inputs))
+      const mm = await matchEncounters(inputs)
+      setMatches(mm)
+      const dd = await checkDuplicates(parsed, mm)
+      setDups(dd)
+      setSkip(new Set([...dd].filter(([, d]) => d.needsDecision).map(([enc]) => enc)))
       setExisting(await findSavedFile(parsed.hospCode, parsed.repNo))
     } catch (e) {
       setError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? String(e))
@@ -98,8 +114,8 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
   const rows = useMemo(() => {
     if (!rep) return []
     return [
-      ...rep.items.map((i) => ({ key: 'A' + i.encounterId, enc: i.encounterId, tcode: 'A', name: i.name, item: i })),
-      ...rep.notPassed.map((n) => ({ key: 'N' + n.encounterId, enc: n.encounterId, tcode: n.tcode, name: n.name, item: null })),
+      ...rep.items.map((i) => ({ key: 'A' + i.encounterId, enc: i.encounterId, tcode: 'A', name: i.name, item: i, msg: i.msgRaw })),
+      ...rep.notPassed.map((n) => ({ key: 'N' + n.encounterId, enc: n.encounterId, tcode: n.tcode, name: n.name, item: null, msg: n.msgRaw })),
     ]
   }, [rep])
 
@@ -107,15 +123,26 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
   const noClaim = rows.filter((r) => r.tcode === 'A' && matches.get(r.enc)?.status === 'matched' && !matches.get(r.enc)?.claimNo)
   const repSum = rep ? rep.items.reduce((s, i) => s + Math.round(i.paid * 100), 0) / 100 : 0
   const diffHead = !!rep && rep.headerTotal != null && Math.abs(repSum - rep.headerTotal) > 0.005
+  const dupList = [...dups.entries()]
+  const dupAbnormal = dupList.filter(([, d]) => d.needsDecision)
+  const dupResent = dupList.filter(([, d]) => !d.needsDecision)
+  const cRows = rows.filter((r) => r.tcode !== 'A')
+  const cCodeCount = cRows.reduce((n, r) => n + splitMsg(r.msg).codes.filter((c) => c.kind === 'error').length, 0)
 
   async function save() {
     if (!rep) return
     setSaving(true)
     setError(null)
     try {
-      const n = await saveRep(rep, fileName, matches)
-      setDone(`บันทึก REP เลขที่ ${rep.repNo} แล้ว ${n} รายการ (ผ่าน ${rep.items.length} · ไม่ผ่าน ${rep.notPassed.length})`)
+      const r = await saveRep(rep, fileName, matches, { skip, dups })
+      setDone(
+        `บันทึก REP เลขที่ ${rep.repNo} แล้ว ${r.saved} รายการ (ผ่าน ${rep.items.length} · ไม่ผ่าน ${rep.notPassed.length})` +
+          ` · แยกรหัสที่ต้องแก้ ${r.codes} รหัส` +
+          (r.skipped > 0 ? ` · ข้าม ${r.skipped} รายการที่เลือกข้าม` : '') +
+          (r.newMasterCodes > 0 ? ` · เพิ่มรหัสใหม่เข้า master C ${r.newMasterCodes} รหัส` : ''),
+      )
       setExisting(await findSavedFile(rep.hospCode, rep.repNo))
+      setSkip(new Set())
       onSaved()
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? String(e)
@@ -157,9 +184,9 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
 
       {rep && !loading && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Card label="ผ่าน (A)" value={`${rep.items.length} ราย`} sub={`หัวไฟล์ระบุ ${rep.headerCount ?? '–'} ราย`} />
-            <Card label="ไม่ผ่าน / ต้องแก้ไข" value={`${rep.notPassed.length} ราย`} sub="เก็บไว้ด้วย พร้อมรหัสข้อผิดพลาด" />
+            <Card label="ไม่ผ่าน / ต้องแก้ไข" value={`${rep.notPassed.length} ราย`} sub={`รหัสที่ต้องแก้ ${cCodeCount} รหัส (ก่อน 837)`} />
             <Card label="จับคู่เคสไม่ได้" value={`${problems.length} ราย`} sub="ต้องเจอทุกเคสที่ส่งเบิกแล้ว" warn={problems.length > 0} />
             <Card
               label="รวมยอดตามรายการ (A)"
@@ -190,6 +217,17 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
               มี {rep.unreadable.length} บรรทัดที่อ่านรูปแบบไม่ได้ (เช่น FFS/PD) จึงไม่ถูกบันทึก ต้องตรวจเอง
             </Notice>
           )}
+          {dupAbnormal.length > 0 && (
+            <Notice>
+              <b>เลขซ้ำผิดปกติ {dupAbnormal.length} ราย</b> — REP คือรายการที่ส่งเบิกไปจริง จึงซ้ำได้เฉพาะเคสที่ติด C แล้วส่งใหม่ด้วยเลขตั้งเบิกใหม่ ระบบตั้งเป็น "ข้าม" ไว้ให้ก่อน เลือก "บันทึก (ติดป้ายซ้ำ)" ในคอลัมน์ท้ายตารางได้ถ้าต้องการเก็บ:{' '}
+              {dupAbnormal.map(([enc, d]) => `${enc} (${DUP_LABEL[d.flag]})`).join(', ')}
+            </Notice>
+          )}
+          {dupResent.length > 0 && (
+            <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">
+              ส่งใหม่หลังติด C ด้วยเลขตั้งเบิกใหม่ {dupResent.length} ราย (ปกติ ผ่านหรือไม่ผ่านดูได้ที่หน้า Code C): {dupResent.map(([enc]) => enc).join(', ')}
+            </div>
+          )}
           {existing && (
             <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">
               REP เลขที่ {existing.file.rep_no} เคยบันทึกไว้เมื่อ {fmtDate(existing.file.uploaded_at)} แล้ว บันทึกซ้ำจะอัปเดตข้อมูลและผลจับคู่
@@ -198,7 +236,7 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-            <table className="w-full min-w-[1500px] border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[1900px] border-collapse text-left text-[13px]">
               <thead>
                 <tr className="bg-brand text-ink">
                   <th className={th}>ผล REP</th>
@@ -215,6 +253,8 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
                   <th className={th}>pcode</th>
                   <th className={th}>สิทธิ / ผู้จ่าย</th>
                   <th className={th}>เลขตั้งเบิก</th>
+                  <th className={th}>รหัสที่ต้องแก้ (ก่อน 837)</th>
+                  <th className={th}>ซ้ำ / ส่งใหม่</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,6 +280,12 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
                       <td className={td}>{i?.pcode ?? '–'}</td>
                       <td className={td}>{m?.coverageCode ? `${m.coverageCode} / ${m.payerId}` : '–'}</td>
                       <td className={td + (m?.status === 'matched' && !m.claimNo ? ' text-rose' : '')}>{m?.claimNo ?? (m?.status === 'matched' ? 'ไม่มี' : '–')}</td>
+                      <td className={td + ' whitespace-normal'}>
+                        <CodeChips msg={r.msg} />
+                      </td>
+                      <td className={td + ' whitespace-normal'}>
+                        <DupCell info={dups.get(r.enc)} skipped={skip.has(r.enc)} onChange={(sk) => setSkip((cur) => { const n = new Set(cur); if (sk) n.add(r.enc); else n.delete(r.enc); return n })} />
+                      </td>
                     </tr>
                   )
                 })}
@@ -249,10 +295,14 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
 
           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4">
             <Button type="button" onClick={() => void save()} disabled={saving}>
-              {saving ? 'กำลังบันทึก…' : `บันทึกผลตอบกลับลงระบบ (${rows.length} รายการ)`}
+              {saving ? 'กำลังบันทึก…' : `บันทึกผลตอบกลับลงระบบ (${rows.length - skip.size} รายการ)`}
             </Button>
-            <span className="text-sm text-ink/70">บันทึกแล้วไปที่ขั้นที่ 2 เพื่อสร้างไฟล์ SAP</span>
+            <Button type="button" variant="outline" onClick={() => setShowRaw((v) => !v)}>
+              {showRaw ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
+            </Button>
+            <span className="text-sm text-ink/70">บันทึกแล้วดูเคสติด C ที่หน้า Code C · ไปขั้นที่ 2 เพื่อสร้างไฟล์ SAP</span>
           </div>
+          {showRaw && <RepOriginalView text={rep.rawText} title={`REP ${rep.repNo} · ${fileName}`} />}
           {done && <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">{done}</div>}
         </>
       )}
@@ -281,6 +331,17 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
   const [ack, setAck] = useState(false)
   const [includeAlready, setIncludeAlready] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  const [raw, setRaw] = useState<{ fileId: number; text: string | null } | null>(null)
+
+  async function toggleRaw() {
+    if (raw && raw.fileId === fileId) return setRaw(null)
+    if (fileId == null) return
+    try {
+      setRaw({ fileId, text: await loadRawText(fileId) })
+    } catch (e) {
+      setError(`โหลดต้นฉบับ REP ไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
+    }
+  }
 
   useEffect(() => {
     if (!active) return
@@ -317,6 +378,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
     }
   }
   useEffect(() => {
+    setRaw(null)
     if (fileId != null) void load(fileId)
   }, [fileId])
 
@@ -424,7 +486,13 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
             ))}
           </select>
         </label>
+        {file && (
+          <Button type="button" variant="outline" onClick={() => void toggleRaw()}>
+            {raw && raw.fileId === fileId ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
+          </Button>
+        )}
       </div>
+      {raw && raw.fileId === fileId && <RepOriginalView text={raw.text} title={file ? `REP ${file.rep_no}` : undefined} />}
 
       {error && <Notice>{error}</Notice>}
       {loading && <div className="text-sm text-ink/70">กำลังโหลดและจับคู่ข้อมูลล่าสุด…</div>}
@@ -545,4 +613,43 @@ function Card({ label, value, sub, warn }: { label: string; value: string; sub?:
 
 function Notice({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">{children}</div>
+}
+
+/** รหัส error ที่ต้องแก้ (ก่อน 837) เป็นชิปเด่น ๆ · คำเตือน (837 / 83A / 926) แสดงเป็นจำนวนเล็ก ๆ ไม่ต้องแก้ */
+function CodeChips({ msg }: { msg: string }) {
+  const { codes, more } = splitMsg(msg)
+  const errs = codes.filter((c) => c.kind === 'error')
+  const warn = codes.length - errs.length + more
+  if (errs.length === 0) return <span className="text-ink/40">{warn > 0 ? `เตือน ${warn} (ไม่ต้องแก้)` : '–'}</span>
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {errs.map((c, i) => (
+        <span key={i} className="rounded-md border border-rose/40 bg-rose-soft px-1.5 py-0.5 font-mono text-[12px] font-semibold text-rose">
+          {c.code}
+          {c.detail ? `:${c.detail}` : ''}
+        </span>
+      ))}
+      {warn > 0 && <span className="text-[11px] text-ink/40">+ เตือน {warn}</span>}
+    </div>
+  )
+}
+
+function DupCell({ info, skipped, onChange }: { info: DupInfo | undefined; skipped: boolean; onChange: (skip: boolean) => void }) {
+  if (!info) return <span className="text-ink/40">–</span>
+  return (
+    <div className="space-y-1">
+      <div className={info.needsDecision ? 'font-semibold text-rose' : 'font-semibold text-ink'}>{DUP_LABEL[info.flag]}</div>
+      <div className="max-w-[320px] text-[12px] text-ink/70">{info.note}</div>
+      {info.needsDecision && (
+        <select
+          value={skipped ? 'skip' : 'save'}
+          onChange={(e) => onChange(e.target.value === 'skip')}
+          className="rounded-md border border-ink/30 bg-surface px-2 py-1 text-xs text-ink"
+        >
+          <option value="skip">ข้าม (ไม่บันทึก)</option>
+          <option value="save">บันทึก (ติดป้ายซ้ำ)</option>
+        </select>
+      )}
+    </div>
+  )
 }
