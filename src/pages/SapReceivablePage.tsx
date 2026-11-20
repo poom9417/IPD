@@ -319,6 +319,8 @@ interface SapRow {
   problem: string | null
   already: boolean
   sap: SapCase | null
+  /** true = ไม่มียอดตั้งเบิก ต้องกลับไปใส่ที่หน้าหลักก่อนจึงสร้างไฟล์ได้ */
+  missingAmount?: boolean
 }
 
 function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
@@ -397,12 +399,12 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
       if (!m.hn) return { ...base, problem: 'ไม่มี HN' }
       if (!m.dischargeDate) return { ...base, problem: 'ไม่มีวันที่จำหน่าย' }
       if (!m.claimNo) return { ...base, problem: 'ไม่มีเลข Ref (claim_no)' }
-      if (m.his == null || m.his <= 0) return { ...base, problem: 'ไม่มียอดรับเอกสาร (HIS)' }
+      if (m.claimAmount == null || m.claimAmount <= 0) return { ...base, problem: 'ยังไม่มียอดตั้งเบิก — กลับไปใส่ยอดส่งเบิกที่หน้าหลักก่อน', missingAmount: true }
       if (item.total_amount == null) return { ...base, problem: 'ไม่มียอดที่จ่ายใน REP' }
       return {
         ...base,
         problem: null,
-        sap: { encounterId: item.encounter_id, hn: m.hn, dischargeDate: m.dischargeDate, claimNo: m.claimNo, hisAmount: m.his, paid: item.total_amount, replyDate: file.issue_date },
+        sap: { encounterId: item.encounter_id, hn: m.hn, dischargeDate: m.dischargeDate, claimNo: m.claimNo, claimAmount: m.claimAmount, paid: item.total_amount, replyDate: file.issue_date },
       }
     }).sort((a, b) => Number(!!b.problem) - Number(!!a.problem))
   }, [aItems, live, file])
@@ -417,7 +419,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
   const totals = useMemo(() => {
     let a09 = 0, a40 = 0, a11 = 0, paid = 0
     for (const r of ready) {
-      const a = computeAmounts(r.sap!.hisAmount, r.sap!.paid)
+      const a = computeAmounts(r.sap!.claimAmount, r.sap!.paid)
       a09 += Math.round(a.a09 * 100)
       a40 += Math.round(a.a40 * 100)
       a11 += Math.round(a.a11 * 100)
@@ -425,6 +427,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
     }
     return { a09: a09 / 100, a40: a40 / 100, a11: a11 / 100, paid: paid / 100 }
   }, [ready])
+  const missing = rows.filter((r) => r.missingAmount)
   const needAck = withProblem.length > 0 || notPassed.length > 0
 
   async function refreshMatches() {
@@ -541,7 +544,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
                   <th className={th}>ชื่อผู้ป่วย</th>
                   <th className={th}>เลขตั้งเบิก</th>
                   <th className={th + ' text-right'}>ยอดที่จ่าย (REP)</th>
-                  <th className={th + ' text-right'}>ยอด HIS</th>
+                  <th className={th + ' text-right'}>ยอดตั้งเบิก</th>
                   <th className={th + ' text-right'}>ส่วนต่าง (40)</th>
                   <th className={th}>บรรทัดที่สร้าง</th>
                 </tr>
@@ -549,7 +552,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
               <tbody>
                 {rows.map((r) => {
                   const s = r.sap
-                  const amt = s ? computeAmounts(s.hisAmount, s.paid) : null
+                  const amt = s ? computeAmounts(s.claimAmount, s.paid) : null
                   const skipped = !!r.problem || (r.already && !includeAlready)
                   return (
                     <tr key={r.item.id} className={'border-b border-line ' + (skipped ? 'bg-rose-soft/50' : 'hover:bg-paper')}>
@@ -561,7 +564,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
                       <td className={td}>{r.item.patient_name}</td>
                       <td className={td}>{r.live?.claimNo ?? '–'}</td>
                       <td className={td + ' text-right tabular-nums'}>{money(r.item.total_amount)}</td>
-                      <td className={td + ' text-right tabular-nums'}>{money(r.live?.his)}</td>
+                      <td className={td + ' text-right tabular-nums'}>{money(r.live?.claimAmount)}</td>
                       <td className={td + ' text-right tabular-nums'}>{amt && amt.a40 > 0 ? money(amt.a40) : '–'}</td>
                       <td className={td}>
                         {amt
@@ -569,7 +572,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
                             ? 'H + 09 + 40 + 11'
                             : amt.kind === 'equal'
                               ? 'H + 09 + 11 (ยอดเท่ากัน ไม่มี 40)'
-                              : 'H + 09 + 11 (REP จ่ายมากกว่า HIS ตั้งตามยอด HIS ไม่มี 40)'
+                              : 'H + 09 + 11 (REP จ่ายมากกว่ายอดตั้งเบิก ตั้งตามยอดตั้งเบิก ไม่มี 40)'
                           : '–'}
                       </td>
                     </tr>
@@ -579,6 +582,14 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
             </table>
           </div>
 
+          {missing.length > 0 && (
+            <Notice>
+              <b>ยังสร้างไฟล์ SAP ไม่ได้:</b> มี {missing.length} เคสที่ยังไม่มียอดตั้งเบิก — กลับไปใส่ยอดส่งเบิกที่หน้าหลักให้ครบก่อน แล้วกลับมาหน้านี้ (ระบบจับคู่ใหม่ให้เอง)
+              <div className="mt-1 tabular-nums">
+                {missing.map((r) => `${r.item.encounter_id}${r.live?.claimNo ? ` (${r.live.claimNo})` : ''}`).join(' · ')}
+              </div>
+            </Notice>
+          )}
           <div className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4 text-sm">
             <div className="tabular-nums">
               09 รวม <b>{money(totals.a09)}</b> + 40 รวม <b>{money(totals.a40)}</b> = <b>{money(totals.a09 + totals.a40)}</b> · 11 รวม <b>{money(totals.a11)}</b>{' '}
@@ -590,7 +601,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
                 รับทราบรายการที่สร้างไม่ได้/ไม่ผ่านด้านบนแล้ว
               </label>
             )}
-            <Button type="button" onClick={() => void download()} disabled={ready.length === 0 || (needAck && !ack)}>
+            <Button type="button" onClick={() => void download()} disabled={ready.length === 0 || missing.length > 0 || (needAck && !ack)}>
               ดาวน์โหลด txt สำหรับ SAP ({ready.length} เคส)
             </Button>
           </div>

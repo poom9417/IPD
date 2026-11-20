@@ -5,14 +5,14 @@
  * 1 เคส = 4 บรรทัด (H + L09 + L40 + L11) — กรณีไม่มีส่วนต่างจะไม่มีบรรทัด 40
  *   H   หัวเอกสาร   : วันที่จำหน่าย, วันที่ตอบกลับ, เลข Ref (claim_no)
  *   L09 ยอดที่จ่าย  : บัญชี ACCOUNT_09
- *   L40 ส่วนต่าง    : บัญชี ACCOUNT_40 = HIS − ยอดที่จ่าย (เมื่อ HIS มากกว่า)
- *   L11 ลูกหนี้     : C+HN = ยอด HIS (ยอดรับเอกสาร) — HN = ตัวอักษร + ตัวเลข 8 หลัก (เติมศูนย์หน้า)
+ *   L40 ส่วนต่าง    : บัญชี ACCOUNT_40 = ยอดตั้งเบิก − ยอดที่จ่าย (เมื่อยอดตั้งเบิกมากกว่า)
+ *   L11 ลูกหนี้     : C+HN = ยอดที่เจนตั้งเบิก (ยอดส่งเบิก; เดิมใช้ยอด HIS — เปลี่ยน 2026-11-20) — HN = ตัวอักษร + ตัวเลข 8 หลัก (เติมศูนย์หน้า)
  *   L09 คอลัมน์ D   : 'C' (เดิม 'E')
  *
  * กติกายอด (ยืนยันกับผู้ใช้ 2026-11-11):
- *   จ่าย < HIS  → 09 = จ่าย,  40 = HIS − จ่าย,  11 = HIS
- *   จ่าย = HIS  → 09 = จ่าย,  ไม่มี 40,         11 = HIS
- *   จ่าย > HIS  → 09 = HIS,   ไม่มี 40,         11 = HIS
+ *   จ่าย < ตั้งเบิก → 09 = จ่าย,     40 = ตั้งเบิก − จ่าย, 11 = ตั้งเบิก
+ *   จ่าย = ตั้งเบิก → 09 = จ่าย,     ไม่มี 40,            11 = ตั้งเบิก
+ *   จ่าย > ตั้งเบิก → 09 = ตั้งเบิก,  ไม่มี 40,            11 = ตั้งเบิก
  */
 
 export interface SapPayerConfig {
@@ -59,8 +59,8 @@ export interface SapCase {
   dischargeDate: string
   /** เลข Ref (claim_no) */
   claimNo: string
-  /** ยอดรับเอกสาร (HIS) */
-  hisAmount: number
+  /** ยอดที่เจนตั้งเบิก (ยอดส่งเบิก) */
+  claimAmount: number
   /** ยอดที่จ่ายตาม REP */
   paid: number
   /** วันที่ตอบกลับ YYYY-MM-DD */
@@ -91,8 +91,8 @@ export function padHn(hn: string, digits = 8): string {
 const toSatang = (n: number) => Math.round(n * 100)
 const fromSatang = (s: number) => s / 100
 
-export function computeAmounts(hisAmount: number, paid: number): SapAmounts {
-  const his = toSatang(hisAmount)
+export function computeAmounts(claimAmount: number, paid: number): SapAmounts {
+  const his = toSatang(claimAmount)
   const p = toSatang(paid)
   if (p < his) return { a09: fromSatang(p), a40: fromSatang(his - p), a11: fromSatang(his), kind: 'short' }
   if (p === his) return { a09: fromSatang(p), a40: 0, a11: fromSatang(his), kind: 'equal' }
@@ -117,7 +117,7 @@ function row(cells: Record<number, string>): string[] {
 }
 
 export function buildCaseRows(c: SapCase, cfg: SapPayerConfig): string[][] {
-  const amt = computeAmounts(c.hisAmount, c.paid)
+  const amt = computeAmounts(c.claimAmount, c.paid)
   const hn = padHn(c.hn)
   const hnFull = `HN${hn}`
   const enc = String(c.encounterId)

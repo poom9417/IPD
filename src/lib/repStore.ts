@@ -23,8 +23,8 @@ export interface MatchResult {
   claimNo: string | null
   hn: string | null
   dischargeDate: string | null
-  /** ยอดรับเอกสาร (HIS) */
-  his: number | null
+  /** ยอดที่เจนตั้งเบิก (ยอดส่งเบิก submission_amount) — ใช้เป็นยอดบรรทัด 11 ในไฟล์ SAP */
+  claimAmount: number | null
 }
 
 const CHUNK = 200
@@ -47,12 +47,12 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
     if (error) throw error
     adms.push(...((data ?? []) as Adm[]))
   }
-  type Trk = { admission_id: number; claim_no: string | null; document_received_amount: number | null }
+  type Trk = { admission_id: number; claim_no: string | null; submission_amount: number | null }
   const trk = new Map<number, Trk>()
   for (const c of chunks(adms.map((a) => a.admission_id))) {
     const { data, error } = await supabase
       .from('case_tracking_v')
-      .select('admission_id, claim_no, document_received_amount')
+      .select('admission_id, claim_no, submission_amount')
       .in('admission_id', c)
     if (error) throw error
     for (const t of (data ?? []) as Trk[]) trk.set(Number(t.admission_id), t)
@@ -61,7 +61,7 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
   for (const a of adms) byEnc.set(Number(a.encounter_id), [...(byEnc.get(Number(a.encounter_id)) ?? []), a])
 
   const empty = (status: MatchStatus, note: string): MatchResult => ({
-    status, note, admissionId: null, payerId: null, coverageCode: null, claimNo: null, hn: null, dischargeDate: null, his: null,
+    status, note, admissionId: null, payerId: null, coverageCode: null, claimNo: null, hn: null, dischargeDate: null, claimAmount: null,
   })
   const found = (a: Adm): MatchResult => {
     const t = trk.get(Number(a.admission_id))
@@ -74,7 +74,7 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
       claimNo: t?.claim_no ?? null,
       hn: a.hn,
       dischargeDate: a.discharge_date ? a.discharge_date.slice(0, 10) : null,
-      his: t?.document_received_amount == null ? null : Number(t.document_received_amount),
+      claimAmount: t?.submission_amount == null ? null : Number(t.submission_amount),
     }
   }
 
