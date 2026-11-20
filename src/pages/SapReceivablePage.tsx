@@ -19,7 +19,7 @@ import {
   type SavedFile,
   type SavedItem,
 } from '../lib/repStore'
-import { SAP_PAYERS, buildSapText, computeAmounts, type SapCase } from '../lib/sapReceivable'
+import { SAP_PAYERS, buildSapText, computeAmounts, isFriday, isFridayOnlyPayer, type SapCase } from '../lib/sapReceivable'
 
 const money = (n: number | null | undefined) =>
   n == null ? '–' : n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -334,6 +334,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
   const [includeAlready, setIncludeAlready] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [raw, setRaw] = useState<{ fileId: number; text: string | null } | null>(null)
+  const [fridayWarn, setFridayWarn] = useState(false)
 
   async function toggleRaw() {
     if (raw && raw.fileId === fileId) return setRaw(null)
@@ -438,6 +439,17 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
     } catch (e) {
       setError(`อัปเดตไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
     }
+  }
+
+  // กติกา: สปสช./LGO/กทม. ต้องตั้งหนี้วันศุกร์เท่านั้น — ถ้าไม่ใช่วันศุกร์ให้เตือนก่อนดาวน์โหลด (ไม่เปลี่ยนวันที่ในไฟล์)
+  const hasFridayRulePayer = ready.some((r) => isFridayOnlyPayer(r.live?.payerId))
+
+  function onDownloadClick() {
+    if (hasFridayRulePayer && !isFriday()) {
+      setFridayWarn(true)
+      return
+    }
+    void download()
   }
 
   async function download() {
@@ -601,12 +613,38 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
                 รับทราบรายการที่สร้างไม่ได้/ไม่ผ่านด้านบนแล้ว
               </label>
             )}
-            <Button type="button" onClick={() => void download()} disabled={ready.length === 0 || missing.length > 0 || (needAck && !ack)}>
+            <Button type="button" onClick={onDownloadClick} disabled={ready.length === 0 || missing.length > 0 || (needAck && !ack)}>
               ดาวน์โหลด txt สำหรับ SAP ({ready.length} เคส)
             </Button>
           </div>
           {done && <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">{done}</div>}
         </>
+      )}
+
+      {fridayWarn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl">
+            <h2 className="mb-2 text-base font-semibold text-ink">วันนี้ไม่ใช่วันศุกร์</h2>
+            <p className="mb-4 text-sm text-ink/80">
+              กติกาของเราคือต้องตั้งหนี้ของสปสช. / LGO / กทม. (เอาเข้า SAP) ในวันศุกร์เท่านั้น
+              ไฟล์นี้มีเคสของผู้จ่ายกลุ่มดังกล่าวอยู่ ต้องการดาวน์โหลดต่อหรือไม่?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setFridayWarn(false)}>
+                ยกเลิก
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setFridayWarn(false)
+                  void download()
+                }}
+              >
+                ดาวน์โหลดต่อ
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

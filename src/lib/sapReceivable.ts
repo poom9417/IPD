@@ -51,6 +51,22 @@ export const SAP_PAYERS: Record<string, SapPayerConfig> = {
   },
 }
 
+/**
+ * กติกา: การตั้งหนี้ (เอาเข้า SAP) ของผู้จ่ายกลุ่มนี้ต้องทำวันศุกร์เท่านั้น
+ * สปสช. / LGO (50087, 15251) และ กทม. (50258) — ไม่รวม GGO กรมบัญชีกลาง 50257
+ * ไม่มีการเปลี่ยนวันที่ในไฟล์ — ใช้เตือนตอนกดดาวน์โหลดเท่านั้น
+ */
+export const FRIDAY_ONLY_PAYERS: ReadonlySet<string> = new Set(['50087', '15251', '50258'])
+
+export function isFridayOnlyPayer(payerId: string | null | undefined): boolean {
+  return !!payerId && FRIDAY_ONLY_PAYERS.has(payerId)
+}
+
+/** วันนี้เป็นวันศุกร์หรือไม่ (เวลาท้องถิ่นของเครื่องผู้ใช้) */
+export function isFriday(d: Date = new Date()): boolean {
+  return d.getDay() === 5
+}
+
 export interface SapCase {
   encounterId: number
   /** HN แบบไม่มีคำนำหน้า เช่น C2722091 */
