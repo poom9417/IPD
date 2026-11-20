@@ -20,9 +20,9 @@ export interface RepItem {
   /** รหัสข้อผิดพลาด/เตือนท้ายบรรทัดตามไฟล์ */
   msgRaw: string
   /** ยอดเงินตาม DRG (บาท) */
-  drgAmount: number
+  drgAmount: number | null
   /** ยอดจ่ายนอก DRG (บาท) */
-  outDrgAmount: number
+  outDrgAmount: number | null
   /** ยอดที่จ่ายรวม = drgAmount + outDrgAmount (ปัดเป็นสตางค์) */
   paid: number
   name: string

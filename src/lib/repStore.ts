@@ -35,7 +35,7 @@ const chunks = <T,>(a: T[], n = CHUNK): T[][] => {
 }
 
 /** จับคู่ encounter_id (+ผู้จ่ายตามตอนที่ของ REP) กับ admissions และดึง claim_no / ยอดรับเอกสารจาก case_tracking_v */
-export async function matchEncounters(inputs: { encounterId: number; section: number }[]): Promise<Map<number, MatchResult>> {
+export async function matchEncounters(inputs: { encounterId: number; section: number; allow?: { payer: string; coverage: string }[] }[]): Promise<Map<number, MatchResult>> {
   const ids = [...new Set(inputs.map((i) => i.encounterId))]
   type Adm = { admission_id: number; encounter_id: number; hn: string; discharge_date: string | null; payer_id: string; coverage_code: string }
   const adms: Adm[] = []
@@ -79,10 +79,19 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
   }
 
   const out = new Map<number, MatchResult>()
-  for (const { encounterId, section } of inputs) {
+  for (const { encounterId, section, allow } of inputs) {
     const list = byEnc.get(encounterId) ?? []
     if (list.length === 0) {
       out.set(encounterId, empty('no_admission', 'ไม่มี encounter_id นี้ในระบบ'))
+      continue
+    }
+    // e-claim: จับคู่ตามชุด (ผู้จ่าย + สิทธิ) ที่ชนิดไฟล์กำหนด
+    if (allow && allow.length > 0) {
+      const label = allow.map((p) => `${p.coverage}/${p.payer}`).join(' หรือ ')
+      const m = list.filter((a) => allow.some((p) => p.payer === a.payer_id && (a.coverage_code === p.coverage || a.coverage_code.startsWith(p.coverage + '_'))))
+      if (m.length === 0) out.set(encounterId, empty('payer_mismatch', `ระบบมี ${list.map((a) => a.coverage_code + '/' + a.payer_id).join(', ')} แต่ไฟล์นี้คือ ${label}`))
+      else if (m.length > 1) out.set(encounterId, empty('ambiguous', `มี ${m.length} แถวที่เป็น ${label}`))
+      else out.set(encounterId, found(m[0]))
       continue
     }
     if (section > 0) {

@@ -19,6 +19,7 @@ import {
   type SavedFile,
   type SavedItem,
 } from '../lib/repStore'
+import { ECLAIM_LABEL, ECLAIM_PAIRS, eclaimToRepFile, normHn, parseEclaimXls, type EclaimKind } from '../lib/eclaimXls'
 import { SAP_PAYERS, buildSapText, computeAmounts, isFriday, isFridayOnlyPayer, type SapCase } from '../lib/sapReceivable'
 
 const money = (n: number | null | undefined) =>
@@ -80,6 +81,8 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
   // encounter_id ที่เลือกข้าม (ไม่บันทึก) — เคสซ้ำผิดปกติถูกตั้งเป็น "ข้าม" ไว้ก่อน ผู้ใช้เปลี่ยนเป็น "บันทึก" ได้
   const [skip, setSkip] = useState<Set<number>>(new Set())
   const [showRaw, setShowRaw] = useState(false)
+  const [eclaimKind, setEclaimKind] = useState<EclaimKind | null>(null)
+  const [eclaimNotes, setEclaimNotes] = useState<string[]>([])
 
   async function onFile(f: File) {
     setError(null)
@@ -89,16 +92,55 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
     setDups(new Map())
     setSkip(new Set())
     setShowRaw(false)
+    setEclaimKind(null)
+    setEclaimNotes([])
     setLoading(true)
     try {
-      const parsed = parseRep(decodeRep(await f.arrayBuffer()))
+      // ไฟล์ .xls = e-claim (สปสช. / LGO / กทม.) → แปลงเป็นโครงสร้างเดียวกับ REP ของ GGO แล้วใช้ขั้นตอนเดียวกันทั้งหมด
+      const isEclaim = /\.xls$/i.test(f.name)
+      let parsed: RepFile
+      let kind: EclaimKind | null = null
+      let eclaimHn = new Map<number, { hn: string; discharge: string }>()
+      if (isEclaim) {
+        const ef = parseEclaimXls(await f.arrayBuffer(), f.name)
+        parsed = eclaimToRepFile(ef)
+        kind = ef.kind
+        eclaimHn = new Map(ef.items.map((i) => [Number(i.an), { hn: i.hn, discharge: i.dischargeDate }]))
+        setEclaimKind(ef.kind)
+        setEclaimNotes(ef.warnings)
+      } else {
+        parsed = parseRep(decodeRep(await f.arrayBuffer()))
+      }
       setRep(parsed)
       setFileName(f.name)
+      const allow = kind ? ECLAIM_PAIRS[kind] : undefined
       const inputs = [
-        ...parsed.items.map((i) => ({ encounterId: i.encounterId, section: i.section })),
-        ...parsed.notPassed.map((n) => ({ encounterId: n.encounterId, section: 0 })),
+        ...parsed.items.map((i) => ({ encounterId: i.encounterId, section: i.section, allow })),
+        ...parsed.notPassed.map((n) => ({ encounterId: n.encounterId, section: 0, allow })),
       ]
       const mm = await matchEncounters(inputs)
+      // e-claim จับคู่ด้วย AN = encounter_id จึงตรวจซ้ำด้วย HN + วันจำหน่าย กันจับผิดเคส
+      if (isEclaim) {
+        for (const [enc, ec] of eclaimHn) {
+          const m = mm.get(enc)
+          if (!m || m.status !== 'matched') continue
+          const hnBad = normHn(m.hn) !== normHn(ec.hn)
+          const dcBad = !!m.dischargeDate && m.dischargeDate !== ec.discharge
+          if (hnBad || dcBad) {
+            mm.set(enc, {
+              ...m,
+              status: 'no_admission',
+              admissionId: null,
+              payerId: null,
+              coverageCode: null,
+              claimNo: null,
+              note: hnBad
+                ? `HN ไม่ตรง (ระบบ ${m.hn} / ไฟล์ ${ec.hn}) — encounter นี้อาจเป็นคนละเคส`
+                : `วันจำหน่ายไม่ตรง (ระบบ ${m.dischargeDate} / ไฟล์ ${ec.discharge}) — encounter นี้อาจเป็นคนละเคส`,
+            })
+          }
+        }
+      }
       setMatches(mm)
       const dd = await checkDuplicates(parsed, mm)
       setDups(dd)
@@ -162,7 +204,7 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
         <input
           ref={fileRef}
           type="file"
-          accept=".rep,.REP,.txt"
+          accept=".rep,.REP,.txt,.xls,.XLS"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0]
@@ -171,16 +213,17 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
           }}
         />
         <Button type="button" onClick={() => fileRef.current?.click()} disabled={loading}>
-          {loading ? 'กำลังอ่านและจับคู่…' : 'เลือกไฟล์ REP'}
+          {loading ? 'กำลังอ่านและจับคู่…' : 'เลือกไฟล์ REP / e-claim (.xls)'}
         </Button>
         {rep && (
           <span className="text-sm text-ink/70">
-            {fileName} · รพ. {rep.hospCode} · เอกสารตอบรับเลขที่ {rep.repNo} · วันที่ตอบกลับ {fmtDate(rep.issueDate)}
+            {fileName} · {eclaimKind ? `e-claim ${ECLAIM_LABEL[eclaimKind]} · ` : ''}รพ. {rep.hospCode} · เอกสารตอบรับเลขที่ {rep.repNo} · วันที่{eclaimKind ? 'ออกรายงาน' : 'ตอบกลับ'} {fmtDate(rep.issueDate)}
           </span>
         )}
       </div>
 
       {error && <Notice>{error}</Notice>}
+      {eclaimNotes.length > 0 && <Notice>{eclaimNotes.join(' · ')}</Notice>}
 
       {rep && !loading && (
         <>
@@ -297,9 +340,11 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
             <Button type="button" onClick={() => void save()} disabled={saving}>
               {saving ? 'กำลังบันทึก…' : `บันทึกผลตอบกลับลงระบบ (${rows.length - skip.size} รายการ)`}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setShowRaw((v) => !v)}>
-              {showRaw ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
-            </Button>
+            {rep.rawText && (
+              <Button type="button" variant="outline" onClick={() => setShowRaw((v) => !v)}>
+                {showRaw ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
+              </Button>
+            )}
             <span className="text-sm text-ink/70">บันทึกแล้วดูเคสติด C ที่หน้า Code C · ไปขั้นที่ 2 เพื่อสร้างไฟล์ SAP</span>
           </div>
           {showRaw && <RepOriginalView text={rep.rawText} title={`REP ${rep.repNo} · ${fileName}`} />}

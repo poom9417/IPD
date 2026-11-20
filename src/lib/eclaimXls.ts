@@ -4,6 +4,7 @@
  * อ่านเฉพาะชีต "Detail" — หัวตารางอยู่คนละแถว/คนละคอลัมน์ในแต่ละชุด จึงหาคอลัมน์จากชื่อหัว ไม่ใช้เลขคอลัมน์ตายตัว
  */
 import * as XLSX from 'xlsx'
+import type { RepFile, RepItem, RepRejected } from './cignRep'
 
 export type EclaimKind = 'IP' | 'IPLGO' | 'IPBKK'
 
@@ -26,6 +27,8 @@ export interface EclaimItem {
   rw: number | null
   rightMain: string
   rightSub: string
+  adjRw: number | null
+  ccuf: number | null
   /** กองทุน (คอลัมน์ "กองทุน" / "กองทุนหลัก") */
   fund: string
 }
@@ -41,8 +44,12 @@ export interface EclaimFile {
   items: EclaimItem[]
   /** รวมยอดชดเชยสุทธิทุกแถว */
   totalPaid: number
+  /** วันที่ออกรายงาน YYYY-MM-DD (จากหัวไฟล์ "ออกรายงานวันที่ …") — ใช้เป็นวันที่ตอบกลับ */
+  reportDate: string
   /** แถวที่อ่านไม่ได้ (วันที่/ยอดผิดรูปแบบ) พร้อมเหตุผล */
   unreadable: string[]
+  /** ข้อสังเกตที่ควรตรวจ เช่น ช่องชดเชยสุทธิมียอดทั้งสองช่อง */
+  warnings: string[]
 }
 
 const norm = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim()
@@ -99,10 +106,13 @@ export function parseEclaimXls(buf: ArrayBuffer, fileName: string): EclaimFile {
   const cRw = head.findIndex((h) => h === 'RW')
   const cRight = head.findIndex((h) => h === 'สิทธิหลัก')
   const cRightSub = head.findIndex((h) => h === 'สิทธิรอง' || h === 'สิทธิย่อย')
+  const cAdj = head.findIndex((h) => h.startsWith('AdjRW'))
+  const cCcuf = head.findIndex((h) => h.startsWith('CCUF'))
   const cFund = head.findIndex((h) => h === 'กองทุน' || h === 'กองทุนหลัก')
 
   const items: EclaimItem[] = []
   const unreadable: string[] = []
+  const warnings: string[] = []
   for (let r = headIdx + 1; r < rows.length; r++) {
     const row = rows[r]
     const repNo = norm(row[0])
@@ -110,7 +120,11 @@ export function parseEclaimXls(buf: ArrayBuffer, fileName: string): EclaimFile {
     if (!/^\d+$/.test(repNo) || !norm(row[cTran])) continue
     const admit = parseEclaimDate(row[cAdmit])
     const disch = parseEclaimDate(row[cDisch])
-    const paid = toNum(row[cPaid])
+    // "ชดเชยสุทธิ" มี 2 ช่องย่อยติดกัน (ค่ารักษา + PP / สปสช. + ต้นสังกัด) — ใช้ช่องที่มียอดเงิน (ถ้ามีทั้งสองช่องจะรวมกันและเตือน)
+    const p1 = toNum(row[cPaid])
+    const p2 = toNum(row[cPaid + 1])
+    const paid = p1 == null && p2 == null ? null : Math.round(((p1 ?? 0) + (p2 ?? 0)) * 100) / 100
+    if (p1 != null && p2 != null && p1 !== 0 && p2 !== 0) warnings.push(`TRAN_ID ${norm(row[cTran])}: ชดเชยสุทธิมียอดทั้งสองช่อง (${p1} และ ${p2}) ระบบรวมให้ — ตรวจก่อนใช้`)
     if (!admit || !disch || paid == null) {
       unreadable.push(`แถว ${r + 1} (TRAN_ID ${norm(row[cTran])}): ${!admit ? 'วันเข้ารักษา' : !disch ? 'วันจำหน่าย' : 'ชดเชยสุทธิ'} อ่านไม่ได้`)
       continue
@@ -130,10 +144,14 @@ export function parseEclaimXls(buf: ArrayBuffer, fileName: string): EclaimFile {
       rw: cRw >= 0 ? toNum(row[cRw]) : null,
       rightMain: cRight >= 0 ? norm(row[cRight]) : '',
       rightSub: cRightSub >= 0 ? norm(row[cRightSub]) : '',
+      adjRw: cAdj >= 0 ? toNum(row[cAdj]) : null,
+      ccuf: cCcuf >= 0 ? toNum(row[cCcuf]) : null,
       fund: cFund >= 0 ? norm(row[cFund]) : '',
     })
   }
 
+  const reportDate = parseEclaimDate(String(rows[0]?.[0] ?? '').match(/\d{1,2}\/\d{1,2}\/\d{4}/)?.[0])
+  if (!reportDate) throw new Error('ไม่พบวันที่ออกรายงานที่หัวไฟล์ (ออกรายงานวันที่ …)')
   const reps = [...new Set(items.map((i) => i.repNo))]
   const hosp = fileName.match(/eclaim_(\d+)_/i)?.[1] ?? ''
   const totalPaid = Math.round(items.reduce((s, i) => s + Math.round(i.paid * 100), 0)) / 100
@@ -144,6 +162,79 @@ export function parseEclaimXls(buf: ArrayBuffer, fileName: string): EclaimFile {
     repNo: reps.length === 1 ? reps[0] : reps.join(','),
     items,
     totalPaid,
+    reportDate,
     unreadable,
+    warnings,
+  }
+}
+
+/** ผู้จ่าย + สิทธิ ที่แต่ละชนิดไฟล์ e-claim ใช้จับคู่เคส (coverage ใช้ชื่อตรงหรือขึ้นต้นด้วยชื่อ + "_" เช่น ONHSI_1) */
+export const ECLAIM_PAIRS: Record<EclaimKind, { payer: string; coverage: string }[]> = {
+  IPBKK: [{ payer: '50258', coverage: 'GGO' }],
+  IPLGO: [{ payer: '50087', coverage: 'LGO' }],
+  IP: [
+    { payer: '50087', coverage: 'ONHSI' },
+    { payer: '15251', coverage: 'ONHSI' },
+  ],
+}
+
+export const ECLAIM_LABEL: Record<EclaimKind, string> = {
+  IPBKK: 'กทม. (IPBKK)',
+  IPLGO: 'อปท./LGO (IPLGO)',
+  IP: 'สปสช. (IP)',
+}
+
+/** HN ตัดศูนย์นำหน้าตัวเลข: C02524283 → C2524283 (ระบบเราเก็บแบบไม่เติมศูนย์) */
+export function normHn(hn: string | null | undefined): string {
+  const m = (hn ?? '').trim().match(/^([A-Za-z]*)0*(\d+)$/)
+  return m ? m[1].toUpperCase() + m[2] : (hn ?? '').trim().toUpperCase()
+}
+
+/**
+ * แปลงเป็นโครงสร้างเดียวกับ REP ของ GGO เพื่อบันทึกลง rep_files / rep_items ด้วยตัวเดียวกัน
+ *  - AN ในไฟล์ e-claim = encounter_id ของระบบเรา
+ *  - Error Code "-" = ผ่าน (tcode A) · มี Error Code = ไม่ผ่าน (tcode C → ไปหน้า Code C)
+ *  - e-claim ไม่มียอด DRG/นอก DRG แยก → เก็บเฉพาะยอดชดเชยสุทธิ (paid)
+ */
+export function eclaimToRepFile(f: EclaimFile): RepFile {
+  const items: RepItem[] = []
+  const notPassed: RepRejected[] = []
+  const unreadable = [...f.unreadable]
+  for (const i of f.items) {
+    const enc = Number(i.an)
+    if (!Number.isInteger(enc) || enc <= 0) {
+      unreadable.push(`TRAN_ID ${i.tranId}: AN "${i.an}" ใช้เป็น encounter_id ไม่ได้`)
+      continue
+    }
+    if (i.errorCode === '-') {
+      items.push({
+        section: 0,
+        pcode: '0',
+        encounterId: enc,
+        drgCode: i.drg,
+        rw: i.rw ?? 0,
+        adjRw: i.adjRw ?? 0,
+        ccuf: i.ccuf,
+        msgRaw: '',
+        drgAmount: null,
+        outDrgAmount: null,
+        paid: i.paid,
+        name: i.name,
+      })
+    } else {
+      notPassed.push({ encounterId: enc, tcode: 'C', name: i.name, msgRaw: i.errorCode })
+    }
+  }
+  return {
+    hospCode: f.hospCode,
+    repNo: f.repNo,
+    issueDate: f.reportDate,
+    headerCount: null,
+    headerTotal: null,
+    items,
+    notPassed,
+    unreadable,
+    legend: [],
+    rawText: '',
   }
 }
