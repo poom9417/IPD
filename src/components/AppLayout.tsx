@@ -5,6 +5,7 @@ import MinePage from '../pages/MinePage'
 import CodeCPage from '../pages/CodeCPage'
 import MyJobPage from '../pages/MyJobPage'
 import SapReceivablePage from '../pages/SapReceivablePage'
+import RepDashboardPage from '../pages/RepDashboardPage'
 import MyJobDashboardPage from '../pages/MyJobDashboardPage'
 import OnboardingTour from './OnboardingTour'
 import CodeCNotifier from './CodeCNotifier'
@@ -14,7 +15,7 @@ import UnassignedPairsNotifier from './UnassignedPairsNotifier'
 import RawChangeNotice from './RawChangeNotice'
 import { useAuth } from '../contexts/AuthContext'
 
-const VALID: PageKey[] = ['mine', 'codec', 'sap', 'myjob-dashboard', 'myjob-claim']
+const VALID: PageKey[] = ['mine', 'codec', 'rep', 'sap', 'myjob-dashboard', 'myjob-claim']
 
 function readHash(): PageKey {
   const raw = window.location.hash.replace('#', '')
@@ -48,7 +49,7 @@ export default function AppLayout() {
     if (roleLoading || role === null) return
     if (page === 'myjob-dashboard' && !canJob) go(canClaimPage ? 'myjob-claim' : 'mine')
     else if (page === 'myjob-claim' && !canClaimPage) go('mine')
-    else if (page === 'sap' && !canJob) go('mine')
+    else if ((page === 'sap' || page === 'rep') && !canJob) go('mine')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, role, roleLoading, canJob, canClaimPage])
 
@@ -80,6 +81,7 @@ export default function AppLayout() {
       <div className="min-w-0">
         {page === 'mine' && <MinePage mode={mineMode} comparePreset={compareNonce} />}
         {page === 'codec' && <CodeCPage />}
+        {page === 'rep' && canJob && <RepDashboardPage />}
         {page === 'sap' && canJob && <SapReceivablePage />}
         {page === 'myjob-dashboard' && canJob && <MyJobDashboardPage />}
         {page === 'myjob-claim' && canClaimPage && <MyJobPage />}

@@ -3,6 +3,9 @@ import Button from '../components/ui/Button'
 import { useAuth } from '../contexts/AuthContext'
 import { loadCCases, STATUS_LABEL, type CCase, type CCode, type CStatus } from '../lib/codeC'
 import { loadMaster, saveFix, type MasterCode } from '../lib/repStore'
+import RepFilterBar from '../components/RepFilterBar'
+import { loadNames } from '../lib/repDashboard'
+import { EMPTY_FILTERS, matchFilters, pairsOf, type RepFilters } from '../lib/repFilters'
 
 /**
  * Code C (ใหม่) — หน้าไว้ดูเคสที่ติด C แบบเรียลไทม์จากข้อมูลของเรา (ผลตอบกลับ REP ที่บันทึกไว้ + เลขตั้งเบิกปัจจุบัน)
@@ -30,6 +33,7 @@ export default function CodeCPage() {
   const [tab, setTab] = useState<Tab>('cases')
   const [cases, setCases] = useState<CCase[]>([])
   const [master, setMaster] = useState<MasterCode[]>([])
+  const [names, setNames] = useState<{ coverage: Map<string, string>; payer: Map<string, string> }>({ coverage: new Map(), payer: new Map() })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
@@ -37,9 +41,10 @@ export default function CodeCPage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [c, m] = await Promise.all([loadCCases(), loadMaster()])
+      const [c, m, n] = await Promise.all([loadCCases(), loadMaster(), loadNames()])
       setCases(c)
       setMaster(m)
+      setNames(n)
       setError(null)
       setLoadedAt(new Date())
     } catch (e) {
@@ -110,14 +115,15 @@ export default function CodeCPage() {
 
       {error && <div className="rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">{error}</div>}
 
-      {tab === 'cases' ? <CasesTab cases={cases} master={master} loading={loading} /> : <MasterTab master={master} cases={cases} onSaved={() => void reload()} />}
+      {tab === 'cases' ? <CasesTab cases={cases} master={master} names={names} loading={loading} /> : <MasterTab master={master} cases={cases} onSaved={() => void reload()} />}
     </main>
   )
 }
 
 /* ───────────── เคสติด C ───────────── */
 
-function CasesTab({ cases, master, loading }: { cases: CCase[]; master: MasterCode[]; loading: boolean }) {
+function CasesTab({ cases, master, names, loading }: { cases: CCase[]; master: MasterCode[]; names: { coverage: Map<string, string>; payer: Map<string, string> }; loading: boolean }) {
+  const [filters, setFilters] = useState<RepFilters>(EMPTY_FILTERS)
   const [status, setStatus] = useState<StatusFilter>('active')
   const [code, setCode] = useState('')
   const [q, setQ] = useState('')
@@ -130,12 +136,18 @@ function CasesTab({ cases, master, loading }: { cases: CCase[]; master: MasterCo
   }, [master])
   const fixOf = (c: CCase, k: CCode) => masterOf.get(`${c.payerId}|${k.code}`)?.our_fix ?? null
 
-  const count = (s: CStatus) => cases.filter((c) => c.status === s).length
-  const allCodes = useMemo(() => [...new Set(cases.flatMap((c) => c.lastC.errors.map((e) => e.code)))].sort(), [cases])
+  // ตัวกรอง สิทธิ / ผู้จ่าย / วันที่จำหน่าย / วันที่ส่งเบิก / วันที่กองทุนตอบกลับ (= วันที่ REP ตอบ C ล่าสุด)
+  const pairs = useMemo(() => pairsOf(cases), [cases])
+  const base = useMemo(
+    () => cases.filter((c) => matchFilters({ coverageCode: c.coverageCode, payerId: c.payerId, dischargeDate: c.dischargeDate, submissionDate: c.submissionDate, replyDate: c.lastC.issueDate }, filters)),
+    [cases, filters],
+  )
+  const count = (s: CStatus) => base.filter((c) => c.status === s).length
+  const allCodes = useMemo(() => [...new Set(base.flatMap((c) => c.lastC.errors.map((e) => e.code)))].sort(), [cases])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return cases
+    return base
       .filter((c) => (status === 'all' ? true : status === 'active' ? c.status === 'open' || c.status === 'resent' : c.status === status))
       .filter((c) => !code || c.lastC.errors.some((e) => e.code === code))
       .filter(
@@ -151,7 +163,7 @@ function CasesTab({ cases, master, loading }: { cases: CCase[]; master: MasterCo
         const rank = (s: CStatus) => (s === 'open' ? 0 : s === 'resent' ? 1 : s === 'other' ? 2 : 3)
         return rank(a.status) - rank(b.status) || (b.daysOpen ?? -1) - (a.daysOpen ?? -1) || b.lastC.issueDate.localeCompare(a.lastC.issueDate)
       })
-  }, [cases, status, code, q])
+  }, [base, status, code, q])
 
   const pick = (s: StatusFilter) => (status === s ? 'active' : s)
 
@@ -161,8 +173,10 @@ function CasesTab({ cases, master, loading }: { cases: CCase[]; master: MasterCo
         <StatCard label="ค้างแก้" value={count('open')} sub="REP ตอบ C ยังไม่ได้ส่งแก้ด้วยเลขเดิม" warn={count('open') > 0} active={status === 'open'} onClick={() => setStatus(pick('open'))} />
         <StatCard label="ส่งใหม่แล้ว รอผล" value={count('resent')} sub="ส่งแก้ด้วยเลขเดิมแล้ว รอ REP รอบถัดไป" active={status === 'resent'} onClick={() => setStatus(pick('resent'))} />
         <StatCard label="ผ่านแล้ว" value={count('passed')} sub="REP ล่าสุดเป็น A" active={status === 'passed'} onClick={() => setStatus(pick('passed'))} />
-        <StatCard label="ทั้งหมดที่เคยติด C" value={cases.length} sub="กดอีกครั้งเพื่อกลับไปดูที่ยังไม่ปิด" active={status === 'all'} onClick={() => setStatus(status === 'all' ? 'active' : 'all')} />
+        <StatCard label="ทั้งหมดที่เคยติด C" value={base.length} sub="กดอีกครั้งเพื่อกลับไปดูที่ยังไม่ปิด" active={status === 'all'} onClick={() => setStatus(status === 'all' ? 'active' : 'all')} />
       </div>
+
+      <RepFilterBar value={filters} onChange={setFilters} pairs={pairs} coverageNames={names.coverage} payerNames={names.payer} />
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-3">
         <input

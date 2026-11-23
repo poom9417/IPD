@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import PillTabs, { type MineMode } from './PillTabs'
 
-export type PageKey = 'mine' | 'codec' | 'sap' | 'myjob-dashboard' | 'myjob-claim'
+export type PageKey = 'mine' | 'codec' | 'rep' | 'sap' | 'myjob-dashboard' | 'myjob-claim'
 export type { MineMode }
 
 type Child = { page: PageKey; label: string; sub: string; /** ต้องมีสิทธิ์ใช้ My job เต็ม (admin / user) */ needsJob?: boolean }
@@ -52,6 +52,18 @@ const MENU: Entry[] = [
       <>
         <path d="M12 3l9 16H3L12 3z" />
         <path d="M12 10v4M12 17v.01" />
+      </>,
+    ),
+  },
+  {
+    page: 'rep',
+    key: 'rep',
+    label: 'ผลตอบกลับ REP',
+    sub: 'สรุปผ่าน / ติด C แยกสิทธิและเลข REP',
+    needsJob: true,
+    icon: svg(
+      <>
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
       </>,
     ),
   },
