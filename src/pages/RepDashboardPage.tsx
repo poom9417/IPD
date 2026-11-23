@@ -3,7 +3,8 @@ import Button from '../components/ui/Button'
 import RepFilterBar from '../components/RepFilterBar'
 import { SaveRepDialog, SapFileDialog } from '../components/RepSapDialogs'
 import { useAuth } from '../contexts/AuthContext'
-import { buildSummary, loadNames, loadRepRows, RESULT_LABEL, type RepResult, type RepRow } from '../lib/repDashboard'
+import RepAmountCharts from '../components/RepAmountCharts'
+import { buildAmountStats, buildSummary, loadNames, loadRepRows, RESULT_LABEL, type RepResult, type RepRow } from '../lib/repDashboard'
 import { exportRepDashboard } from '../lib/exportRep'
 import { EMPTY_FILTERS, matchFilters, pairsOf, type RepFilters } from '../lib/repFilters'
 
@@ -83,6 +84,7 @@ export default function RepDashboardPage() {
       )
   }, [base, status, sel, q])
 
+  const amountStats = useMemo(() => buildAmountStats(rowsShown), [rowsShown])
   const cnt = (s: RepResult) => base.filter((r) => r.result === s).length
   const unmatched = rows.filter((r) => r.unmatched).length
 
@@ -149,6 +151,9 @@ export default function RepDashboardPage() {
         <Stat label="ติด C" value={cnt('c')} sub={`ส่งแก้แล้ว รอผล ${base.filter((r) => r.resent).length}`} warn={cnt('c') > 0} active={status === 'c'} onClick={() => setStatus(status === 'c' ? 'all' : 'c')} />
         <Stat label="อื่น ๆ" value={cnt('other')} sub="เช่น T" active={status === 'other'} onClick={() => setStatus(status === 'other' ? 'all' : 'other')} />
       </div>
+
+      {/* กราฟยอดเงิน: ตั้งเบิก vs ได้รับ (ตามตัวกรอง/สถานะ/ค้นหาบนหน้าจอ) */}
+      <RepAmountCharts stats={amountStats} />
 
       {/* ตารางรวมผลตอบกลับ แยกสิทธิ × ผู้จ่าย × เลข REP */}
       <section className="space-y-2">
@@ -245,7 +250,7 @@ export default function RepDashboardPage() {
                   </td>
                   <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{fmtMoney(r.paidAmount)}</td>
                   <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{fmtMoney(r.claimedAmount)}</td>
-                  <td className={td + ' whitespace-nowrap text-right tabular-nums ' + (r.diffAmount != null && r.diffAmount !== 0 ? 'font-semibold text-rose' : '')}>
+                  <td className={td + ' whitespace-nowrap text-right tabular-nums ' + (r.diffAmount == null || r.diffAmount === 0 ? '' : r.diffAmount > 0 ? 'font-semibold text-good' : 'font-semibold text-rose')}>
                     {r.diffAmount == null ? '–' : (r.diffAmount > 0 ? '+' : '') + fmtMoney(r.diffAmount)}
                   </td>
                   <td className={td}>

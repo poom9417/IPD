@@ -184,4 +184,70 @@ export function buildSummary(rows: RepRow[]): RepSummaryLine[] {
   return [...m.values()].sort((a, b) => a.coverageCode.localeCompare(b.coverageCode) || a.payerId.localeCompare(b.payerId) || b.replyDate.localeCompare(a.replyDate) || b.repNo.localeCompare(a.repNo))
 }
 
+/* ───────────── สถิติยอดเงิน: ยอดตั้งเบิก vs ยอดที่ได้รับจาก REP ───────────── */
+
+export interface AmountStats {
+  /** ยอดตั้งเบิกรวม (ทุกเคสที่มียอดตั้งเบิก) */
+  claimedTotal: number
+  /** เคสที่ "ผ่าน" และมีทั้งยอดจ่ายและยอดตั้งเบิก — ฐานคำนวณ % และส่วนต่าง */
+  comparedCases: number
+  paidCompared: number
+  claimedCompared: number
+  diffNet: number
+  /** แบ่งสัดส่วนของยอดตั้งเบิกรวม */
+  received: number
+  cut: number
+  inC: number
+  other: number
+  /** จ่ายมากกว่าตั้งเบิก (ไม่รวมในสัดส่วนข้างบน) */
+  overpaid: number
+  /** จำนวนเคสตามทิศทางส่วนต่าง (เฉพาะเคสที่เทียบได้) */
+  equal: number
+  less: number
+  more: number
+  /** เคสที่ไม่มียอดตั้งเบิก จึงไม่นับในกราฟ */
+  noClaimed: number
+  byCoverage: { label: string; paid: number; claimed: number; pct: number; cases: number }[]
+}
+
+export function buildAmountStats(rows: RepRow[]): AmountStats {
+  const s: AmountStats = {
+    claimedTotal: 0, comparedCases: 0, paidCompared: 0, claimedCompared: 0, diffNet: 0,
+    received: 0, cut: 0, inC: 0, other: 0, overpaid: 0, equal: 0, less: 0, more: 0, noClaimed: 0, byCoverage: [],
+  }
+  const cov = new Map<string, { label: string; paid: number; claimed: number; cases: number }>()
+  for (const r of rows) {
+    if (r.claimedAmount == null) {
+      s.noClaimed++
+      continue
+    }
+    const claimed = r.claimedAmount
+    s.claimedTotal += claimed
+    if (r.result === 'c') s.inC += claimed
+    else if (r.result === 'other' || r.paidAmount == null) s.other += claimed
+    else {
+      const paid = r.paidAmount
+      s.comparedCases++
+      s.paidCompared += paid
+      s.claimedCompared += claimed
+      s.diffNet += paid - claimed
+      s.received += Math.min(paid, claimed)
+      if (paid < claimed) { s.cut += claimed - paid; s.less++ }
+      else if (paid > claimed) { s.overpaid += paid - claimed; s.more++ }
+      else s.equal++
+      const label = `${r.coverageCode ?? '–'} / ${r.payerId ?? '–'}`
+      const c = cov.get(label) ?? { label, paid: 0, claimed: 0, cases: 0 }
+      c.paid += paid
+      c.claimed += claimed
+      c.cases++
+      cov.set(label, c)
+    }
+  }
+  s.diffNet = round2(s.diffNet)
+  s.byCoverage = [...cov.values()]
+    .map((c) => ({ ...c, pct: c.claimed > 0 ? (c.paid / c.claimed) * 100 : 0 }))
+    .sort((a, b) => b.claimed - a.claimed)
+  return s
+}
+
 export const RESULT_LABEL = (r: RepRow): string => (r.result === 'passed' ? 'ผ่าน' : r.result === 'c' ? 'ติด C' : `อื่น ๆ (${r.tcode})`)
