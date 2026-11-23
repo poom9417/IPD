@@ -93,7 +93,7 @@ export default function CodeCPage() {
         <div>
           <h1 className="text-xl font-bold text-ink">Code C — เคสที่ติด C จากผลตอบกลับ REP</h1>
           <p className="mt-1 text-sm text-ink/70">
-            ข้อมูลมาจาก REP ที่บันทึกไว้ที่หน้า "ตั้งหนี้ SAP" · สถานะคำนวณสดจากเลขตั้งเบิกปัจจุบันของเคส · เน้นรหัสที่มาก่อน 837 (รหัสที่ต้องแก้)
+            ข้อมูลมาจาก REP ที่บันทึกไว้ที่หน้า "ผลตอบกลับ REP" · สถานะคำนวณสดจากเลขตั้งเบิกปัจจุบันของเคส · เน้นรหัสที่มาก่อน 837 (รหัสที่ต้องแก้)
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-ink/60">
@@ -223,7 +223,7 @@ function CasesTab({ cases, master, names, loading }: { cases: CCase[]; master: M
             {rows.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-3 py-8 text-center text-ink/60">
-                  {loading ? 'กำลังโหลด…' : cases.length === 0 ? 'ยังไม่มีเคสติด C — บันทึกไฟล์ REP ที่หน้า "ตั้งหนี้ SAP" ก่อน' : 'ไม่พบเคสตามตัวกรอง'}
+                  {loading ? 'กำลังโหลด…' : cases.length === 0 ? 'ยังไม่มีเคสติด C — บันทึกไฟล์ REP ที่หน้า "ผลตอบกลับ REP" ก่อน' : 'ไม่พบเคสตามตัวกรอง'}
                 </td>
               </tr>
             )}
@@ -359,7 +359,7 @@ function CaseModal({ c, master, onClose }: { c: CCase; master: MasterCode[]; onC
               })}
             </div>
           )}
-          {c.lastC.warnCount > 0 && <div className="mt-2 text-xs text-ink/50">รหัสเตือนอีก {c.lastC.warnCount} รายการ (837 / 83A / 926 …) ไม่ต้องแก้ — ดูข้อความเต็มที่ "ดูต้นฉบับ REP" หน้าตั้งหนี้ SAP</div>}
+          {c.lastC.warnCount > 0 && <div className="mt-2 text-xs text-ink/50">รหัสเตือนอีก {c.lastC.warnCount} รายการ (837 / 83A / 926 …) ไม่ต้องแก้ — ดูข้อความเต็มที่ "ดูต้นฉบับ REP" หน้าผลตอบกลับ REP</div>}
         </Section>
 
         <Section title="ประวัติผลตอบกลับของเคสนี้ (เลขที่เอกสารตอบรับแต่ละรอบ)">

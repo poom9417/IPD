@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Button from '../components/ui/Button'
 import RepFilterBar from '../components/RepFilterBar'
+import { SaveRepDialog, SapFileDialog } from '../components/RepSapDialogs'
 import { useAuth } from '../contexts/AuthContext'
 import { buildSummary, loadNames, loadRepRows, RESULT_LABEL, type RepResult, type RepRow } from '../lib/repDashboard'
 import { exportRepDashboard } from '../lib/exportRep'
 import { EMPTY_FILTERS, matchFilters, pairsOf, type RepFilters } from '../lib/repFilters'
 
 /**
- * ผลตอบกลับ REP — dashboard รวมจากไฟล์ตอบกลับที่บันทึกไว้ที่หน้า "ตั้งหนี้ SAP" แมปกับข้อมูลเคสของเรา
+ * ผลตอบกลับ REP — dashboard รวมจากไฟล์ตอบกลับที่บันทึกไว้ แมปกับข้อมูลเคสของเรา · บันทึก REP และสร้างไฟล์ SAP ผ่านปุ่มในหน้านี้
  * 1 แถว = 1 เคส (REP ล่าสุดของเคส) · ตารางสรุปแยกสิทธิ × ผู้จ่าย → เลข REP · ตัวกรองมีผลกับ Export
  */
 
@@ -38,6 +39,7 @@ export default function RepDashboardPage() {
   /** เลือกจากตารางสรุป: ดูเฉพาะเลข REP นั้นของสิทธิ/ผู้จ่ายนั้น */
   const [sel, setSel] = useState<{ cov: string; payer: string; repNo: string } | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [dialog, setDialog] = useState<'save' | 'sap' | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -112,12 +114,18 @@ export default function RepDashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink">ผลตอบกลับ REP</h1>
-          <p className="mt-1 text-sm text-ink/70">รวมผลตอบกลับจากไฟล์ REP ที่บันทึกไว้ที่หน้า "ตั้งหนี้ SAP" แมปกับข้อมูลเคสของเรา · แสดง REP ล่าสุดของแต่ละเคส</p>
+          <p className="mt-1 text-sm text-ink/70">รวมผลตอบกลับจากไฟล์ REP ที่บันทึกไว้ แมปกับข้อมูลเคสของเรา · แสดง REP ล่าสุดของแต่ละเคส</p>
         </div>
         <div className="flex items-center gap-3 text-xs text-ink/60">
           {loadedAt && <span>อัปเดตล่าสุด {loadedAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
           <Button type="button" variant="outline" onClick={() => void reload()} disabled={loading}>
             {loading ? 'กำลังโหลด…' : 'รีเฟรช'}
+          </Button>
+          <Button type="button" variant="outline" className="whitespace-nowrap" onClick={() => setDialog('save')}>
+            บันทึกไฟล์ตอบกลับ REP
+          </Button>
+          <Button type="button" variant="outline" className="whitespace-nowrap" onClick={() => setDialog('sap')}>
+            สร้างไฟล์สำหรับ SAP
           </Button>
           <Button type="button" onClick={() => void doExport()} disabled={exporting || rowsShown.length === 0}>
             {exporting ? 'กำลังสร้างไฟล์…' : '⬇ Export Excel'}
@@ -128,7 +136,7 @@ export default function RepDashboardPage() {
       {error && <div className="rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">{error}</div>}
       {unmatched > 0 && (
         <div className="rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">
-          มี {unmatched} รายการใน REP ที่ยังจับคู่เคสในระบบไม่ได้ (แสดงในตารางด้านล่างโดยไม่มีสิทธิ/HN) — ตรวจที่หน้า "ตั้งหนี้ SAP"
+          มี {unmatched} รายการใน REP ที่ยังจับคู่เคสในระบบไม่ได้ (แสดงในตารางด้านล่างโดยไม่มีสิทธิ/HN) — ตรวจที่ปุ่ม "บันทึกไฟล์ตอบกลับ REP"
         </div>
       )}
 
@@ -161,7 +169,7 @@ export default function RepDashboardPage() {
               {summary.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-3 py-6 text-center text-ink/60">
-                    {loading ? 'กำลังโหลด…' : rows.length === 0 ? 'ยังไม่มีข้อมูล — บันทึกไฟล์ REP ที่หน้า "ตั้งหนี้ SAP" ก่อน' : 'ไม่พบข้อมูลตามตัวกรอง'}
+                    {loading ? 'กำลังโหลด…' : rows.length === 0 ? 'ยังไม่มีข้อมูล — กดปุ่ม "บันทึกไฟล์ตอบกลับ REP" ก่อน' : 'ไม่พบข้อมูลตามตัวกรอง'}
                   </td>
                 </tr>
               )}
@@ -242,6 +250,9 @@ export default function RepDashboardPage() {
           </table>
         </div>
       </section>
+
+      {dialog === 'save' && <SaveRepDialog onClose={() => setDialog(null)} onSaved={() => void reload()} />}
+      {dialog === 'sap' && <SapFileDialog onClose={() => setDialog(null)} onGenerated={() => void reload()} />}
     </main>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import Button from '../components/ui/Button'
+import Button from './ui/Button'
 import { decodeRep, parseRep, splitMsg, type RepFile } from '../lib/cignRep'
-import RepOriginalView from '../components/RepOriginalView'
+import RepOriginalView from './RepOriginalView'
 import {
   DUP_LABEL,
   MATCH_LABEL,
@@ -28,40 +28,48 @@ const fmtDate = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 const th = 'whitespace-nowrap px-2 py-2 text-xs font-semibold'
 const td = 'whitespace-nowrap px-2 py-2'
 
-type Tab = 'save' | 'sap'
-
-export default function SapReceivablePage() {
-  const [tab, setTab] = useState<Tab>('save')
-  // เพิ่มค่าทุกครั้งที่บันทึก REP ใหม่ เพื่อให้แท็บที่ 2 โหลดรายการไฟล์ใหม่
-  const [savedNonce, setSavedNonce] = useState(0)
-
-  const tabCls = (t: Tab) =>
-    'rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ' +
-    (tab === t ? 'border-ink bg-brand text-ink' : 'border-ink/30 text-ink hover:bg-brand-soft')
-
+/** กรอบ popup เต็มจอ — ปิดด้วยปุ่ม ✕ / Esc / กดพื้นหลัง */
+function DialogShell({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   return (
-    <main className="w-full space-y-4 px-4 py-6 sm:px-8">
-      <div>
-        <h1 className="text-xl font-bold text-ink">ตั้งหนี้ SAP จากไฟล์ตอบกลับ (REP)</h1>
-        <p className="mt-1 text-sm text-ink/70">
-          ขั้นที่ 1 บันทึกผลตอบกลับ REP ลงระบบ (ผ่าน/ไม่ผ่าน ยอด DRG จับคู่เคสและเลขตั้งเบิก) → ขั้นที่ 2 สร้างไฟล์ txt สำหรับนำเข้า SAP จากข้อมูลที่บันทึกไว้
-        </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-[96vw] flex-col rounded-2xl bg-surface shadow-xl">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-ink">{title}</h2>
+            <p className="mt-0.5 text-sm text-ink/70">{subtitle}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-ink/40 hover:text-ink" aria-label="ปิด">
+            ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">{children}</div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={tabCls('save')} onClick={() => setTab('save')}>
-          1 · บันทึกผลตอบกลับ REP
-        </button>
-        <button type="button" className={tabCls('sap')} onClick={() => setTab('sap')}>
-          2 · สร้างไฟล์สำหรับ SAP
-        </button>
-      </div>
-      <div className={tab === 'save' ? '' : 'hidden'}>
-        <SaveTab onSaved={() => setSavedNonce((n) => n + 1)} />
-      </div>
-      <div className={tab === 'sap' ? '' : 'hidden'}>
-        <SapTab nonce={savedNonce} active={tab === 'sap'} />
-      </div>
-    </main>
+    </div>
+  )
+}
+
+/** ปุ่ม "บันทึกไฟล์ตอบกลับ REP" → อ่าน REP / e-claim → จับคู่ → บันทึกลงระบบ */
+export function SaveRepDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  return (
+    <DialogShell title="บันทึกไฟล์ตอบกลับ REP" subtitle="อ่านไฟล์ REP / e-claim (.xls) → จับคู่เคส → บันทึกผ่าน/ไม่ผ่าน ยอด DRG และเลขตั้งเบิกลงระบบ" onClose={onClose}>
+      <SaveTab onSaved={onSaved} />
+    </DialogShell>
+  )
+}
+
+/** ปุ่ม "สร้างไฟล์สำหรับ SAP" → เลือก REP ที่บันทึกไว้ → ดาวน์โหลด txt นำเข้า SAP */
+export function SapFileDialog({ onClose, onGenerated }: { onClose: () => void; onGenerated: () => void }) {
+  return (
+    <DialogShell title="สร้างไฟล์สำหรับ SAP" subtitle="เลือก REP ที่บันทึกไว้ → ตรวจรายการ → ดาวน์โหลด txt สำหรับนำเข้า SAP" onClose={onClose}>
+      <SapTab nonce={0} active onGenerated={onGenerated} />
+    </DialogShell>
   )
 }
 
@@ -345,7 +353,7 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
                 {showRaw ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
               </Button>
             )}
-            <span className="text-sm text-ink/70">บันทึกแล้วดูเคสติด C ที่หน้า Code C · ไปขั้นที่ 2 เพื่อสร้างไฟล์ SAP</span>
+            <span className="text-sm text-ink/70">บันทึกแล้วดูเคสติด C ที่หน้า Code C · สร้างไฟล์ SAP ได้จากปุ่ม "สร้างไฟล์สำหรับ SAP" ในหน้านี้</span>
           </div>
           {showRaw && <RepOriginalView text={rep.rawText} title={`REP ${rep.repNo} · ${fileName}`} />}
           {done && <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">{done}</div>}
@@ -368,7 +376,7 @@ interface SapRow {
   missingAmount?: boolean
 }
 
-function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
+function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean; onGenerated?: () => void }) {
   const [files, setFiles] = useState<SavedFile[]>([])
   const [fileId, setFileId] = useState<number | null>(null)
   const [items, setItems] = useState<SavedItem[]>([])
@@ -529,6 +537,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
       await markSapGenerated(ready.map((r) => r.item.id), name)
       msg += ' และบันทึกสถานะ "สร้างไฟล์ SAP แล้ว" ไว้ในระบบ'
       if (fileId != null) await load(fileId)
+      onGenerated?.()
     } catch (e) {
       msg += ` — แต่บันทึกสถานะไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`
     }
@@ -674,7 +683,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
       )}
 
       {fridayWarn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 px-4">
           <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl">
             <h2 className="mb-2 text-base font-semibold text-ink">วันนี้ไม่ใช่วันศุกร์</h2>
             <p className="mb-4 text-sm text-ink/80">
