@@ -15,6 +15,7 @@ import { EMPTY_FILTERS, matchFilters, pairsOf, type RepFilters } from '../lib/re
 const fmtDate = (iso: string | null) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '–')
 const th = 'whitespace-nowrap px-2 py-2 text-xs font-semibold'
 const td = 'px-2 py-2 align-top'
+const fmtMoney = (n: number | null) => (n == null ? '–' : n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 
 type StatusFilter = 'all' | RepResult
 
@@ -203,7 +204,7 @@ export default function RepDashboardPage() {
           <span className="text-xs text-ink/60">{rowsShown.length} เคส</span>
         </div>
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full min-w-[1100px] border-collapse text-left text-[13px]">
+          <table className="w-full min-w-[1350px] border-collapse text-left text-[13px]">
             <thead>
               <tr className="bg-brand text-ink">
                 <th className={th}>encounter_id</th>
@@ -213,13 +214,16 @@ export default function RepDashboardPage() {
                 <th className={th}>สิทธิ / ผู้จ่าย</th>
                 <th className={th}>เลขตั้งเบิกปัจจุบัน</th>
                 <th className={th}>REP ล่าสุด</th>
+                <th className={th + ' text-right'}>ยอดที่จ่าย (REP)</th>
+                <th className={th + ' text-right'}>ยอดที่ตั้งเบิก</th>
+                <th className={th + ' text-right'}>ส่วนต่าง</th>
                 <th className={th}>สถานะ</th>
               </tr>
             </thead>
             <tbody>
               {rowsShown.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-ink/60">
+                  <td colSpan={11} className="px-3 py-8 text-center text-ink/60">
                     {loading ? 'กำลังโหลด…' : 'ไม่พบเคสตามตัวกรอง'}
                   </td>
                 </tr>
@@ -238,6 +242,11 @@ export default function RepDashboardPage() {
                   <td className={td + ' whitespace-nowrap'}>
                     REP {r.repNo}
                     <div className="text-xs text-ink/60">ตอบกลับ {fmtDate(r.replyDate)}</div>
+                  </td>
+                  <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{fmtMoney(r.paidAmount)}</td>
+                  <td className={td + ' whitespace-nowrap text-right tabular-nums'}>{fmtMoney(r.claimedAmount)}</td>
+                  <td className={td + ' whitespace-nowrap text-right tabular-nums ' + (r.diffAmount != null && r.diffAmount !== 0 ? 'font-semibold text-rose' : '')}>
+                    {r.diffAmount == null ? '–' : (r.diffAmount > 0 ? '+' : '') + fmtMoney(r.diffAmount)}
                   </td>
                   <td className={td}>
                     <span className={'whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ' + BADGE[r.result]}>{RESULT_LABEL(r)}</span>

@@ -13,15 +13,16 @@ export async function exportRepDashboard(rows: RepRow[], summary: RepSummaryLine
   sh.forEach((h, i) => (s.getColumn(i + 1).width = Math.max(h.length + 4, 14)))
 
   const d = wb.addWorksheet('ผลตอบกลับรายเคส')
-  const dh = ['encounter_id', 'HN', 'ชื่อผู้ป่วย', 'วันที่จำหน่าย', 'สิทธิ', 'ผู้จ่าย', 'เลขตั้งเบิกปัจจุบัน', 'วันที่ส่งเบิก', 'REP ล่าสุด', 'วันที่ตอบกลับ', 'สถานะ', 'ส่งแก้แล้ว รอผล', 'จำนวนรอบที่ติด C']
+  const dh = ['encounter_id', 'HN', 'ชื่อผู้ป่วย', 'วันที่จำหน่าย', 'สิทธิ', 'ผู้จ่าย', 'เลขตั้งเบิกปัจจุบัน', 'วันที่ส่งเบิก', 'REP ล่าสุด', 'วันที่ตอบกลับ', 'ยอดที่จ่าย (REP)', 'ยอดที่ตั้งเบิก', 'ส่วนต่าง', 'สถานะ', 'ส่งแก้แล้ว รอผล', 'จำนวนรอบที่ติด C']
   d.addRow(dh)
   for (const r of rows) {
     d.addRow([
       String(r.encounterId), r.hn, r.name, r.dischargeDate, r.coverageCode, r.payerId, r.currentClaimNo, r.submissionDate,
-      r.repNo, r.replyDate, RESULT_LABEL(r), r.resent ? 'ใช่' : '', r.cRounds || null,
+      r.repNo, r.replyDate, r.paidAmount, r.claimedAmount, r.diffAmount, RESULT_LABEL(r), r.resent ? 'ใช่' : '', r.cRounds || null,
     ])
   }
   dh.forEach((h, i) => (d.getColumn(i + 1).width = Math.max(h.length + 4, 14)))
+  for (const c of [10, 11, 12]) d.getColumn(c).numFmt = '#,##0.00'
   if (rows.length > 0) d.autoFilter = { from: { row: 1, column: 1 }, to: { row: rows.length + 1, column: dh.length } }
 
   const buf = await wb.xlsx.writeBuffer()

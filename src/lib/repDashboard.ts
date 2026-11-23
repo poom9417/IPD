@@ -21,6 +21,12 @@ export interface RepRow {
   /** เลขตั้งเบิกปัจจุบันของเคส (จากหน้าหลัก) */
   currentClaimNo: string | null
   submissionDate: string | null
+  /** ยอดที่ตั้งเบิก (submission_amount จากหน้าหลัก) */
+  claimedAmount: number | null
+  /** ยอดที่จ่าย จาก REP ล่าสุดของเคส (total_amount) */
+  paidAmount: number | null
+  /** ส่วนต่าง = ยอดที่จ่าย (REP) − ยอดที่ตั้งเบิก · null ถ้าขาดฝั่งใดฝั่งหนึ่ง */
+  diffAmount: number | null
   repNo: string
   /** วันที่กองทุนตอบกลับ (วันที่ออกรายงาน REP ล่าสุด) */
   replyDate: string
@@ -43,10 +49,13 @@ type Item = {
   claim_no: string | null
   payer_id: string | null
   coverage_code: string | null
+  total_amount: number | string | null
   rep_files: FileRef | FileRef[] | null
 }
 
-const SEL = 'id, encounter_id, admission_id, patient_name, tcode, claim_no, payer_id, coverage_code, rep_files(rep_no, issue_date)'
+const SEL = 'id, encounter_id, admission_id, patient_name, tcode, claim_no, payer_id, coverage_code, total_amount, rep_files(rep_no, issue_date)'
+const numOrNull = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
+const round2 = (n: number) => Math.round(n * 100) / 100
 const fileOf = (r: Item): FileRef => (Array.isArray(r.rep_files) ? r.rep_files[0] : r.rep_files) ?? { rep_no: '?', issue_date: '1970-01-01' }
 
 const chunks = <T,>(a: T[], n = 200): T[][] => {
@@ -79,16 +88,16 @@ export async function loadRepRows(): Promise<RepRow[]> {
 
   const admIds = [...new Set(items.map((i) => i.admission_id).filter((x): x is number => x != null))]
   const adm = new Map<number, { hn: string; discharge_date: string | null; coverage_code: string; payer_id: string }>()
-  const trk = new Map<number, { claim_no: string | null; submission_date: string | null }>()
+  const trk = new Map<number, { claim_no: string | null; submission_date: string | null; submission_amount: number | string | null }>()
   for (const c of chunks(admIds)) {
     const [a, t] = await Promise.all([
       supabase.from('admissions').select('admission_id, hn, discharge_date, coverage_code, payer_id').in('admission_id', c),
-      supabase.from('case_tracking_v').select('admission_id, claim_no, submission_date').in('admission_id', c),
+      supabase.from('case_tracking_v').select('admission_id, claim_no, submission_date, submission_amount').in('admission_id', c),
     ])
     if (a.error) throw new Error(a.error.message)
     if (t.error) throw new Error(t.error.message)
     for (const r of (a.data ?? []) as { admission_id: number; hn: string; discharge_date: string | null; coverage_code: string; payer_id: string }[]) adm.set(Number(r.admission_id), r)
-    for (const r of (t.data ?? []) as { admission_id: number; claim_no: string | null; submission_date: string | null }[]) trk.set(Number(r.admission_id), r)
+    for (const r of (t.data ?? []) as { admission_id: number; claim_no: string | null; submission_date: string | null; submission_amount: number | string | null }[]) trk.set(Number(r.admission_id), r)
   }
 
   const out: RepRow[] = []
@@ -105,6 +114,8 @@ export async function loadRepRows(): Promise<RepRow[]> {
     const t = admissionId != null ? trk.get(admissionId) : undefined
     const submissionDate = t?.submission_date ? t.submission_date.slice(0, 10) : null
     const result: RepResult = last.tcode === 'A' ? 'passed' : last.tcode === 'C' ? 'c' : 'other'
+    const claimedAmount = numOrNull(t?.submission_amount)
+    const paidAmount = numOrNull(last.total_amount)
     out.push({
       key,
       admissionId,
@@ -116,6 +127,9 @@ export async function loadRepRows(): Promise<RepRow[]> {
       payerId: a?.payer_id ?? last.payer_id,
       currentClaimNo: t?.claim_no ?? null,
       submissionDate,
+      claimedAmount,
+      paidAmount,
+      diffAmount: claimedAmount != null && paidAmount != null ? round2(paidAmount - claimedAmount) : null,
       repNo: f.rep_no,
       replyDate: f.issue_date.slice(0, 10),
       tcode: last.tcode,
