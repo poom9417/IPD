@@ -158,9 +158,9 @@ export interface SavedItem {
   dup_note: string | null
 }
 
-/* ───────────── เลขซ้ำ: REP = รายการที่เราส่งเบิกไปจริง จึงซ้ำได้เฉพาะ "ติด C แล้วแก้ส่งใหม่ด้วยเลขตั้งเบิกใหม่" ───────────── */
+/* ───────────── เลขซ้ำ: REP = รายการที่เราส่งเบิกไปจริง จึงซ้ำได้เฉพาะ "ติด C แล้วแก้ส่งใหม่ด้วยเลขตั้งเบิกเดิม" ───────────── */
 
-export type DupFlag = 'resubmitted_after_c' | 'duplicate_after_a' | 'same_claim_no'
+export type DupFlag = 'resubmitted_after_c' | 'duplicate_after_a' | 'changed_claim_no'
 
 export interface DupInfo {
   flag: DupFlag
@@ -174,13 +174,13 @@ export interface DupInfo {
 export const DUP_LABEL: Record<DupFlag, string> = {
   resubmitted_after_c: 'ส่งใหม่หลังติด C',
   duplicate_after_a: 'ซ้ำ: เคยผ่านแล้ว',
-  same_claim_no: 'ซ้ำ: เลขตั้งเบิกเดิม',
+  changed_claim_no: 'ซ้ำ: เลขตั้งเบิกเปลี่ยน',
 }
 
 /**
  * ตรวจแต่ละเคสของไฟล์ที่กำลังจะบันทึกกับ REP ก่อนหน้าของเคสเดียวกัน (admission_id เดียวกัน, ไม่นับไฟล์เดียวกัน)
- *  - ก่อนหน้า = C/T และเลขตั้งเบิกใหม่ต่างจากเดิม → ปกติ (ส่งใหม่หลังแก้ C ผ่านหรือไม่ผ่านก็ได้)
- *  - ก่อนหน้า = C/T แต่เลขตั้งเบิกเดิม/ไม่มี → ผิดปกติ (ยังไม่มีเลขตั้งเบิกใหม่)
+ *  - ก่อนหน้า = C/T และเลขตั้งเบิกยังเป็นเลขเดิม → ปกติ (ส่งเลขตั้งเบิกเดิมไปใหม่เพื่อแก้ C ผ่านหรือไม่ผ่านก็ได้)
+ *  - ก่อนหน้า = C/T แต่เลขตั้งเบิกเปลี่ยนไปจากเดิม → ผิดปกติ (การแก้ C ต้องส่งด้วยเลขเดิม)
  *  - ก่อนหน้า = A (ผ่านแล้ว) → ผิดปกติ ไม่ควรมีซ้ำ
  */
 export async function checkDuplicates(rep: RepFile, matches: Map<number, MatchResult>): Promise<Map<number, DupInfo>> {
@@ -217,15 +217,15 @@ export async function checkDuplicates(rep: RepFile, matches: Map<number, MatchRe
     if (prev.tcode === 'A') {
       out.set(enc, { flag: 'duplicate_after_a', needsDecision: true, prevRepNo: pf.rep_no, prevTcode: 'A', note: `เคสนี้ผ่าน (A) แล้วใน REP ${pf.rep_no} ปกติไม่ควรมีซ้ำ` })
     } else if (cur && prev.claim_no && cur !== prev.claim_no) {
-      out.set(enc, { flag: 'resubmitted_after_c', needsDecision: false, prevRepNo: pf.rep_no, prevTcode: prev.tcode, note: `ติด ${prev.tcode} ใน REP ${pf.rep_no} (เลขตั้งเบิก ${prev.claim_no}) ส่งใหม่ด้วยเลขตั้งเบิก ${cur}` })
-    } else {
       out.set(enc, {
-        flag: 'same_claim_no',
+        flag: 'changed_claim_no',
         needsDecision: true,
         prevRepNo: pf.rep_no,
         prevTcode: prev.tcode,
-        note: `ติด ${prev.tcode} ใน REP ${pf.rep_no} แต่เลขตั้งเบิกยังเป็น ${cur ?? '(ไม่มี)'} ไม่ใช่เลขใหม่ — ส่งใหม่ต้องมีเลขตั้งเบิกใหม่ (ตรวจว่าอัปไฟล์ GGO รอบใหม่แล้วหรือยัง)`,
+        note: `ติด ${prev.tcode} ใน REP ${pf.rep_no} (เลขตั้งเบิก ${prev.claim_no}) แต่ตอนนี้เลขตั้งเบิกเป็น ${cur} — การส่งแก้ C ต้องใช้เลขตั้งเบิกเดิม`,
       })
+    } else {
+      out.set(enc, { flag: 'resubmitted_after_c', needsDecision: false, prevRepNo: pf.rep_no, prevTcode: prev.tcode, note: `ติด ${prev.tcode} ใน REP ${pf.rep_no} ส่งใหม่ด้วยเลขตั้งเบิกเดิม ${cur ?? prev.claim_no ?? ''}` })
     }
   }
   return out

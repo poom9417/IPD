@@ -52,6 +52,38 @@ export const SAP_PAYERS: Record<string, SapPayerConfig> = {
 }
 
 /**
+ * เลือก config ตามผู้จ่าย + สิทธิ (50087 ใช้ร่วมกันระหว่าง LGO กับ ONHSI* จึงต้องดู coverage)
+ *   GGO 50257 · 0030001515 · C · GGO        GGO 50258 (กทม.) · 0030001516 · E · GGO
+ *   LGO 50087 · 0030001344 · E · LGO        ONHSI* 50087 · 0030001344 · E · ONHSI
+ *   ONHSI* 15251 · 0030001344 · N · ONHSI
+ * ไม่รู้จัก → null (หน้าจอแจ้งว่ายังไม่รองรับ)
+ */
+export function resolveSapConfig(payerId: string | null | undefined, coverageCode: string | null | undefined): SapPayerConfig | null {
+  const cov = (coverageCode ?? '').toUpperCase()
+  const base = SAP_PAYERS['50257']
+  switch (payerId) {
+    case '50257':
+      return base
+    case '50258':
+      return { ...base, payerId: '50258', account09: '0030001516', col09Flag: 'E', tagB: 'GGO' }
+    case '50087':
+      if (cov.startsWith('LGO')) return { ...base, payerId: '50087', account09: '0030001344', col09Flag: 'E', tagB: 'LGO' }
+      if (cov.startsWith('ONHSI')) return { ...base, payerId: '50087', account09: '0030001344', col09Flag: 'E', tagB: 'ONHSI' }
+      return null
+    case '15251':
+      if (cov.startsWith('ONHSI')) return { ...base, payerId: '15251', account09: '0030001344', col09Flag: 'N', tagB: 'ONHSI' }
+      return null
+    default:
+      return null
+  }
+}
+
+/** วันนี้ (เวลาไทย) เป็นวันศุกร์หรือไม่ */
+export function isFridayInBangkok(now: Date = new Date()): boolean {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', weekday: 'short' }).format(now) === 'Fri'
+}
+
+/**
  * กติกา: การตั้งหนี้ (เอาเข้า SAP) ของผู้จ่ายกลุ่มนี้ต้องทำวันศุกร์เท่านั้น
  * สปสช. / LGO (50087, 15251) และ กทม. (50258) — ไม่รวม GGO กรมบัญชีกลาง 50257
  * ไม่มีการเปลี่ยนวันที่ในไฟล์ — ใช้เตือนตอนกดดาวน์โหลดเท่านั้น

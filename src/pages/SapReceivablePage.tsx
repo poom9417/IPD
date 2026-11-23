@@ -20,7 +20,7 @@ import {
   type SavedItem,
 } from '../lib/repStore'
 import { ECLAIM_LABEL, ECLAIM_PAIRS, eclaimToRepFile, normHn, parseEclaimXls, type EclaimKind } from '../lib/eclaimXls'
-import { SAP_PAYERS, buildSapText, computeAmounts, isFriday, isFridayOnlyPayer, type SapCase } from '../lib/sapReceivable'
+import { resolveSapConfig, isFridayInBangkok, buildSapText, computeAmounts, isFridayOnlyPayer, type SapCase } from '../lib/sapReceivable'
 
 const money = (n: number | null | undefined) =>
   n == null ? '–' : n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -262,13 +262,13 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
           )}
           {dupAbnormal.length > 0 && (
             <Notice>
-              <b>เลขซ้ำผิดปกติ {dupAbnormal.length} ราย</b> — REP คือรายการที่ส่งเบิกไปจริง จึงซ้ำได้เฉพาะเคสที่ติด C แล้วส่งใหม่ด้วยเลขตั้งเบิกใหม่ ระบบตั้งเป็น "ข้าม" ไว้ให้ก่อน เลือก "บันทึก (ติดป้ายซ้ำ)" ในคอลัมน์ท้ายตารางได้ถ้าต้องการเก็บ:{' '}
+              <b>เลขซ้ำผิดปกติ {dupAbnormal.length} ราย</b> — REP คือรายการที่ส่งเบิกไปจริง จึงซ้ำได้เฉพาะเคสที่ติด C แล้วส่งใหม่ด้วยเลขตั้งเบิกเดิม ระบบตั้งเป็น "ข้าม" ไว้ให้ก่อน เลือก "บันทึก (ติดป้ายซ้ำ)" ในคอลัมน์ท้ายตารางได้ถ้าต้องการเก็บ:{' '}
               {dupAbnormal.map(([enc, d]) => `${enc} (${DUP_LABEL[d.flag]})`).join(', ')}
             </Notice>
           )}
           {dupResent.length > 0 && (
             <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">
-              ส่งใหม่หลังติด C ด้วยเลขตั้งเบิกใหม่ {dupResent.length} ราย (ปกติ ผ่านหรือไม่ผ่านดูได้ที่หน้า Code C): {dupResent.map(([enc]) => enc).join(', ')}
+              ส่งใหม่หลังติด C ด้วยเลขตั้งเบิกเดิม {dupResent.length} ราย (ปกติ ผ่านหรือไม่ผ่านดูได้ที่หน้า Code C): {dupResent.map(([enc]) => enc).join(', ')}
             </div>
           )}
           {existing && (
@@ -440,7 +440,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
       const m = live.get(item.encounter_id)
       const base = { item, live: m, already: !!item.sap_generated_at, sap: null }
       if (!m || m.status !== 'matched') return { ...base, problem: `จับคู่เคสไม่ได้: ${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` (${m.note})` : ''}` }
-      if (!m.payerId || !SAP_PAYERS[m.payerId]) return { ...base, problem: `ยังไม่รองรับไฟล์ SAP ของผู้จ่าย ${m.payerId ?? '–'} (ทำเพิ่มภายหลัง)` }
+      if (!resolveSapConfig(m.payerId, m.coverageCode)) return { ...base, problem: `ยังไม่รองรับไฟล์ SAP ของผู้จ่าย ${m.payerId ?? '–'} สิทธิ ${m.coverageCode ?? '–'}` }
       if (item.pcode && item.pcode !== '0') return { ...base, problem: `ส่งเกินกำหนด (pcode ${item.pcode}) ยอดอาจถูกปรับ ให้ตรวจก่อน` }
       if (!m.hn) return { ...base, problem: 'ไม่มี HN' }
       if (!m.dischargeDate) return { ...base, problem: 'ไม่มีวันที่จำหน่าย' }
@@ -490,7 +490,7 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
   const hasFridayRulePayer = ready.some((r) => isFridayOnlyPayer(r.live?.payerId))
 
   function onDownloadClick() {
-    if (hasFridayRulePayer && !isFriday()) {
+    if (hasFridayRulePayer && !isFridayInBangkok()) {
       setFridayWarn(true)
       return
     }
@@ -499,15 +499,22 @@ function SapTab({ nonce, active }: { nonce: number; active: boolean }) {
 
   async function download() {
     if (!file || ready.length === 0) return
-    const byPayer = new Map<string, SapRow[]>()
-    for (const r of ready) byPayer.set(r.live!.payerId!, [...(byPayer.get(r.live!.payerId!) ?? []), r])
+    // จัดกลุ่มตาม config (ผู้จ่าย + แท็ก) เพราะ 50087 มีทั้ง LGO และ ONHSI
+    const groups = new Map<string, { cfg: NonNullable<ReturnType<typeof resolveSapConfig>>; rows: SapRow[] }>()
+    for (const r of ready) {
+      const cfg = resolveSapConfig(r.live!.payerId, r.live!.coverageCode)!
+      const k = `${cfg.payerId}|${cfg.tagB}`
+      const g = groups.get(k) ?? { cfg, rows: [] }
+      g.rows.push(r)
+      groups.set(k, g)
+    }
     let text = ''
-    let tag = ''
-    for (const [payer, rs] of byPayer) {
-      const cfg = SAP_PAYERS[payer]
-      tag ||= cfg.tagB
+    const tags = new Set<string>()
+    for (const { cfg, rows: rs } of groups.values()) {
+      tags.add(cfg.tagB)
       text += buildSapText(rs.map((r) => r.sap!), cfg)
     }
+    const tag = [...tags].join('-')
     const name = `SAP_${tag}_REP${file.rep_no}_${file.issue_date.replace(/-/g, '')}.txt`
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
     const a = document.createElement('a')

@@ -158,8 +158,8 @@ function CasesTab({ cases, master, loading }: { cases: CCase[]; master: MasterCo
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="ค้างแก้" value={count('open')} sub="REP ตอบ C ยังไม่มีเลขตั้งเบิกใหม่" warn={count('open') > 0} active={status === 'open'} onClick={() => setStatus(pick('open'))} />
-        <StatCard label="ส่งใหม่แล้ว รอผล" value={count('resent')} sub="มีเลขตั้งเบิกใหม่ รอ REP รอบถัดไป" active={status === 'resent'} onClick={() => setStatus(pick('resent'))} />
+        <StatCard label="ค้างแก้" value={count('open')} sub="REP ตอบ C ยังไม่ได้ส่งแก้ด้วยเลขเดิม" warn={count('open') > 0} active={status === 'open'} onClick={() => setStatus(pick('open'))} />
+        <StatCard label="ส่งใหม่แล้ว รอผล" value={count('resent')} sub="ส่งแก้ด้วยเลขเดิมแล้ว รอ REP รอบถัดไป" active={status === 'resent'} onClick={() => setStatus(pick('resent'))} />
         <StatCard label="ผ่านแล้ว" value={count('passed')} sub="REP ล่าสุดเป็น A" active={status === 'passed'} onClick={() => setStatus(pick('passed'))} />
         <StatCard label="ทั้งหมดที่เคยติด C" value={cases.length} sub="กดอีกครั้งเพื่อกลับไปดูที่ยังไม่ปิด" active={status === 'all'} onClick={() => setStatus(status === 'all' ? 'active' : 'all')} />
       </div>

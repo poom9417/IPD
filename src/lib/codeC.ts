@@ -3,8 +3,8 @@ import { splitMsg } from './cignRep'
 
 /**
  * Code C แบบใหม่: คำนวณสดจากผลตอบกลับ REP ที่บันทึกไว้ (rep_items / rep_item_codes) + เลขตั้งเบิกปัจจุบันของเคส
- *  - open   = REP ล่าสุดของเคสเป็น C และยังไม่มีเลขตั้งเบิกใหม่ → ค้างแก้
- *  - resent = REP ล่าสุดเป็น C แต่เคสมีเลขตั้งเบิกใหม่แล้ว → ส่งใหม่แล้ว รอผลตอบกลับรอบใหม่
+ *  - open   = REP ล่าสุดของเคสเป็น C และยังไม่ได้ส่งแก้ (วันที่ส่งเบิกยังไม่ใหม่กว่าวันที่ REP ตอบ C) → ค้างแก้
+ *  - resent = REP ล่าสุดเป็น C แต่วันที่ส่งเบิกใหม่กว่าวันที่ REP ตอบ → ส่งแก้ด้วยเลขเดิมแล้ว รอผลตอบกลับรอบใหม่
  *  - passed = REP ล่าสุดของเคสเป็น A → ผ่านแล้ว (เคยติด C มาก่อน)
  *  - other  = REP ล่าสุดเป็นสถานะอื่น (เช่น T รอใบรับรองสิทธิ)
  */
@@ -159,7 +159,11 @@ export async function loadCCases(): Promise<CCase[]> {
     const currentClaimNo = t?.claim_no ?? null
     let status: CStatus = 'other'
     if (latest.tcode === 'A') status = 'passed'
-    else if (latest.tcode === 'C') status = currentClaimNo && latest.claimNo && currentClaimNo !== latest.claimNo ? 'resent' : 'open'
+    else if (latest.tcode === 'C') {
+      // ส่งแก้ด้วยเลขตั้งเบิกเดิม → เลขไม่เปลี่ยน จึงดูจากวันที่ส่งเบิกล่าสุดที่ใหม่กว่าวันที่ REP ตอบ C
+      const sd = t?.submission_date ? t.submission_date.slice(0, 10) : null
+      status = sd && sd > latest.issueDate ? 'resent' : 'open'
+    }
     return {
       key,
       admissionId,
