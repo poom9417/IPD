@@ -2,17 +2,19 @@
  * สร้างไฟล์ txt (tab-delimited) สำหรับนำเข้า SAP เพื่อตั้งหนี้จากผลตอบกลับ REP
  * รูปแบบอ้างอิงจากไฟล์ตัวอย่างที่ใช้จริง (47 คอลัมน์, ขึ้นบรรทัดใหม่แบบ CRLF)
  *
- * 1 เคส = 4 บรรทัด (H + L09 + L40 + L11) — กรณีไม่มีส่วนต่างจะไม่มีบรรทัด 40
+ * 1 เคส = H + L09 + (L40 หรือ L50 อย่างใดอย่างหนึ่ง) + L11 — กรณีไม่มีส่วนต่างจะไม่มีทั้ง 40 และ 50
  *   H   หัวเอกสาร   : วันที่จำหน่าย, วันที่ตอบกลับ, เลข Ref (claim_no)
- *   L09 ยอดที่จ่าย  : บัญชี ACCOUNT_09
- *   L40 ส่วนต่าง    : บัญชี ACCOUNT_40 = ยอดตั้งเบิก − ยอดที่จ่าย (เมื่อยอดตั้งเบิกมากกว่า)
+ *   L09 ยอดที่จ่าย  : บัญชี ACCOUNT_09 (Dr.)
+ *   L40 ส่วนต่าง Dr.: บัญชี ACCOUNT_40 = ยอดตั้งเบิก − ยอดที่จ่าย (เมื่อจ่ายน้อยกว่า)
+ *   L50 ส่วนต่าง Cr.: บัญชี/ฟิลด์เดียวกับ 40 แต่ขา 50 = ยอดที่จ่าย − ยอดตั้งเบิก (เมื่อจ่ายมากกว่า) (เพิ่ม 2026-11-25)
  *   L11 ลูกหนี้     : C+HN = ยอดที่เจนตั้งเบิก (ยอดส่งเบิก; เดิมใช้ยอด HIS — เปลี่ยน 2026-11-20) — HN = ตัวอักษร + ตัวเลข 8 หลัก (เติมศูนย์หน้า)
  *   L09 คอลัมน์ D   : 'C' (เดิม 'E')
  *
  * กติกายอด (ยืนยันกับผู้ใช้ 2026-11-11):
  *   จ่าย < ตั้งเบิก → 09 = จ่าย,     40 = ตั้งเบิก − จ่าย, 11 = ตั้งเบิก
  *   จ่าย = ตั้งเบิก → 09 = จ่าย,     ไม่มี 40,            11 = ตั้งเบิก
- *   จ่าย > ตั้งเบิก → 09 = ตั้งเบิก,  ไม่มี 40,            11 = ตั้งเบิก
+ *   จ่าย > ตั้งเบิก → 09 = จ่าย,     50 = จ่าย − ตั้งเบิก, 11 = ตั้งเบิก   (Dr. 09 = Cr. 50 + Cr. 11)
+ * 40 กับ 50 เกิดพร้อมกันไม่ได้ (คนละขา Dr./Cr.)
  */
 
 export interface SapPayerConfig {
@@ -118,8 +120,10 @@ export interface SapCase {
 export interface SapAmounts {
   /** บรรทัด 09 */
   a09: number
-  /** บรรทัด 40 (0 = ไม่สร้างบรรทัด) */
+  /** บรรทัด 40 — ส่วนต่าง Dr. (0 = ไม่สร้างบรรทัด) */
   a40: number
+  /** บรรทัด 50 — ส่วนต่าง Cr. (0 = ไม่สร้างบรรทัด) */
+  a50: number
   /** บรรทัด 11 */
   a11: number
   kind: 'short' | 'equal' | 'over'
@@ -142,9 +146,9 @@ const fromSatang = (s: number) => s / 100
 export function computeAmounts(claimAmount: number, paid: number): SapAmounts {
   const his = toSatang(claimAmount)
   const p = toSatang(paid)
-  if (p < his) return { a09: fromSatang(p), a40: fromSatang(his - p), a11: fromSatang(his), kind: 'short' }
-  if (p === his) return { a09: fromSatang(p), a40: 0, a11: fromSatang(his), kind: 'equal' }
-  return { a09: fromSatang(his), a40: 0, a11: fromSatang(his), kind: 'over' }
+  if (p < his) return { a09: fromSatang(p), a40: fromSatang(his - p), a50: 0, a11: fromSatang(his), kind: 'short' }
+  if (p === his) return { a09: fromSatang(p), a40: 0, a50: 0, a11: fromSatang(his), kind: 'equal' }
+  return { a09: fromSatang(p), a40: 0, a50: fromSatang(p - his), a11: fromSatang(his), kind: 'over' }
 }
 
 /** YYYY-MM-DD → DDMMYYYY (ค.ศ.) */
@@ -202,13 +206,15 @@ export function buildCaseRows(c: SapCase, cfg: SapPayerConfig): string[][] {
     }),
   )
 
-  if (amt.a40 > 0) {
+  // ส่วนต่าง: จ่ายน้อยกว่า → ขา 40 (Dr.) / จ่ายมากกว่า → ขา 50 (Cr.) — ฟิลด์อื่นเหมือนกันทุกช่อง
+  const diffLine = amt.a40 > 0 ? { key: '40', amount: amt.a40 } : amt.a50 > 0 ? { key: '50', amount: amt.a50 } : null
+  if (diffLine) {
     rows.push(
       row({
         0: 'L',
-        1: '40',
+        1: diffLine.key,
         2: cfg.account40,
-        4: fmtAmount(amt.a40),
+        4: fmtAmount(diffLine.amount),
         6: cfg.companyCode,
         7: cfg.profitCenter,
         8: cfg.col40Ref,

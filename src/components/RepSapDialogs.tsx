@@ -471,15 +471,16 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   })
 
   const totals = useMemo(() => {
-    let a09 = 0, a40 = 0, a11 = 0, paid = 0
+    let a09 = 0, a40 = 0, a50 = 0, a11 = 0, paid = 0
     for (const r of ready) {
       const a = computeAmounts(r.sap!.claimAmount, r.sap!.paid)
       a09 += Math.round(a.a09 * 100)
       a40 += Math.round(a.a40 * 100)
+      a50 += Math.round(a.a50 * 100)
       a11 += Math.round(a.a11 * 100)
       paid += Math.round(r.sap!.paid * 100)
     }
-    return { a09: a09 / 100, a40: a40 / 100, a11: a11 / 100, paid: paid / 100 }
+    return { a09: a09 / 100, a40: a40 / 100, a50: a50 / 100, a11: a11 / 100, paid: paid / 100 }
   }, [ready])
   const missing = rows.filter((r) => r.missingAmount)
   const needAck = withProblem.length > 0 || notPassed.length > 0
@@ -618,7 +619,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                   <th className={th}>เลขตั้งเบิก</th>
                   <th className={th + ' text-right'}>ยอดที่จ่าย (REP)</th>
                   <th className={th + ' text-right'}>ยอดตั้งเบิก</th>
-                  <th className={th + ' text-right'}>ส่วนต่าง (40)</th>
+                  <th className={th + ' text-right'}>ส่วนต่าง (40 / 50)</th>
                   <th className={th}>บรรทัดที่สร้าง</th>
                 </tr>
               </thead>
@@ -638,14 +639,14 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                       <td className={td}>{r.live?.claimNo ?? '–'}</td>
                       <td className={td + ' text-right tabular-nums'}>{money(r.item.total_amount)}</td>
                       <td className={td + ' text-right tabular-nums'}>{money(r.live?.claimAmount)}</td>
-                      <td className={td + ' text-right tabular-nums'}>{amt && amt.a40 > 0 ? money(amt.a40) : '–'}</td>
+                      <td className={td + ' text-right tabular-nums'}>{amt && amt.a40 > 0 ? `${money(amt.a40)} (40)` : amt && amt.a50 > 0 ? `${money(amt.a50)} (50)` : '–'}</td>
                       <td className={td}>
                         {amt
                           ? amt.kind === 'short'
                             ? 'H + 09 + 40 + 11'
                             : amt.kind === 'equal'
                               ? 'H + 09 + 11 (ยอดเท่ากัน ไม่มี 40)'
-                              : 'H + 09 + 11 (REP จ่ายมากกว่ายอดตั้งเบิก ตั้งตามยอดตั้งเบิก ไม่มี 40)'
+                              : 'H + 09 + 50 + 11 (REP จ่ายมากกว่ายอดตั้งเบิก ส่วนต่างตั้งขา 50)'
                           : '–'}
                       </td>
                     </tr>
@@ -665,8 +666,8 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
           )}
           <div className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4 text-sm">
             <div className="tabular-nums">
-              09 รวม <b>{money(totals.a09)}</b> + 40 รวม <b>{money(totals.a40)}</b> = <b>{money(totals.a09 + totals.a40)}</b> · 11 รวม <b>{money(totals.a11)}</b>{' '}
-              {Math.abs(totals.a09 + totals.a40 - totals.a11) < 0.005 ? '✓ สมดุล' : '✗ ไม่สมดุล'}
+              Dr.: 09 รวม <b>{money(totals.a09)}</b> + 40 รวม <b>{money(totals.a40)}</b> = <b>{money(totals.a09 + totals.a40)}</b> · Cr.: 11 รวม <b>{money(totals.a11)}</b> + 50 รวม <b>{money(totals.a50)}</b> = <b>{money(totals.a11 + totals.a50)}</b>{' '}
+              {Math.abs(totals.a09 + totals.a40 - totals.a11 - totals.a50) < 0.005 ? '✓ สมดุล' : '✗ ไม่สมดุล'}
             </div>
             {needAck && (
               <label className="flex items-center gap-2 text-ink">
