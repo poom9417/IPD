@@ -183,6 +183,15 @@ export default function ArSummaryDashboard() {
         </div>
       </div>
 
+      {/* แบนเนอร์วันที่ ณ — ให้หัวหน้าเห็นวันที่ชัดเจนเมื่อดู/พิมพ์รายงาน (เปลี่ยนตามวันที่ที่เลือก) */}
+      <section
+        aria-label="วันที่รายงาน"
+        className="mx-auto w-full max-w-4xl rounded-2xl border-2 border-ink bg-brand px-6 py-5 text-center"
+      >
+        <p className="text-lg font-bold tracking-wide text-ink sm:text-2xl">IPD ค้างส่งเบิก ณ</p>
+        <p className="mt-1 text-4xl font-extrabold leading-tight text-ink sm:text-6xl">{asOfThai}</p>
+      </section>
+
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">
           <span>โหลดข้อมูลไม่สำเร็จ: {error}</span>
@@ -207,7 +216,7 @@ export default function ArSummaryDashboard() {
                   </th>
                   <th rowSpan={2} colSpan={2} className="border-l border-ink/15 px-2 py-2 text-center font-semibold">
                     IPD ค้างส่งเบิก
-                    <div className="text-xs font-medium text-ink/70">ณ {asOfThai}</div>
+                    <div className="text-sm font-bold text-ink">ณ {asOfThai}</div>
                   </th>
                   <th colSpan={BUCKETS.length * 2} className="border-l border-ink/15 px-2 py-2 text-center font-semibold">
                     เกินกำหนดเรียกเก็บ IPD
