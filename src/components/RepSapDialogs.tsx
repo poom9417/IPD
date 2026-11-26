@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Button from './ui/Button'
 import { decodeRep, parseRep, splitMsg, type RepFile } from '../lib/cignRep'
 import RepOriginalView from './RepOriginalView'
+import DateInput from './DateInput'
+import MultiSelectBox from './MultiSelectBox'
+import { loadNames } from '../lib/repDashboard'
+import { inRange, pairsOf } from '../lib/repFilters'
 import {
   DUP_LABEL,
   MATCH_LABEL,
@@ -378,9 +382,19 @@ interface SapRow {
 
 function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean; onGenerated?: () => void }) {
   const [files, setFiles] = useState<SavedFile[]>([])
-  const [fileId, setFileId] = useState<number | null>(null)
+  /** REP ที่ติ๊กเลือก (เลือกได้หลายรายการ → รวมเป็นไฟล์ SAP เดียว) */
+  const [selected, setSelected] = useState<number[]>([])
   const [items, setItems] = useState<SavedItem[]>([])
+  /** ผลจับคู่ล่าสุด คีย์ด้วย rep_items.id (encounter เดียวกันอาจอยู่ในหลาย REP) */
   const [live, setLive] = useState<Map<number, MatchResult>>(new Map())
+  const [repQuery, setRepQuery] = useState('')
+  const [issueFrom, setIssueFrom] = useState('')
+  const [issueTo, setIssueTo] = useState('')
+  const [covSel, setCovSel] = useState<string[]>([])
+  const [paySel, setPaySel] = useState<string[]>([])
+  const [names, setNames] = useState<{ coverage: Map<string, string>; payer: Map<string, string> }>({ coverage: new Map(), payer: new Map() })
+  const loadSeq = useRef(0)
+  const fileId = selected.length === 1 ? selected[0] : null
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ack, setAck] = useState(false)
@@ -407,45 +421,83 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
         if (cancelled) return
         setFiles(f)
         setError(null)
-        setFileId((cur) => cur ?? f[0]?.id ?? null)
+        setSelected((cur) => {
+          const ok = cur.filter((id) => f.some((x) => x.id === id))
+          return ok.length > 0 ? ok : f[0] ? [f[0].id] : []
+        })
       })
       .catch((e) => {
         if (!cancelled) setError(`โหลดรายการ REP ที่บันทึกไว้ไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
       })
+    loadNames().then((n) => !cancelled && setNames(n)).catch(() => {})
     return () => {
       cancelled = true
     }
   }, [active, nonce])
 
-  async function load(id: number) {
+  async function load(ids: number[]) {
+    const seq = ++loadSeq.current
     setLoading(true)
     setError(null)
     setDone(null)
     setAck(false)
     setIncludeAlready(false)
     try {
-      const its = await loadSavedItems(id)
+      const its: SavedItem[] = []
+      const lv = new Map<number, MatchResult>()
+      for (const id of ids) {
+        const fi = await loadSavedItems(id)
+        const m = await matchEncounters(fi.filter((i) => i.tcode === 'A').map((i) => ({ encounterId: i.encounter_id, section: i.section ?? 1 })))
+        for (const i of fi) {
+          const r = m.get(i.encounter_id)
+          if (r && i.tcode === 'A') lv.set(i.id, r)
+        }
+        its.push(...fi)
+      }
+      if (seq !== loadSeq.current) return
       setItems(its)
-      setLive(await matchEncounters(its.filter((i) => i.tcode === 'A').map((i) => ({ encounterId: i.encounter_id, section: i.section ?? 1 }))))
+      setLive(lv)
     } catch (e) {
-      setError(`โหลดข้อมูลไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
+      if (seq === loadSeq.current) setError(`โหลดข้อมูลไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }
+  const selectedKey = selected.join(',')
   useEffect(() => {
     setRaw(null)
-    if (fileId != null) void load(fileId)
-  }, [fileId])
+    void load(selected)
+  }, [selectedKey])
 
-  const file = files.find((f) => f.id === fileId) ?? null
-  const aItems = items.filter((i) => i.tcode === 'A')
-  const notPassed = items.filter((i) => i.tcode !== 'A')
+  const fileById = useMemo(() => new Map(files.map((f) => [f.id, f])), [files])
+  const selectedFiles = useMemo(() => selected.map((id) => fileById.get(id)).filter((f): f is SavedFile => !!f), [selected, fileById])
+  const file = selectedFiles.length === 1 ? selectedFiles[0] : null
+
+  // รายการ REP ที่แสดงให้เลือก: กรองตามเลขที่ REP และช่วงวันที่ออกรายงาน
+  const visibleFiles = useMemo(() => {
+    const q = repQuery.trim().toLowerCase()
+    return files.filter((f) => (!q || f.rep_no.toLowerCase().includes(q)) && inRange(f.issue_date, issueFrom, issueTo))
+  }, [files, repQuery, issueFrom, issueTo])
+  const toggleFile = (id: number) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+
+  // ตัวกรองสิทธิ / ผู้จ่าย ใช้คัดเคสในตาราง (ค่าจากผลจับคู่ล่าสุด ถ้าไม่มีใช้ค่าที่บันทึกไว้)
+  const covOf = (i: SavedItem) => live.get(i.id)?.coverageCode ?? i.coverage_code
+  const payOf = (i: SavedItem) => live.get(i.id)?.payerId ?? i.payer_id
+  const passFilter = (i: SavedItem) => (covSel.length === 0 || (!!covOf(i) && covSel.includes(covOf(i)!))) && (paySel.length === 0 || (!!payOf(i) && paySel.includes(payOf(i)!)))
+  const pairs = useMemo(() => pairsOf(items.map((i) => ({ coverageCode: covOf(i) ?? null, payerId: payOf(i) ?? null }))), [items, live])
+  const covOptions = useMemo(() => [...new Set(pairs.map((p) => p.coverageCode))].sort().map((c) => ({ value: c, label: names.coverage.get(c) ?? '' })), [pairs, names])
+  const payOptions = useMemo(
+    () => [...new Set(pairs.filter((p) => covSel.length === 0 || covSel.includes(p.coverageCode)).map((p) => p.payerId))].sort().map((p) => ({ value: p, label: names.payer.get(p) ?? '' })),
+    [pairs, covSel, names],
+  )
+  const allA = items.filter((i) => i.tcode === 'A')
+  const aItems = allA.filter(passFilter)
+  const notPassed = items.filter((i) => i.tcode !== 'A').filter(passFilter)
 
   const rows: SapRow[] = useMemo(() => {
-    if (!file) return []
+    if (selectedFiles.length === 0) return []
     return aItems.map((item) => {
-      const m = live.get(item.encounter_id)
+      const m = live.get(item.id)
       const base = { item, live: m, already: !!item.sap_generated_at, sap: null }
       if (!m || m.status !== 'matched') return { ...base, problem: `จับคู่เคสไม่ได้: ${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` (${m.note})` : ''}` }
       if (!resolveSapConfig(m.payerId, m.coverageCode)) return { ...base, problem: `ยังไม่รองรับไฟล์ SAP ของผู้จ่าย ${m.payerId ?? '–'} สิทธิ ${m.coverageCode ?? '–'}` }
@@ -458,17 +510,23 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
       return {
         ...base,
         problem: null,
-        sap: { encounterId: item.encounter_id, hn: m.hn, dischargeDate: m.dischargeDate, claimNo: m.claimNo, claimAmount: m.claimAmount, paid: item.total_amount, replyDate: file.issue_date },
+        sap: { encounterId: item.encounter_id, hn: m.hn, dischargeDate: m.dischargeDate, claimNo: m.claimNo, claimAmount: m.claimAmount, paid: item.total_amount, replyDate: fileById.get(item.rep_file_id)!.issue_date },
       }
     }).sort((a, b) => Number(!!b.problem) - Number(!!a.problem))
-  }, [aItems, live, file])
+  }, [aItems, live, selectedFiles, fileById])
 
   const ready = rows.filter((r) => !r.problem && (!r.already || includeAlready))
   const withProblem = rows.filter((r) => r.problem || (r.already && !includeAlready))
-  const changed = aItems.filter((i) => {
-    const m = live.get(i.encounter_id)
+  const changed = allA.filter((i) => {
+    const m = live.get(i.id)
     return m && (m.status !== i.match_status || m.admissionId !== i.admission_id || m.claimNo !== i.claim_no)
   })
+  // encounter เดียวกันพร้อมสร้างไฟล์จากหลาย REP → เตือนกันตั้งหนี้ซ้ำ
+  const dupEncounters = useMemo(() => {
+    const cnt = new Map<number, number>()
+    for (const r of ready) cnt.set(r.item.encounter_id, (cnt.get(r.item.encounter_id) ?? 0) + 1)
+    return [...cnt.entries()].filter(([, n]) => n > 1).map(([e]) => e)
+  }, [ready])
 
   const totals = useMemo(() => {
     let a09 = 0, a40 = 0, a50 = 0, a11 = 0, paid = 0
@@ -487,8 +545,8 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
 
   async function refreshMatches() {
     try {
-      await updateMatches(changed.map((i) => ({ id: i.id, match: live.get(i.encounter_id)! })))
-      if (fileId != null) await load(fileId)
+      await updateMatches(changed.map((i) => ({ id: i.id, match: live.get(i.id)! })))
+      await load(selected)
       setDone('อัปเดตผลจับคู่ที่บันทึกไว้แล้ว')
     } catch (e) {
       setError(`อัปเดตไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
@@ -507,7 +565,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   }
 
   async function download() {
-    if (!file || ready.length === 0) return
+    if (selectedFiles.length === 0 || ready.length === 0) return
     // จัดกลุ่มตาม config (ผู้จ่าย + แท็ก) เพราะ 50087 มีทั้ง LGO และ ONHSI
     const groups = new Map<string, { cfg: NonNullable<ReturnType<typeof resolveSapConfig>>; rows: SapRow[] }>()
     for (const r of ready) {
@@ -524,7 +582,10 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
       text += buildSapText(rs.map((r) => r.sap!), cfg)
     }
     const tag = [...tags].join('-')
-    const name = `SAP_${tag}_REP${file.rep_no}_${file.issue_date.replace(/-/g, '')}.txt`
+    const nos = selectedFiles.map((f) => f.rep_no)
+    const repPart = nos.length <= 3 ? nos.map((n) => `REP${n}`).join('-') : `${nos.length}REPs`
+    const datePart = selectedFiles.map((f) => f.issue_date).sort().reverse()[0].replace(/-/g, '')
+    const name = `SAP_${tag}_${repPart}_${datePart}.txt`
     const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
     const a = document.createElement('a')
     a.href = url
@@ -537,7 +598,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
     try {
       await markSapGenerated(ready.map((r) => r.item.id), name)
       msg += ' และบันทึกสถานะ "สร้างไฟล์ SAP แล้ว" ไว้ในระบบ'
-      if (fileId != null) await load(fileId)
+      await load(selected)
       onGenerated?.()
     } catch (e) {
       msg += ` — แต่บันทึกสถานะไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`
@@ -547,22 +608,73 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4">
-        <label className="text-sm text-ink/70">
-          <div className="mb-1">เลือก REP ที่บันทึกไว้</div>
-          <select
-            value={fileId ?? ''}
-            onChange={(e) => setFileId(Number(e.target.value))}
-            className="rounded-lg border border-ink/30 bg-surface px-3 py-2 text-sm text-ink"
-          >
-            {files.length === 0 && <option value="">ยังไม่มี REP ที่บันทึกไว้</option>}
-            {files.map((f) => (
-              <option key={f.id} value={f.id}>
-                REP {f.rep_no} · {fmtDate(f.issue_date)} · ผ่าน {f.passed_count} / ไม่ผ่าน {f.not_passed_count}
-              </option>
+      <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm text-ink/70">
+            <div className="mb-1 text-xs font-semibold">เลขที่ REP</div>
+            <input value={repQuery} onChange={(e) => setRepQuery(e.target.value)} placeholder="ค้นหาเลข REP…" className="form-input w-40 py-2 text-sm" />
+          </label>
+          <div className="text-sm text-ink/70">
+            <div className="mb-1 text-xs font-semibold">วันที่ออกรายงาน REP</div>
+            <div className="flex items-start gap-1.5">
+              <DateInput value={issueFrom} onChange={setIssueFrom} className="w-full rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink" title="จากวันที่ (ถ้าเลือกช่องเดียว = วันนั้นวันเดียว)" />
+              <span className="pt-2 text-xs text-ink/50">ถึง</span>
+              <DateInput value={issueTo} onChange={setIssueTo} min={issueFrom || undefined} className="w-full rounded-lg border border-ink/25 bg-surface px-3 py-2 text-sm text-ink" />
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-semibold text-ink/70">สิทธิ</div>
+            <MultiSelectBox
+              options={covOptions}
+              value={covSel}
+              onChange={(cov) => {
+                setCovSel(cov)
+                const allowed = new Set(pairs.filter((p) => cov.length === 0 || cov.includes(p.coverageCode)).map((p) => p.payerId))
+                setPaySel((cur) => cur.filter((p) => allowed.has(p)))
+              }}
+              allLabel="ทุกสิทธิ"
+              unit="สิทธิ"
+              searchPlaceholder="ค้นหารหัสหรือชื่อสิทธิ…"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-semibold text-ink/70">ผู้จ่าย (payer)</div>
+            <MultiSelectBox options={payOptions} value={paySel} onChange={setPaySel} allLabel="ทุกผู้จ่าย" unit="ผู้จ่าย" searchPlaceholder="ค้นหารหัสหรือชื่อผู้จ่าย…" />
+          </div>
+          {(repQuery || issueFrom || issueTo || covSel.length > 0 || paySel.length > 0) && (
+            <Button type="button" variant="outline" onClick={() => { setRepQuery(''); setIssueFrom(''); setIssueTo(''); setCovSel([]); setPaySel([]) }}>
+              ล้างตัวกรอง
+            </Button>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-1 flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-semibold text-ink/70">เลือก REP ที่บันทึกไว้ (ติ๊กได้หลายรายการ → รวมเป็นไฟล์ SAP เดียว)</span>
+            <button type="button" className="font-semibold text-ink hover:underline" onClick={() => setSelected((cur) => Array.from(new Set([...cur, ...visibleFiles.map((f) => f.id)])))}>
+              เลือกทั้งหมดที่กรองแล้ว ({visibleFiles.length})
+            </button>
+            <button type="button" className="font-semibold text-ink hover:underline" onClick={() => setSelected([])}>
+              ล้างที่เลือก
+            </button>
+            <span className="text-ink/60">เลือกอยู่ {selected.length} REP</span>
+          </div>
+          <div className="max-h-56 overflow-auto rounded-lg border border-line">
+            {files.length === 0 && <p className="px-3 py-3 text-sm text-ink/70">ยังไม่มี REP ที่บันทึกไว้</p>}
+            {files.length > 0 && visibleFiles.length === 0 && <p className="px-3 py-3 text-sm text-ink/70">ไม่พบ REP ตามตัวกรอง</p>}
+            {visibleFiles.map((f) => (
+              <label key={f.id} className="flex cursor-pointer items-center gap-3 border-b border-line px-3 py-1.5 text-sm last:border-b-0 hover:bg-paper">
+                <input type="checkbox" checked={selected.includes(f.id)} onChange={() => toggleFile(f.id)} />
+                <span className="font-mono text-xs font-medium text-ink">REP {f.rep_no}</span>
+                <span className="text-ink/70">{fmtDate(f.issue_date)}</span>
+                <span className="text-ink/60">ผ่าน {f.passed_count} / ไม่ผ่าน {f.not_passed_count}</span>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+          {selected.some((id) => !visibleFiles.some((f) => f.id === id)) && (
+            <p className="mt-1 text-xs text-ink/60">มี REP ที่เลือกไว้แต่ถูกซ่อนด้วยตัวกรองด้านบน (ยังนับรวมในไฟล์)</p>
+          )}
+        </div>
         {file && (
           <Button type="button" variant="outline" onClick={() => void toggleRaw()}>
             {raw && raw.fileId === fileId ? 'ซ่อนต้นฉบับ REP' : 'ดูต้นฉบับ REP (แบบ Notepad)'}
@@ -574,15 +686,20 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
       {error && <Notice>{error}</Notice>}
       {loading && <div className="text-sm text-ink/70">กำลังโหลดและจับคู่ข้อมูลล่าสุด…</div>}
 
-      {file && !loading && (
+      {selectedFiles.length > 0 && !loading && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card label="รายการผ่าน (A)" value={`${aItems.length} ราย`} sub={`REP ${file.rep_no} · ${fmtDate(file.issue_date)}`} />
+            <Card label="รายการผ่าน (A)" value={`${aItems.length} ราย`} sub={file ? `REP ${file.rep_no} · ${fmtDate(file.issue_date)}` : `${selectedFiles.length} REP ที่เลือก`} />
             <Card label="พร้อมสร้างไฟล์" value={`${ready.length} ราย`} sub={`ยอดที่จ่าย ${money(totals.paid)}`} />
             <Card label="ยังสร้างไม่ได้ / ถูกข้าม" value={`${withProblem.length} ราย`} sub="เหตุผลอยู่ในตารางสีแดง" warn={withProblem.length > 0} />
-            <Card label="สร้างไฟล์ SAP แล้ว" value={`${aItems.filter((i) => i.sap_generated_at).length} ราย`} sub="จากรายการผ่านของ REP นี้" />
+            <Card label="สร้างไฟล์ SAP แล้ว" value={`${aItems.filter((i) => i.sap_generated_at).length} ราย`} sub="จากรายการผ่านของ REP ที่เลือก" />
           </div>
 
+          {dupEncounters.length > 0 && (
+            <Notice>
+              <b>เตือน:</b> encounter เดียวกันปรากฏในหลาย REP ที่พร้อมสร้างไฟล์ ({dupEncounters.join(', ')}) — ตรวจก่อนว่าไม่ได้ตั้งหนี้ซ้ำ
+            </Notice>
+          )}
           {withProblem.length > 0 && (
             <Notice>
               <b>มี {withProblem.length} รายการที่สร้างไฟล์ไม่ได้</b> (ไม่ถูกข้ามเงียบ ๆ ต้องตรวจก่อน): {withProblem.map((r) => r.item.encounter_id).join(', ')}
@@ -590,7 +707,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
           )}
           {notPassed.length > 0 && (
             <Notice>
-              REP นี้มี {notPassed.length} รายการที่ไม่ผ่าน (ต้องแก้ไขแล้วส่งใหม่) จึงไม่นำมาตั้งหนี้: {notPassed.map((n) => `${n.encounter_id} (${n.tcode})`).join(', ')}
+              REP ที่เลือกมี {notPassed.length} รายการที่ไม่ผ่าน (ต้องแก้ไขแล้วส่งใหม่) จึงไม่นำมาตั้งหนี้: {notPassed.map((n) => `${n.encounter_id} (${n.tcode})`).join(', ')}
             </Notice>
           )}
           {changed.length > 0 && (
@@ -613,6 +730,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
               <thead>
                 <tr className="bg-brand text-ink">
                   <th className={th}>สถานะ</th>
+                  <th className={th}>REP</th>
                   <th className={th}>encounter_id</th>
                   <th className={th}>HN</th>
                   <th className={th}>ชื่อผู้ป่วย</th>
@@ -633,6 +751,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                       <td className={td + (skipped ? ' whitespace-normal text-rose' : '')}>
                         {r.problem ? r.problem : r.already && !includeAlready ? `เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''})` : 'พร้อม'}
                       </td>
+                      <td className={td + ' tabular-nums'}>{fileById.get(r.item.rep_file_id)?.rep_no ?? '–'}</td>
                       <td className={td + ' tabular-nums'}>{r.item.encounter_id}</td>
                       <td className={td}>{r.live?.hn ?? '–'}</td>
                       <td className={td}>{r.item.patient_name}</td>
