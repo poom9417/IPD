@@ -80,23 +80,50 @@ export async function loadRepRows(): Promise<RepRow[]> {
     supabase.from('rep_items').select(SEL).order('id', { ascending: true }).range(a, b) as unknown as PromiseLike<{ data: Item[] | null; error: { message: string } | null }>,
   )
 
+  // encounter ที่มีหลายสิทธิ: ถ้า REP ผูกไว้กับแถว UNK / DIS_* (หรือยังไม่ผูก) ให้ใช้แถวที่ไม่ใช่ UNK / DIS
+  // เหมือนเงื่อนไขสร้างไฟล์ SAP — เพื่อให้เลขตั้งเบิก / ยอดตั้งเบิกมาจากสิทธิที่ใช้เบิกจริง ค้นหาด้วยเลขตั้งเบิกได้
+  type AdmLite = { admission_id: number; hn: string; discharge_date: string | null; coverage_code: string; payer_id: string; encounter_id: number }
+  const isUnkOrDis = (a: { coverage_code: string | null; payer_id: string | null }) => {
+    const cov = (a.coverage_code ?? '').toUpperCase()
+    return cov === 'UNK' || (a.payer_id ?? '').toUpperCase() === 'UNK' || cov.startsWith('DIS')
+  }
+  const encIds = [...new Set(items.map((i) => Number(i.encounter_id)))]
+  const adm = new Map<number, AdmLite>()
+  const byEnc = new Map<number, AdmLite[]>()
+  for (const c of chunks(encIds)) {
+    const { data, error } = await supabase.from('admissions').select('admission_id, encounter_id, hn, discharge_date, coverage_code, payer_id').in('encounter_id', c)
+    if (error) throw new Error(error.message)
+    for (const r of (data ?? []) as AdmLite[]) {
+      adm.set(Number(r.admission_id), r)
+      byEnc.set(Number(r.encounter_id), [...(byEnc.get(Number(r.encounter_id)) ?? []), r])
+    }
+  }
+  const resolveAdm = (it: Item): number | null => {
+    const stored = it.admission_id == null ? null : Number(it.admission_id)
+    const storedRow = stored != null ? adm.get(stored) : undefined
+    if (storedRow && !isUnkOrDis(storedRow)) return stored
+    const list = byEnc.get(Number(it.encounter_id)) ?? []
+    if (list.length > 1) {
+      const pref = list.filter((a) => !isUnkOrDis(a))
+      if (pref.length === 1) return Number(pref[0].admission_id)
+    }
+    return stored
+  }
+  const resolved = new Map<number, number | null>() // rep_items.id → admission_id ที่ใช้แสดง
+  for (const it of items) resolved.set(Number(it.id), resolveAdm(it))
+
   const groups = new Map<string, Item[]>()
   for (const it of items) {
-    const k = it.admission_id != null ? `a${it.admission_id}` : `e${it.encounter_id}`
+    const ra = resolved.get(Number(it.id))
+    const k = ra != null ? `a${ra}` : `e${it.encounter_id}`
     groups.set(k, [...(groups.get(k) ?? []), it])
   }
 
-  const admIds = [...new Set(items.map((i) => i.admission_id).filter((x): x is number => x != null))]
-  const adm = new Map<number, { hn: string; discharge_date: string | null; coverage_code: string; payer_id: string }>()
+  const admIds = [...new Set([...resolved.values()].filter((x): x is number => x != null))]
   const trk = new Map<number, { claim_no: string | null; submission_date: string | null; submission_amount: number | string | null }>()
   for (const c of chunks(admIds)) {
-    const [a, t] = await Promise.all([
-      supabase.from('admissions').select('admission_id, hn, discharge_date, coverage_code, payer_id').in('admission_id', c),
-      supabase.from('case_tracking_v').select('admission_id, claim_no, submission_date, submission_amount').in('admission_id', c),
-    ])
-    if (a.error) throw new Error(a.error.message)
+    const t = await supabase.from('case_tracking_v').select('admission_id, claim_no, submission_date, submission_amount').in('admission_id', c)
     if (t.error) throw new Error(t.error.message)
-    for (const r of (a.data ?? []) as { admission_id: number; hn: string; discharge_date: string | null; coverage_code: string; payer_id: string }[]) adm.set(Number(r.admission_id), r)
     for (const r of (t.data ?? []) as { admission_id: number; claim_no: string | null; submission_date: string | null; submission_amount: number | string | null }[]) trk.set(Number(r.admission_id), r)
   }
 
@@ -109,7 +136,7 @@ export async function loadRepRows(): Promise<RepRow[]> {
     })
     const last = sorted[sorted.length - 1]
     const f = fileOf(last)
-    const admissionId = last.admission_id == null ? null : Number(last.admission_id)
+    const admissionId = resolved.get(Number(last.id)) ?? null
     const a = admissionId != null ? adm.get(admissionId) : undefined
     const t = admissionId != null ? trk.get(admissionId) : undefined
     const submissionDate = t?.submission_date ? t.submission_date.slice(0, 10) : null
