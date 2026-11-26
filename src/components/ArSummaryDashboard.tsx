@@ -126,12 +126,21 @@ export default function ArSummaryDashboard() {
 
   return (
     <main data-tour="ar-summary" className="w-full space-y-4 px-4 py-6 sm:px-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink">IPD ค้างส่งเบิก รวมทุกสิทธิ</h1>
           <p className="mt-1 text-sm text-ink/70">
             นับเคสที่จำหน่ายแล้วและยังไม่ส่งเบิก ณ วันที่เลือก · อายุนับจากวันที่จำหน่ายถึงวันที่เลือก
           </p>
+        </div>
+
+        {/* แบนเนอร์วันที่ ณ (ขนาดกะทัดรัด อยู่กลางแถวหัวข้อ) — ให้หัวหน้าเห็นวันที่ชัดเจน เปลี่ยนตามวันที่ที่เลือก */}
+        <div
+          aria-label="วันที่รายงาน"
+          className="mx-auto rounded-xl border-2 border-ink bg-brand px-5 py-2 text-center"
+        >
+          <p className="text-sm font-bold text-ink">IPD ค้างส่งเบิก ณ</p>
+          <p className="text-2xl font-extrabold leading-tight text-ink sm:text-3xl">{asOfThai}</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm text-ink/70">
@@ -182,15 +191,6 @@ export default function ArSummaryDashboard() {
           )}
         </div>
       </div>
-
-      {/* แบนเนอร์วันที่ ณ — ให้หัวหน้าเห็นวันที่ชัดเจนเมื่อดู/พิมพ์รายงาน (เปลี่ยนตามวันที่ที่เลือก) */}
-      <section
-        aria-label="วันที่รายงาน"
-        className="mx-auto w-full max-w-4xl rounded-2xl border-2 border-ink bg-brand px-6 py-5 text-center"
-      >
-        <p className="text-lg font-bold tracking-wide text-ink sm:text-2xl">IPD ค้างส่งเบิก ณ</p>
-        <p className="mt-1 text-4xl font-extrabold leading-tight text-ink sm:text-6xl">{asOfThai}</p>
-      </section>
 
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-rose/30 bg-rose-soft/50 px-4 py-2 text-sm text-rose">
