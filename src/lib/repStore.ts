@@ -25,6 +25,8 @@ export interface MatchResult {
   dischargeDate: string | null
   /** ยอดที่เจนตั้งเบิก (ยอดส่งเบิก submission_amount) — ใช้เป็นยอดบรรทัด 11 ในไฟล์ SAP */
   claimAmount: number | null
+  /** true = encounter นี้มีหลายสิทธิ ระบบเลือกแถวที่ไม่ใช่ UNK / DIS_* ให้เอง (รายละเอียดอยู่ใน note) */
+  autoPicked?: boolean
 }
 
 const CHUNK = 200
@@ -63,11 +65,12 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
   const empty = (status: MatchStatus, note: string): MatchResult => ({
     status, note, admissionId: null, payerId: null, coverageCode: null, claimNo: null, hn: null, dischargeDate: null, claimAmount: null,
   })
-  const found = (a: Adm): MatchResult => {
+  const found = (a: Adm, note = '', autoPicked = false): MatchResult => {
     const t = trk.get(Number(a.admission_id))
     return {
       status: 'matched',
-      note: '',
+      note,
+      autoPicked,
       admissionId: Number(a.admission_id),
       payerId: a.payer_id,
       coverageCode: a.coverage_code,
@@ -76,6 +79,26 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
       dischargeDate: a.discharge_date ? a.discharge_date.slice(0, 10) : null,
       claimAmount: t?.submission_amount == null ? null : Number(t.submission_amount),
     }
+  }
+
+  const lab = (a: Adm) => `${a.coverage_code}/${a.payer_id}`
+  /** สิทธิที่ "ไม่ใช้ตั้งหนี้": UNK (ไม่เบิก) และ DIS ทั้งหมด (DIS_*) */
+  const isUnkOrDis = (a: Adm) => {
+    const cov = (a.coverage_code ?? '').toUpperCase()
+    return cov === 'UNK' || (a.payer_id ?? '').toUpperCase() === 'UNK' || cov.startsWith('DIS')
+  }
+  /**
+   * หลายแถวใน encounter เดียว → เลือกแถวที่ไม่ใช่ UNK / DIS_* ให้ก่อน
+   *  - เหลือแถวเดียว → เลือกให้ + แจ้งเตือน (autoPicked)
+   *  - เหลือมากกว่า 1 (หรือเป็น UNK/DIS หมด) → ambiguous ให้ผู้ใช้ระบุเอง ยังไม่สร้างไฟล์
+   */
+  const resolveMany = (rows: Adm[], where: string): MatchResult => {
+    if (rows.length === 1) return found(rows[0])
+    const all = rows.map(lab).join(', ')
+    const pref = rows.filter((a) => !isUnkOrDis(a))
+    if (pref.length === 1) return found(pref[0], `${where}มี ${rows.length} แถว (${all}) — ระบบเลือก ${lab(pref[0])} ให้แล้ว (ตัดสิทธิ UNK / DIS ออก)`, true)
+    if (pref.length === 0) return empty('ambiguous', `${where}มี ${rows.length} แถว (${all}) เป็น UNK / DIS ทั้งหมด ระบุเองว่าแถวไหน`)
+    return empty('ambiguous', `${where}มี ${pref.length} สิทธิที่ไม่ใช่ UNK / DIS (${pref.map(lab).join(', ')}) ระบุเองว่าแถวไหน`)
   }
 
   const out = new Map<number, MatchResult>()
@@ -90,8 +113,7 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
       const label = allow.map((p) => `${p.coverage}/${p.payer}`).join(' หรือ ')
       const m = list.filter((a) => allow.some((p) => p.payer === a.payer_id && (a.coverage_code === p.coverage || a.coverage_code.startsWith(p.coverage + '_'))))
       if (m.length === 0) out.set(encounterId, empty('payer_mismatch', `ระบบมี ${list.map((a) => a.coverage_code + '/' + a.payer_id).join(', ')} แต่ไฟล์นี้คือ ${label}`))
-      else if (m.length > 1) out.set(encounterId, empty('ambiguous', `มี ${m.length} แถวที่เป็น ${label}`))
-      else out.set(encounterId, found(m[0]))
+      else out.set(encounterId, resolveMany(m, `ชุด ${label} `))
       continue
     }
     if (section > 0) {
@@ -102,13 +124,11 @@ export async function matchEncounters(inputs: { encounterId: number; section: nu
       }
       const m = list.filter((a) => a.payer_id === expected)
       if (m.length === 0) out.set(encounterId, empty('payer_mismatch', `ระบบมีผู้จ่าย ${list.map((a) => a.payer_id).join(', ')} แต่ REP ตอนที่ ${section} คือ ${expected}`))
-      else if (m.length > 1) out.set(encounterId, empty('ambiguous', `มี ${m.length} แถวที่ผู้จ่าย ${expected}`))
-      else out.set(encounterId, found(m[0]))
+      else out.set(encounterId, resolveMany(m, `ผู้จ่าย ${expected} `))
       continue
     }
     // รายการไม่ผ่านไม่ระบุตอนที่ → ถ้ามีแถวเดียวถือว่าตรง ถ้ามีหลายแถว (แยกสิทธิ) ต้องระบุเอง
-    if (list.length === 1) out.set(encounterId, found(list[0]))
-    else out.set(encounterId, empty('ambiguous', `encounter นี้มี ${list.length} แถว (${list.map((a) => a.coverage_code + '/' + a.payer_id).join(', ')}) ระบุเองว่าแถวไหน`))
+    out.set(encounterId, resolveMany(list, 'encounter นี้'))
   }
   return out
 }

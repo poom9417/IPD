@@ -174,6 +174,7 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
   }, [rep])
 
   const problems = rows.filter((r) => (matches.get(r.enc)?.status ?? 'no_admission') !== 'matched')
+  const autoPickedSave = rows.filter((r) => matches.get(r.enc)?.autoPicked)
   const noClaim = rows.filter((r) => r.tcode === 'A' && matches.get(r.enc)?.status === 'matched' && !matches.get(r.enc)?.claimNo)
   const repSum = rep ? rep.items.reduce((s, i) => s + Math.round(i.paid * 100), 0) / 100 : 0
   const diffHead = !!rep && rep.headerTotal != null && Math.abs(repSum - rep.headerTotal) > 0.005
@@ -257,6 +258,18 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
               {problems.map((p) => p.enc).join(', ')}
             </Notice>
           )}
+          {autoPickedSave.length > 0 && (
+            <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">
+              <b>แจ้งเตือน: ระบบเลือกสิทธิให้แล้ว {autoPickedSave.length} เคส</b> (encounter มีหลายสิทธิ จึงเลือกสิทธิที่ไม่ใช่ UNK / DIS ให้):
+              <ul className="mt-1 list-disc pl-5 text-[13px] tabular-nums">
+                {autoPickedSave.map((r) => (
+                  <li key={r.key}>
+                    {r.enc}: {matches.get(r.enc)?.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {noClaim.length > 0 && (
             <Notice>
               พบเคสในระบบแต่ยังไม่มีเลขตั้งเบิก (claim_no) {noClaim.length} ราย: {noClaim.map((p) => p.enc).join(', ')}
@@ -321,7 +334,7 @@ function SaveTab({ onSaved }: { onSaved: () => void }) {
                     <tr key={r.key} className={'border-b border-line ' + (bad ? 'bg-rose-soft/50' : 'hover:bg-paper')}>
                       <td className={td}>{r.tcode === 'A' ? 'ผ่าน (A)' : `ไม่ผ่าน (${r.tcode})`}</td>
                       <td className={td + (bad ? ' whitespace-normal text-rose' : '')}>
-                        {bad ? `${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` — ${m.note}` : ''}` : MATCH_LABEL.matched}
+                        {bad ? `${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` — ${m.note}` : ''}` : m?.autoPicked ? `${MATCH_LABEL.matched} (ระบบเลือกสิทธิให้แล้ว)` : MATCH_LABEL.matched}
                       </td>
                       <td className={td + ' tabular-nums'}>{r.enc}</td>
                       <td className={td}>{r.name}</td>
@@ -378,6 +391,8 @@ interface SapRow {
   sap: SapCase | null
   /** true = ไม่มียอดตั้งเบิก ต้องกลับไปใส่ที่หน้าหลักก่อนจึงสร้างไฟล์ได้ */
   missingAmount?: boolean
+  /** true = encounter มีหลายสิทธิ ระบุแถวเองไม่ได้ → ห้ามสร้างไฟล์จนกว่าจะแก้หรือติ๊กออก */
+  ambiguous?: boolean
 }
 
 function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean; onGenerated?: () => void }) {
@@ -402,6 +417,8 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   const [done, setDone] = useState<string | null>(null)
   const [raw, setRaw] = useState<{ fileId: number; text: string | null } | null>(null)
   const [fridayWarn, setFridayWarn] = useState(false)
+  /** rep_items.id ที่ผู้ใช้ติ๊กออก (ไม่สร้างในไฟล์นี้) — ตั้งต้นว่าง = เลือกทั้งหมด */
+  const [excluded, setExcluded] = useState<Set<number>>(new Set())
 
   async function toggleRaw() {
     if (raw && raw.fileId === fileId) return setRaw(null)
@@ -442,6 +459,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
     setDone(null)
     setAck(false)
     setIncludeAlready(false)
+    setExcluded(new Set())
     try {
       const its: SavedItem[] = []
       const lv = new Map<number, MatchResult>()
@@ -494,12 +512,12 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   const aItems = allA.filter(passFilter)
   const notPassed = items.filter((i) => i.tcode !== 'A').filter(passFilter)
 
-  const rows: SapRow[] = useMemo(() => {
+  const allRows: SapRow[] = useMemo(() => {
     if (selectedFiles.length === 0) return []
     return aItems.map((item) => {
       const m = live.get(item.id)
       const base = { item, live: m, already: !!item.sap_generated_at, sap: null }
-      if (!m || m.status !== 'matched') return { ...base, problem: `จับคู่เคสไม่ได้: ${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` (${m.note})` : ''}` }
+      if (!m || m.status !== 'matched') return { ...base, problem: `จับคู่เคสไม่ได้: ${MATCH_LABEL[m?.status ?? 'no_admission']}${m?.note ? ` (${m.note})` : ''}`, ambiguous: m?.status === 'ambiguous' }
       if (!resolveSapConfig(m.payerId, m.coverageCode)) return { ...base, problem: `ยังไม่รองรับไฟล์ SAP ของผู้จ่าย ${m.payerId ?? '–'} สิทธิ ${m.coverageCode ?? '–'}` }
       if (item.pcode && item.pcode !== '0') return { ...base, problem: `ส่งเกินกำหนด (pcode ${item.pcode}) ยอดอาจถูกปรับ ให้ตรวจก่อน` }
       if (!m.hn) return { ...base, problem: 'ไม่มี HN' }
@@ -514,6 +532,19 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
       }
     }).sort((a, b) => Number(!!b.problem) - Number(!!a.problem))
   }, [aItems, live, selectedFiles, fileById])
+
+  // เฉพาะรายการที่ติ๊กเลือก (ตั้งต้น = ทุกรายการ) ที่นำไปคิดพร้อมสร้าง / เตือน / ยอดรวม / บันทึกสถานะ
+  const rows = useMemo(() => allRows.filter((r) => !excluded.has(r.item.id)), [allRows, excluded])
+  const toggleRow = (id: number) =>
+    setExcluded((cur) => {
+      const n = new Set(cur)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  const allTicked = allRows.length > 0 && excluded.size === 0
+  const blockedAmbiguous = rows.filter((r) => r.ambiguous)
+  const autoPicked = allRows.filter((r) => r.live?.autoPicked)
 
   const ready = rows.filter((r) => !r.problem && (!r.already || includeAlready))
   const withProblem = rows.filter((r) => r.problem || (r.already && !includeAlready))
@@ -695,6 +726,30 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
             <Card label="สร้างไฟล์ SAP แล้ว" value={`${aItems.filter((i) => i.sap_generated_at).length} ราย`} sub="จากรายการผ่านของ REP ที่เลือก" />
           </div>
 
+          {autoPicked.length > 0 && (
+            <div className="rounded-lg border border-line bg-brand-soft px-4 py-2 text-sm text-ink">
+              <b>แจ้งเตือน: ระบบเลือกสิทธิให้แล้ว {autoPicked.length} เคส</b> (encounter มีหลายสิทธิ จึงเลือกสิทธิที่ไม่ใช่ UNK / DIS ให้ — ตรวจว่าถูกต้อง)
+              <ul className="mt-1 list-disc pl-5 text-[13px] tabular-nums">
+                {autoPicked.map((r) => (
+                  <li key={r.item.id}>
+                    {r.item.encounter_id}: {r.live?.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {blockedAmbiguous.length > 0 && (
+            <Notice>
+              <b>ยังไม่สร้างไฟล์: มี {blockedAmbiguous.length} เคสที่มีหลายสิทธิ ระบุแถวเองไม่ได้</b> — แก้สิทธิที่หน้าหลักให้เหลือสิทธิเดียวที่ใช้ตั้งหนี้ หรือติ๊กรายการเหล่านี้ออกจากตารางด้านล่างก่อน
+              <ul className="mt-1 list-disc pl-5 text-[13px] tabular-nums">
+                {blockedAmbiguous.map((r) => (
+                  <li key={r.item.id}>
+                    {r.item.encounter_id}: {r.live?.note}
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          )}
           {dupEncounters.length > 0 && (
             <Notice>
               <b>เตือน:</b> encounter เดียวกันปรากฏในหลาย REP ที่พร้อมสร้างไฟล์ ({dupEncounters.join(', ')}) — ตรวจก่อนว่าไม่ได้ตั้งหนี้ซ้ำ
@@ -725,10 +780,30 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
             </label>
           )}
 
+          <div className="flex flex-wrap items-center gap-3 text-sm text-ink">
+            <span className="font-semibold">ติ๊กเลือกรายการที่จะสร้างในไฟล์ SAP</span>
+            <span className="text-ink/70">
+              เลือก {allRows.length - excluded.size} จาก {allRows.length} รายการ · พร้อมสร้างจริง {ready.length} เคส
+            </span>
+            <button type="button" className="text-xs font-semibold hover:underline" onClick={() => setExcluded(new Set())}>
+              เลือกทั้งหมด
+            </button>
+            <button type="button" className="text-xs font-semibold hover:underline" onClick={() => setExcluded(new Set(allRows.map((r) => r.item.id)))}>
+              ไม่เลือกเลย
+            </button>
+          </div>
           <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-            <table className="w-full min-w-[1100px] border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[1150px] border-collapse text-left text-[13px]">
               <thead>
                 <tr className="bg-brand text-ink">
+                  <th className={th}>
+                    <input
+                      type="checkbox"
+                      aria-label="เลือกทั้งหมด"
+                      checked={allTicked}
+                      onChange={(e) => setExcluded(e.target.checked ? new Set() : new Set(allRows.map((r) => r.item.id)))}
+                    />
+                  </th>
                   <th className={th}>สถานะ</th>
                   <th className={th}>REP</th>
                   <th className={th}>encounter_id</th>
@@ -742,14 +817,26 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {allRows.map((r) => {
                   const s = r.sap
                   const amt = s ? computeAmounts(s.claimAmount, s.paid) : null
-                  const skipped = !!r.problem || (r.already && !includeAlready)
+                  const ticked = !excluded.has(r.item.id)
+                  const skipped = ticked && (!!r.problem || (r.already && !includeAlready))
                   return (
-                    <tr key={r.item.id} className={'border-b border-line ' + (skipped ? 'bg-rose-soft/50' : 'hover:bg-paper')}>
+                    <tr key={r.item.id} className={'border-b border-line ' + (!ticked ? 'opacity-50 ' : '') + (skipped ? 'bg-rose-soft/50' : 'hover:bg-paper')}>
+                      <td className={td}>
+                        <input type="checkbox" aria-label={`เลือก encounter ${r.item.encounter_id}`} checked={ticked} onChange={() => toggleRow(r.item.id)} />
+                      </td>
                       <td className={td + (skipped ? ' whitespace-normal text-rose' : '')}>
-                        {r.problem ? r.problem : r.already && !includeAlready ? `เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''})` : 'พร้อม'}
+                        {!ticked
+                          ? `ไม่ได้เลือก (ไม่สร้างในไฟล์นี้)${r.problem ? ` — ${r.problem}` : ''}`
+                          : r.problem
+                            ? r.problem
+                            : r.already && !includeAlready
+                              ? `เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''})`
+                              : r.live?.autoPicked
+                                ? `พร้อม · ระบบเลือกสิทธิ ${r.live.coverageCode}/${r.live.payerId} ให้แล้ว`
+                                : 'พร้อม'}
                       </td>
                       <td className={td + ' tabular-nums'}>{fileById.get(r.item.rep_file_id)?.rep_no ?? '–'}</td>
                       <td className={td + ' tabular-nums'}>{r.item.encounter_id}</td>
@@ -794,7 +881,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                 รับทราบรายการที่สร้างไม่ได้/ไม่ผ่านด้านบนแล้ว
               </label>
             )}
-            <Button type="button" onClick={onDownloadClick} disabled={ready.length === 0 || missing.length > 0 || (needAck && !ack)}>
+            <Button type="button" onClick={onDownloadClick} disabled={ready.length === 0 || missing.length > 0 || blockedAmbiguous.length > 0 || (needAck && !ack)}>
               ดาวน์โหลด txt สำหรับ SAP ({ready.length} เคส)
             </Button>
           </div>
