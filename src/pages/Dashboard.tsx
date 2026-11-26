@@ -314,11 +314,47 @@ export default function Dashboard() {
     setOnlyMine(false)
   }
 
+  // วันที่ที่แสดงในแบนเนอร์: เลือกวันจำหน่ายวันเดียว → วันนั้น | เลือกช่วง → ช่วงนั้น | ไม่ได้เลือก → วันนี้
+  const thDate = (d: Date, long = true) =>
+    d.toLocaleDateString('th-TH', { day: 'numeric', month: long ? 'long' : 'short', year: 'numeric' })
+  const parseYmd = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  let reportDateText: string
+  let reportDateSub = ''
+  if (filters.from && filters.to) {
+    if (filters.from === filters.to) {
+      reportDateText = thDate(parseYmd(filters.from))
+      reportDateSub = 'ตามวันจำหน่ายที่เลือก'
+    } else {
+      reportDateText = `${thDate(parseYmd(filters.from), false)} – ${thDate(parseYmd(filters.to), false)}`
+      reportDateSub = 'ช่วงวันจำหน่ายที่เลือก'
+    }
+  } else {
+    reportDateText = thDate(new Date())
+    reportDateSub = 'ทุกวันจำหน่าย (ยังไม่ได้เลือกวันที่)'
+  }
+
   return (
     <div>
       <main className="w-full space-y-5 px-4 py-6 sm:px-8">
         {/* แจ้งเตือน: สิทธิที่ Audit / Developer เลือกให้ รอยืนยัน (เฉพาะ admin / user) */}
         {canFilterMine && <PendingAssignmentsBanner onChanged={() => setPairsTick((t) => t + 1)} />}
+
+        {/* แบนเนอร์วันที่รายงาน — ให้หัวหน้าเห็นวันที่ชัดเจนเมื่อดู/พิมพ์รายงาน (ตามวันจำหน่ายที่เลือกใน filter) */}
+        <section
+          aria-label="วันที่รายงาน"
+          className="mx-auto w-full max-w-4xl rounded-2xl border-2 border-ink bg-brand px-6 py-6 text-center"
+        >
+          <p className="text-lg font-bold tracking-wide text-ink sm:text-2xl">IPD ค้างส่งเบิก ณ</p>
+          <p className="mt-1 text-4xl font-extrabold leading-tight text-ink sm:text-6xl">{reportDateText}</p>
+          {reportDateSub && (
+            <p className="mt-3 inline-block rounded-full bg-ink px-4 py-1 text-sm font-semibold text-brand sm:text-base">
+              {reportDateSub}
+            </p>
+          )}
+        </section>
 
         {/* สถิติคิดจากรายการที่กรองอยู่ */}
         <StatCards stats={stats} />

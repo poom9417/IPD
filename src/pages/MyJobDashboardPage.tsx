@@ -344,17 +344,6 @@ export default function MyJobDashboardPage() {
   }
 
   const now = new Date()
-  // วันที่รายงาน = วันนี้ (เคสค้างนับอายุถึงวันนี้) + ช่วงวันจำหน่ายที่เลือกใน filter
-  const reportDateLong = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const fmtShort = (d: string) => fmtDate(`${d}T00:00:00`)
-  const rangeText =
-    from && to
-      ? `เคสที่จำหน่ายระหว่าง ${fmtShort(from)} – ${fmtShort(to)}`
-      : from
-        ? `เคสที่จำหน่ายตั้งแต่ ${fmtShort(from)}`
-        : to
-          ? `เคสที่จำหน่ายถึง ${fmtShort(to)}`
-          : 'เคสที่จำหน่ายแล้วทั้งหมด'
   const presets = [
     { label: '30 วันล่าสุด', f: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29), t: now },
     { label: 'เดือนนี้', f: new Date(now.getFullYear(), now.getMonth(), 1), t: new Date(now.getFullYear(), now.getMonth() + 1, 0) },
@@ -403,18 +392,6 @@ export default function MyJobDashboardPage() {
           </div>
         )}
       </div>
-
-      {/* ---------- แบนเนอร์วันที่รายงาน (ให้หัวหน้าเห็นวันที่ชัดเจนเมื่อดู/พิมพ์รายงาน) ---------- */}
-      <section
-        aria-label="วันที่รายงาน"
-        className="mx-auto w-full max-w-4xl rounded-2xl border-2 border-ink bg-brand px-6 py-6 text-center shadow-sm print:shadow-none"
-      >
-        <p className="text-lg font-bold tracking-wide text-ink sm:text-2xl">IPD ค้างส่งเบิก ณ</p>
-        <p className="mt-1 text-4xl font-extrabold leading-tight text-ink sm:text-6xl">{reportDateLong}</p>
-        <p className="mt-3 inline-block rounded-full bg-ink px-4 py-1 text-sm font-semibold text-brand sm:text-base">
-          {rangeText}
-        </p>
-      </section>
 
       {/* ---------- Filters ---------- */}
       <div data-tour="mydash-filters" className="space-y-3 rounded-xl border border-line bg-paper/50 p-4">
