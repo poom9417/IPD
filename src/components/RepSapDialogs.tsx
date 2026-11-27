@@ -413,7 +413,6 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ack, setAck] = useState(false)
-  const [includeAlready, setIncludeAlready] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [raw, setRaw] = useState<{ fileId: number; text: string | null } | null>(null)
   const [fridayWarn, setFridayWarn] = useState(false)
@@ -458,8 +457,6 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
     setError(null)
     setDone(null)
     setAck(false)
-    setIncludeAlready(false)
-    setExcluded(new Set())
     try {
       const its: SavedItem[] = []
       const lv = new Map<number, MatchResult>()
@@ -475,6 +472,8 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
       if (seq !== loadSeq.current) return
       setItems(its)
       setLive(lv)
+      // ตั้งต้น: รายการที่เคยสร้างไฟล์ SAP แล้วไม่ถูกติก — ติกเฉพาะรายการที่ยังไม่สร้าง
+      setExcluded(new Set(its.filter((i) => i.tcode === 'A' && !!i.sap_generated_at).map((i) => i.id)))
     } catch (e) {
       if (seq === loadSeq.current) setError(`โหลดข้อมูลไม่สำเร็จ: ${(e as { message?: string })?.message ?? String(e)}`)
     } finally {
@@ -530,7 +529,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
         problem: null,
         sap: { encounterId: item.encounter_id, hn: m.hn, dischargeDate: m.dischargeDate, claimNo: m.claimNo, claimAmount: m.claimAmount, paid: item.total_amount, replyDate: fileById.get(item.rep_file_id)!.issue_date },
       }
-    }).sort((a, b) => Number(!!b.problem) - Number(!!a.problem))
+    }).sort((a, b) => Number(a.already) - Number(b.already) || Number(!!b.problem) - Number(!!a.problem))
   }, [aItems, live, selectedFiles, fileById])
 
   // เฉพาะรายการที่ติ๊กเลือก (ตั้งต้น = ทุกรายการ) ที่นำไปคิดพร้อมสร้าง / เตือน / ยอดรวม / บันทึกสถานะ
@@ -546,8 +545,9 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
   const blockedAmbiguous = rows.filter((r) => r.ambiguous)
   const autoPicked = allRows.filter((r) => r.live?.autoPicked)
 
-  const ready = rows.filter((r) => !r.problem && (!r.already || includeAlready))
-  const withProblem = rows.filter((r) => r.problem || (r.already && !includeAlready))
+  const ready = rows.filter((r) => !r.problem)
+  const withProblem = rows.filter((r) => r.problem)
+  const alreadyTicked = ready.filter((r) => r.already)
   const changed = allA.filter((i) => {
     const m = live.get(i.id)
     return m && (m.status !== i.match_status || m.admissionId !== i.admission_id || m.claimNo !== i.claim_no)
@@ -773,11 +773,10 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
               </Button>
             </div>
           )}
-          {rows.some((r) => r.already && !r.problem) && (
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={includeAlready} onChange={(e) => setIncludeAlready(e.target.checked)} />
-              รวมรายการที่เคยสร้างไฟล์ SAP แล้ว ({rows.filter((r) => r.already && !r.problem).length} ราย) ปกติจะข้ามเพื่อกันตั้งซ้ำ
-            </label>
+          {alreadyTicked.length > 0 && (
+            <Notice>
+              <b>เตือน:</b> มี {alreadyTicked.length} เคสที่เคยสร้างไฟล์ SAP ไปแล้วแต่ถูกติกซ้ำ — ระวังตั้งหนี้ซ้ำ: {alreadyTicked.map((r) => r.item.encounter_id).join(', ')}
+            </Notice>
           )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-ink">
@@ -785,6 +784,9 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
             <span className="text-ink/70">
               เลือก {allRows.length - excluded.size} จาก {allRows.length} รายการ · พร้อมสร้างจริง {ready.length} เคส
             </span>
+            <button type="button" className="text-xs font-semibold hover:underline" onClick={() => setExcluded(new Set(allRows.filter((r) => r.already).map((r) => r.item.id)))}>
+              เลือกเฉพาะที่ยังไม่สร้าง ({allRows.filter((r) => !r.already).length})
+            </button>
             <button type="button" className="text-xs font-semibold hover:underline" onClick={() => setExcluded(new Set())}>
               เลือกทั้งหมด
             </button>
@@ -821,7 +823,7 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                   const s = r.sap
                   const amt = s ? computeAmounts(s.claimAmount, s.paid) : null
                   const ticked = !excluded.has(r.item.id)
-                  const skipped = ticked && (!!r.problem || (r.already && !includeAlready))
+                  const skipped = ticked && !!r.problem
                   return (
                     <tr key={r.item.id} className={'border-b border-line ' + (!ticked ? 'opacity-50 ' : '') + (skipped ? 'bg-rose-soft/50' : 'hover:bg-paper')}>
                       <td className={td}>
@@ -829,11 +831,11 @@ function SapTab({ nonce, active, onGenerated }: { nonce: number; active: boolean
                       </td>
                       <td className={td + (skipped ? ' whitespace-normal text-rose' : '')}>
                         {!ticked
-                          ? `ไม่ได้เลือก (ไม่สร้างในไฟล์นี้)${r.problem ? ` — ${r.problem}` : ''}`
+                          ? `${r.already ? `เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''}) · ` : ''}ไม่ได้เลือก (ไม่สร้างในไฟล์นี้)${r.problem ? ` — ${r.problem}` : ''}`
                           : r.problem
                             ? r.problem
-                            : r.already && !includeAlready
-                              ? `เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''})`
+                            : r.already
+                              ? `พร้อม · เคยสร้างไฟล์แล้ว (${r.item.sap_file_name ?? ''}) ติกซ้ำ ระวังตั้งหนี้ซ้ำ`
                               : r.live?.autoPicked
                                 ? `พร้อม · ระบบเลือกสิทธิ ${r.live.coverageCode}/${r.live.payerId} ให้แล้ว`
                                 : 'พร้อม'}
